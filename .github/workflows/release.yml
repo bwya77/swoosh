@@ -41,29 +41,44 @@ jobs:
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Building Swoosh $version"
 
+      # Publish the main tray app (single-file) and the WinUI settings app into a
+      # "Settings" subfolder next to it, for each architecture. The tray app looks
+      # for Swoosh.Settings.exe in that subfolder at runtime.
       - name: Publish win-x64
         shell: pwsh
-        run: >
-          dotnet publish Swoosh.csproj
-          -c Release
-          -r win-x64
-          --self-contained true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:Version=${{ steps.ver.outputs.version }}
-          -o publish/win-x64
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          dotnet publish Swoosh.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=$v -o publish/win-x64
+          dotnet publish Swoosh.Settings/Swoosh.Settings.csproj -c Release -r win-x64 `
+            -p:Platform=x64 --self-contained true -p:WindowsAppSDKSelfContained=true `
+            -p:Version=$v -o publish/win-x64/Settings
 
       - name: Publish win-arm64
         shell: pwsh
-        run: >
-          dotnet publish Swoosh.csproj
-          -c Release
-          -r win-arm64
-          --self-contained true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:Version=${{ steps.ver.outputs.version }}
-          -o publish/win-arm64
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          dotnet publish Swoosh.csproj -c Release -r win-arm64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=$v -o publish/win-arm64
+          dotnet publish Swoosh.Settings/Swoosh.Settings.csproj -c Release -r win-arm64 `
+            -p:Platform=arm64 --self-contained true -p:WindowsAppSDKSelfContained=true `
+            -p:Version=$v -o publish/win-arm64/Settings
+
+      # The self-contained Windows App SDK bundles a large AI/ML runtime the
+      # settings app never calls. Drop those native DLLs to keep downloads small.
+      - name: Trim unused runtime
+        shell: pwsh
+        run: |
+          $patterns = 'onnxruntime*.dll','Microsoft.AI.MachineLearning*.dll','DirectML*.dll'
+          foreach ($rid in 'win-x64','win-arm64') {
+            $dir = "publish/$rid/Settings"
+            if (Test-Path $dir) {
+              Get-ChildItem $dir -Recurse -Include $patterns -EA SilentlyContinue |
+                ForEach-Object { Write-Host "trim $($_.Name)"; Remove-Item $_.FullName -Force -EA SilentlyContinue }
+            }
+          }
 
       - name: Package artifacts
         shell: pwsh
