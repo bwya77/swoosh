@@ -1,0 +1,83 @@
+name: Build & Release
+
+# Every push to main produces a downloadable release with an auto-incrementing
+# version (0.1.<run number>), so the version never has to be bumped by hand.
+# Doc-only changes are ignored. You can also trigger a build manually from the
+# Actions tab via "Run workflow".
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Compute version
+        id: ver
+        shell: pwsh
+        run: |
+          $version = "0.1.${{ github.run_number }}"
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Building Swoosh $version"
+
+      - name: Publish win-x64
+        shell: pwsh
+        run: >
+          dotnet publish Swoosh.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.ver.outputs.version }}
+          -o publish/win-x64
+
+      - name: Publish win-arm64
+        shell: pwsh
+        run: >
+          dotnet publish Swoosh.csproj
+          -c Release
+          -r win-arm64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.ver.outputs.version }}
+          -o publish/win-arm64
+
+      - name: Package artifacts
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          Compress-Archive -Path publish/win-x64/*   -DestinationPath "Swoosh-$v-win-x64.zip"   -Force
+          Compress-Archive -Path publish/win-arm64/* -DestinationPath "Swoosh-$v-win-arm64.zip" -Force
+          Get-ChildItem *.zip | ForEach-Object { Write-Host "$($_.Name)  $([math]::Round($_.Length/1MB,1)) MB" }
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Swoosh v${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          files: |
+            Swoosh-*.zip
