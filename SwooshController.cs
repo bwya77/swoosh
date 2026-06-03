@@ -24,6 +24,15 @@ public sealed class SwooshController : IDisposable
     private int _deskCount = 2;
     private int _deskIndex;
 
+    // 5-finger free-move state: the window's live top-left (in physical pixels)
+    // plus the monitor work-area size used to map pad motion 1:1 onto the screen.
+    private bool _free;
+    private double _freeWinX, _freeWinY;
+    private int _freeWorkW = 1, _freeWorkH = 1;
+
+    /// <summary>How much screen the window covers per unit of pad travel (1.0 = pad spans the monitor).</summary>
+    private const double FreeMoveScale = 1.0;
+
     public bool GesturesEnabled { get; set; } = true;
 
     public SwooshController()
@@ -41,6 +50,9 @@ public sealed class SwooshController : IDisposable
         _gestures.HoldEngaged += OnHoldEngaged;
         _gestures.HoldUpdated += OnHoldUpdated;
         _gestures.DesktopMove += OnDesktopMove;
+        _gestures.FreeMoveBegan += OnFreeMoveBegan;
+        _gestures.FreeMoveDelta += OnFreeMoveDelta;
+        _gestures.FreeMoveEnded += OnFreeMoveEnded;
         _hotkeys.Triggered += OnHotkey;
     }
 
@@ -134,6 +146,52 @@ public sealed class SwooshController : IDisposable
             Win32.SetForegroundWindow(_target);
             _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
         }
+    }
+
+    private void OnFreeMoveBegan()
+    {
+        // Free-move arms exactly like a snap: only act over a manageable titlebar.
+        _target = _snapper.ArmTarget(out string diag);
+        _armed = _target != IntPtr.Zero;
+        if (!_armed) { _free = false; Log.Write($"FreeMoveBegan not-armed {diag}"); return; }
+
+        // A maximized/minimized window can't be nudged; restore it first so the
+        // window has a real floating rect to move from.
+        long style = Win32.GetWindowLong(_target, Win32.GWL_STYLE);
+        if ((style & (Win32.WS_MAXIMIZE | Win32.WS_MINIMIZE)) != 0)
+            Win32.ShowWindow(_target, Win32.SW_RESTORE);
+
+        _free = true;
+        if (Win32.GetWindowRect(_target, out var wr)) { _freeWinX = wr.Left; _freeWinY = wr.Top; }
+        var work = _snapper.WorkAreaFor(_target);
+        _freeWorkW = Math.Max(1, work.Width);
+        _freeWorkH = Math.Max(1, work.Height);
+
+        // The window itself is the live feedback here — no snap/desktop HUD.
+        _preview.Hide();
+        _chip.Hide();
+        Win32.MessageBeep(0xFFFFFFFF);
+        Log.Write($"FreeMoveBegan armed pos=({_freeWinX:F0},{_freeWinY:F0}) work={_freeWorkW}x{_freeWorkH}");
+    }
+
+    private void OnFreeMoveDelta(double ddx, double ddy)
+    {
+        if (!_free || !_armed) return;
+        // Map normalized pad travel onto the monitor: a full pad sweep moves the
+        // window a full work-area span (touchpad acts as the monitor).
+        _freeWinX += ddx * _freeWorkW * FreeMoveScale;
+        _freeWinY += ddy * _freeWorkH * FreeMoveScale;
+        Win32.SetWindowPos(_target, IntPtr.Zero,
+            (int)Math.Round(_freeWinX), (int)Math.Round(_freeWinY), 0, 0,
+            Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE);
+    }
+
+    private void OnFreeMoveEnded()
+    {
+        if (_free && _armed)
+            Win32.SetForegroundWindow(_target);
+        _free = false;
+        _armed = false;
     }
 
     private void OnHotkey(SnapZone zone)

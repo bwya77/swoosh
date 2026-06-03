@@ -23,7 +23,7 @@ public sealed class TouchpadParser
 
     private readonly Dictionary<IntPtr, DeviceLayout?> _devices = new();
 
-    private const int DiagMax = 400;
+    private const int DiagMax = 1500;
     private int _diagCount;
     private string _lastSig = "";
     private readonly Dictionary<ushort, (uint x, uint y)> _prevPos = new();
@@ -32,18 +32,25 @@ public sealed class TouchpadParser
     private readonly Dictionary<ushort, (uint x, uint y, long sinceMs)> _stillSince = new();
 
     // Phantom rejection (intermittent firmware-stuck contact). This device
-    // sometimes wedges a finger collection at a fixed raw coordinate that never
-    // moves and never lifts. We can't drop "any frozen slot" — during a real
-    // press-and-hold the user's two fingers freeze too. The discriminator that
-    // works: the phantom is the only thing on the pad when it appears (a hold
-    // always shows TWO contacts), so we LEARN the phantom's coordinate only from
-    // a LONE contact that has been frozen past LearnMs, then suppress only that
-    // exact frozen coordinate. A real finger that lands there and moves reclaims
-    // the spot (we unlearn). Two-finger holds are never at a learned lone coord,
-    // so they survive.
+    // sometimes wedges one or more finger collections at a fixed raw coordinate
+    // that never moves and never lifts — and crucially the pad goes SILENT (stops
+    // sending reports) while such a contact sits motionless, so any time-based
+    // "frozen for N ms" test never gets the frames it needs to fire. Two
+    // discriminators, neither of which can trip during a real gesture:
+    //   1. LONE: a sole contact frozen past LearnMs (a real hold always shows two
+    //      contacts, so a held finger is never the only thing on the pad).
+    //   2. MASS-RELEASE RESIDUE (collection-tracked): every finger collection
+    //      seen during a >=3-finger press is remembered; the real fingers lift
+    //      (tip-up clears them), but a stuck slot lingers. So any collection still
+    //      down after the press collapses to <=2 is the firmware residue — dropped
+    //      immediately, no wait on freeze time. Genuine new fingers always arrive
+    //      on fresh collections, so later gestures are unaffected.
+    // Learned coordinates are also suppressed while frozen; a MOVING contact at a
+    // learned spot is a real finger reclaiming it, so we unlearn that position.
     private const long LearnMs = 1200;
     private const uint PhantomTol = 3;
-    private (uint x, uint y)? _phantomPos;
+    private readonly List<(uint x, uint y)> _phantoms = new();
+    private readonly HashSet<ushort> _peakResidue = new();
 
     private DeviceLayout? GetLayout(IntPtr device)
     {
@@ -185,7 +192,7 @@ public sealed class TouchpadParser
                             if (usageBuf[i] == Hid.USAGE_TIP_SWITCH) { tip = true; break; }
                     }
 
-                    if (!tip) { _prevPos.Remove(col); _stillSince.Remove(col); continue; }
+                    if (!tip) { _prevPos.Remove(col); _stillSince.Remove(col); _peakResidue.Remove(col); continue; }
 
                     if (Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_GENERIC, col, Hid.USAGE_X,
                             out uint rawX, layout.Preparsed, report, (uint)sizeHid) != Hid.HIDP_STATUS_SUCCESS)
@@ -214,39 +221,118 @@ public sealed class TouchpadParser
                     cand.Add((id, nx, ny, col, moved, rawX, rawY, frozenMs));
                 }
 
-                // Phantom rejection by lone-learned signature. Learn the stuck
-                // contact's coordinate ONLY when it is the sole contact and has
-                // been frozen past LearnMs (a real hold always shows two contacts,
-                // so a held finger can never be captured here). Once learned,
-                // suppress that exact coordinate whenever it sits frozen. If a
-                // contact at the learned coordinate is MOVING, it's a real finger
-                // reclaiming the spot — keep it and forget the phantom.
-                static bool Near(uint a, uint b) => (a > b ? a - b : b - a) <= PhantomTol;
-
-                if (_phantomPos is { } cur)
+                // Collapse firmware-duplicated contact ids. After a many-finger
+                // gesture this pad sometimes leaves two or three finger
+                // collections all reporting the SAME contact id with stale
+                // positions (the residue that looks like a phantom 2-finger
+                // hold). Real simultaneous fingers always carry DISTINCT contact
+                // ids, so any duplicate id is firmware garbage: keep a single
+                // representative per id (prefer a moving one) and drop the rest.
+                if (cand.Count > 1)
                 {
-                    int idx = cand.FindIndex(c => Near(c.rawX, cur.x) && Near(c.rawY, cur.y));
-                    if (idx >= 0 && cand[idx].moved) _phantomPos = null;
+                    var byId = new Dictionary<int, int>();
+                    var deduped = new List<(int id, double nx, double ny, ushort col, bool moved, uint rawX, uint rawY, long frozenMs)>();
+                    foreach (var c in cand)
+                    {
+                        if (byId.TryGetValue(c.id, out int ki))
+                        {
+                            if (c.moved && !deduped[ki].moved) deduped[ki] = c;
+                        }
+                        else
+                        {
+                            byId[c.id] = deduped.Count;
+                            deduped.Add(c);
+                        }
+                    }
+                    cand = deduped;
                 }
 
-                if (cand.Count == 1 && !cand[0].moved && cand[0].frozenMs >= LearnMs)
-                    _phantomPos = (cand[0].rawX, cand[0].rawY);
+                // Phantom rejection. See the field comments for the two learning
+                // rules. Suppress frozen contacts sitting on a learned coord; a
+                // moving contact there reclaims it (unlearn).
+                static bool Near(uint a, uint b) => (a > b ? a - b : b - a) <= PhantomTol;
+                void Learn(uint x, uint y)
+                {
+                    if (!_phantoms.Any(p => Near(p.x, x) && Near(p.y, y)))
+                    {
+                        _phantoms.Add((x, y));
+                        if (_phantoms.Count > 8) _phantoms.RemoveAt(0);
+                    }
+                }
+
+                int curDown = cand.Count;
+
+                // Pad genuinely empty → nothing can be stuck. Wipe all residue and
+                // learned phantom coords so they never accumulate across gestures.
+                if (curDown == 0)
+                {
+                    _peakResidue.Clear();
+                    _phantoms.Clear();
+                }
+
+                // Remember every collection present during a >=3-finger press.
+                // Real fingers get cleared on tip-up (gather loop); a stuck slot
+                // never lifts, so it survives in this set.
+                if (curDown >= 3)
+                    foreach (var c in cand) _peakResidue.Add(c.col);
+
+                // Unlearn any phantom position now occupied by a MOVING contact.
+                for (int i = _phantoms.Count - 1; i >= 0; i--)
+                {
+                    var ph = _phantoms[i];
+                    int mi = cand.FindIndex(c => Near(c.rawX, ph.x) && Near(c.rawY, ph.y));
+                    if (mi >= 0 && cand[mi].moved) _phantoms.RemoveAt(i);
+                }
+
+                // Rule 1 — LONE: a sole frozen contact past LearnMs is a phantom.
+                if (curDown == 1 && !cand[0].moved && cand[0].frozenMs >= LearnMs)
+                    Learn(cand[0].rawX, cand[0].rawY);
 
                 int dropped = 0;
-                if (_phantomPos is { } pp)
+
+                // Rule 2 — MASS-RELEASE RESIDUE (collection-tracked). Once a
+                // >=3-finger press collapses to <=2, any collection still down that
+                // was part of that press is the stuck firmware slot. Drop it now,
+                // unconditionally (the pad goes silent on a motionless stuck
+                // contact, so we cannot wait on a freeze timer) and learn its coord
+                // so a slot that churns id/collection but stays put is still caught.
+                if (curDown <= 2 && _peakResidue.Count > 0)
                 {
-                    int before = cand.Count;
-                    cand = cand.Where(c => c.moved || !(Near(c.rawX, pp.x) && Near(c.rawY, pp.y))).ToList();
-                    dropped = before - cand.Count;
+                    var kept = new List<(int id, double nx, double ny, ushort col, bool moved, uint rawX, uint rawY, long frozenMs)>();
+                    foreach (var c in cand)
+                    {
+                        if (_peakResidue.Contains(c.col)) { Learn(c.rawX, c.rawY); dropped++; }
+                        else kept.Add(c);
+                    }
+                    cand = kept;
                 }
 
-                if (_diagCount < DiagMax)
+                // Suppress frozen contacts sitting on a learned phantom coord.
+                if (_phantoms.Count > 0)
+                {
+                    int before = cand.Count;
+                    cand = cand.Where(c => c.moved ||
+                        !_phantoms.Any(p => Near(c.rawX, p.x) && Near(c.rawY, p.y))).ToList();
+                    dropped += before - cand.Count;
+                }
+
+                // Always log the low-count region (post-lift phantoms) and any
+                // drop, bypassing the cap — that's the interesting part. Steady
+                // high-finger holds respect the cap so they don't flood the log.
+                bool interesting = curDown <= 2 || dropped > 0;
+                if (interesting || _diagCount < DiagMax)
                 {
                     string rawDetail = string.Join(" ", cand.Select(c =>
-                        $"id{c.id}@({c.nx:F2},{c.ny:F2}){(c.moved ? "M" : "S")}f{c.frozenMs}"));
-                    string ghostStr = _phantomPos is { } pq ? $"({pq.x},{pq.y})" : "none";
-                    string sig = $"rid={reportId} cc={ccVal} ghost={ghostStr} drop={dropped} n={cand.Count} [{rawDetail}]";
-                    if (sig != _lastSig) { Swoosh.Log.Write(sig); _lastSig = sig; _diagCount++; }
+                        $"id{c.id}@{c.rawX},{c.rawY}({c.nx:F2},{c.ny:F2}){(c.moved ? "M" : "S")}f{c.frozenMs}"));
+                    string ghostStr = _phantoms.Count == 0 ? "none"
+                        : string.Join("", _phantoms.Select(p => $"({p.x},{p.y})"));
+                    string sig = $"rid={reportId} cc={ccVal} res={_peakResidue.Count} ghost={ghostStr} drop={dropped} n={cand.Count} [{rawDetail}]";
+                    if (sig != _lastSig)
+                    {
+                        Swoosh.Log.Write(sig);
+                        _lastSig = sig;
+                        if (!interesting) _diagCount++;
+                    }
                 }
 
                 var frame = new TouchFrame { TimestampMs = Environment.TickCount64 };

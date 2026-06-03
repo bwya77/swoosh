@@ -27,6 +27,12 @@ public sealed class GestureEngine
     /// <summary>Horizontal travel (after holding) needed to pick a desktop direction.</summary>
     public double DesktopMoveThreshold { get; set; } = 0.09;
 
+    /// <summary>Simultaneous contacts that engage fine-grained free positioning.</summary>
+    public int FreeMoveEngageContacts { get; set; } = 5;
+
+    /// <summary>Contacts that keep free-move alive once engaged (hysteresis for finger flicker).</summary>
+    public int FreeMoveKeepContacts { get; set; } = 4;
+
     public event Action<int>? GestureBegan;
     public event Action<SwipeDirection, double>? GestureUpdated;
     public event Action<SwipeDirection>? GestureCompleted;
@@ -41,6 +47,15 @@ public sealed class GestureEngine
     /// <summary>Fired on release while held, when a desktop direction was chosen.</summary>
     public event Action<DesktopDirection>? DesktopMove;
 
+    /// <summary>Fired when enough fingers (default 5) land to begin fine-grained free positioning.</summary>
+    public event Action? FreeMoveBegan;
+
+    /// <summary>Per-frame normalized centroid delta (dx, dy) while free-moving. Pad Y grows downward.</summary>
+    public event Action<double, double>? FreeMoveDelta;
+
+    /// <summary>Fired when the fingers lift and free-move ends.</summary>
+    public event Action? FreeMoveEnded;
+
     private bool _tracking;
     private bool _cancelled;
     private double _startX, _startY, _lastX, _lastY;
@@ -52,9 +67,58 @@ public sealed class GestureEngine
     private double _maxDist;
     private double _holdAnchorX;
 
+    private bool _free;
+    private double _freeLastX, _freeLastY;
+    private bool _freeHasLast;
+    private int _freeLastCount;
+
     public void Process(TouchFrame frame)
     {
         int down = frame.DownCount;
+
+        // Fine-grained free-move (default 5 fingers): the touchpad becomes an
+        // absolute 1:1 proxy for the monitor. Once engaged it owns the gesture
+        // stream until the fingers lift, emitting per-frame centroid deltas.
+        if (_free)
+        {
+            if (down >= FreeMoveEngageContacts)
+            {
+                // Full contact count: track the centroid and move the window.
+                var (fx, fy) = Centroid(frame);
+                if (down != _freeLastCount) _freeHasLast = false; // re-anchor across count changes
+                _freeLastCount = down;
+                if (_freeHasLast)
+                    FreeMoveDelta?.Invoke(fx - _freeLastX, fy - _freeLastY);
+                _freeLastX = fx; _freeLastY = fy; _freeHasLast = true;
+            }
+            else if (down >= FreeMoveKeepContacts)
+            {
+                // Under the engage count but not yet lifted (e.g. one finger
+                // flickered, or fingers are mid-lift): FREEZE — do not move. This
+                // stops the window from drifting as fingers peel off on release.
+                // Re-anchor so a return to full count won't inject a jump.
+                _freeHasLast = false;
+                _freeLastCount = down;
+            }
+            else
+            {
+                _free = false;
+                _freeHasLast = false;
+                FreeMoveEnded?.Invoke();
+            }
+            return;
+        }
+
+        if (down >= FreeMoveEngageContacts)
+        {
+            // Abandon any in-flight 2-finger snap/hold and switch to free-move.
+            if (_tracking) { _tracking = false; GestureCancelled?.Invoke(); }
+            _free = true;
+            _freeHasLast = false;
+            _freeLastCount = down;
+            FreeMoveBegan?.Invoke();
+            return;
+        }
 
         if (down == 2)
         {
@@ -189,6 +253,7 @@ public sealed class GestureEngine
     {
         if (_tracking) GestureCancelled?.Invoke();
         _tracking = false;
+        if (_free) { _free = false; _freeHasLast = false; FreeMoveEnded?.Invoke(); }
     }
 
     private static (double, double) Centroid(TouchFrame f)
