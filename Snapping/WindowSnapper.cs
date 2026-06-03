@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Windows.Threading;
 using Swoosh.Native;
 
 namespace Swoosh.Snapping;
@@ -120,9 +122,15 @@ public sealed class WindowSnapper
 
         if (zone == SnapZone.Minimize)
         {
+            CancelAnimation();
             Win32.ShowWindow(hwnd, Win32.SW_MINIMIZE);
             return;
         }
+
+        // Capture the current outer rect BEFORE restoring, so a maximized window
+        // animates smoothly down from full screen instead of snapping to its
+        // restored size first.
+        bool haveStart = Win32.GetWindowRect(hwnd, out var startRect);
 
         // Restore first so SetWindowPos geometry takes effect.
         long style = Win32.GetWindowLong(hwnd, Win32.GWL_STYLE);
@@ -131,6 +139,7 @@ public sealed class WindowSnapper
 
         if (zone == SnapZone.Maximize)
         {
+            CancelAnimation();
             Win32.ShowWindow(hwnd, Win32.SW_MAXIMIZE);
             return;
         }
@@ -156,7 +165,89 @@ public sealed class WindowSnapper
         int pw = target.Width + ml + mr;
         int ph = target.Height + mt + mb;
 
-        Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph,
-            Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE);
+        if (AnimateSnaps && haveStart)
+            AnimateTo(hwnd, startRect, px, py, pw, ph);
+        else
+            Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
+    }
+
+    // ----- Smooth snap animation (Swish-style ease-out glide) ----------------
+
+    /// <summary>When true, window snaps glide to the target instead of jumping.</summary>
+    public bool AnimateSnaps { get; set; } = true;
+
+    /// <summary>Glide duration in milliseconds.</summary>
+    public double AnimationMs { get; set; } = 170;
+
+    private const uint MoveFlags =
+        Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE;
+
+    private DispatcherTimer? _animTimer;
+    private readonly Stopwatch _animClock = new();
+    private IntPtr _animHwnd;
+    private double _sx, _sy, _sw, _sh;   // start outer rect
+    private double _tx, _ty, _tw, _th;   // target outer rect
+    private bool _timerRaised;
+
+    private void AnimateTo(IntPtr hwnd, Win32.RECT start, int px, int py, int pw, int ph)
+    {
+        _animHwnd = hwnd;
+        _sx = start.Left; _sy = start.Top; _sw = start.Width; _sh = start.Height;
+        _tx = px; _ty = py; _tw = pw; _th = ph;
+
+        // Already there (within a pixel)? Just set it; no animation needed.
+        if (Math.Abs(_sx - _tx) < 1 && Math.Abs(_sy - _ty) < 1 &&
+            Math.Abs(_sw - _tw) < 1 && Math.Abs(_sh - _th) < 1)
+        {
+            Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
+            return;
+        }
+
+        // Raise the system timer resolution so DispatcherTimer ticks crisply for
+        // the brief glide (released when the animation ends).
+        if (!_timerRaised) { Win32.timeBeginPeriod(1); _timerRaised = true; }
+
+        _animClock.Restart();
+        if (_animTimer == null)
+        {
+            _animTimer = new DispatcherTimer(DispatcherPriority.Render)
+            {
+                Interval = TimeSpan.FromMilliseconds(6),
+            };
+            _animTimer.Tick += AnimTick;
+        }
+        _animTimer.Start();
+        AnimTick(null, EventArgs.Empty); // render the first frame immediately
+    }
+
+    private void AnimTick(object? sender, EventArgs e)
+    {
+        double t = AnimationMs <= 0 ? 1.0 : _animClock.Elapsed.TotalMilliseconds / AnimationMs;
+        if (t >= 1.0) t = 1.0;
+        double p = 1.0 - Math.Pow(1.0 - t, 3); // ease-out cubic
+
+        int x = (int)Math.Round(_sx + (_tx - _sx) * p);
+        int y = (int)Math.Round(_sy + (_ty - _sy) * p);
+        int w = (int)Math.Round(_sw + (_tw - _sw) * p);
+        int h = (int)Math.Round(_sh + (_th - _sh) * p);
+        Win32.SetWindowPos(_animHwnd, IntPtr.Zero, x, y, w, h, MoveFlags);
+
+        if (t >= 1.0) StopAnimation(snapFinal: true);
+    }
+
+    private void StopAnimation(bool snapFinal)
+    {
+        _animTimer?.Stop();
+        _animClock.Reset();
+        if (snapFinal && _animHwnd != IntPtr.Zero)
+            Win32.SetWindowPos(_animHwnd, IntPtr.Zero,
+                (int)_tx, (int)_ty, (int)_tw, (int)_th, MoveFlags);
+        if (_timerRaised) { Win32.timeEndPeriod(1); _timerRaised = false; }
+    }
+
+    /// <summary>Abort any in-flight glide (e.g. before a native maximize/minimize).</summary>
+    public void CancelAnimation()
+    {
+        if (_animTimer != null && _animTimer.IsEnabled) StopAnimation(snapFinal: false);
     }
 }
