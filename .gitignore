@@ -90,3 +90,7 @@ $RECYCLE.BIN/
 
 # Swoosh runtime artifacts
 swoosh.log
+
+# WinUI settings publish staging
+Swoosh.Settings/pub-arm64/
+Swoosh.Settings/pub-x64/

@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Swoosh.SettingsApp.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Custom title bar (drag region) -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="40" Padding="14,0,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="TitleText" Grid.Column="0"
+                       Text="Swoosh"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Grid>
+
+        <muxc:NavigationView x:Name="Nav" Grid.Row="1"
+                             IsBackButtonVisible="Collapsed"
+                             IsSettingsVisible="False"
+                             PaneDisplayMode="Left"
+                             OpenPaneLength="190"
+                             IsPaneToggleButtonVisible="False"
+                             SelectionChanged="Nav_SelectionChanged">
+            <muxc:NavigationView.MenuItems>
+                <muxc:NavigationViewItem Content="General" Tag="general" IsSelected="True">
+                    <muxc:NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </muxc:NavigationViewItem.Icon>
+                </muxc:NavigationViewItem>
+                <muxc:NavigationViewItem Content="Snapping" Tag="snapping">
+                    <muxc:NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE744;" />
+                    </muxc:NavigationViewItem.Icon>
+                </muxc:NavigationViewItem>
+                <muxc:NavigationViewItem Content="Appearance" Tag="appearance">
+                    <muxc:NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE790;" />
+                    </muxc:NavigationViewItem.Icon>
+                </muxc:NavigationViewItem>
+                <muxc:NavigationViewItem Content="Updates" Tag="updates">
+                    <muxc:NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE777;" />
+                    </muxc:NavigationViewItem.Icon>
+                </muxc:NavigationViewItem>
+                <muxc:NavigationViewItem Content="About" Tag="about">
+                    <muxc:NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" />
+                    </muxc:NavigationViewItem.Icon>
+                </muxc:NavigationViewItem>
+            </muxc:NavigationView.MenuItems>
+
+            <ScrollViewer Padding="28,12,28,28" VerticalScrollBarVisibility="Auto">
+                <Grid>
+                    <!-- GENERAL -->
+                    <StackPanel x:Name="GeneralPane" Spacing="12">
+                        <TextBlock Text="General" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Gestures enabled" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Master switch for all touchpad gestures."
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="GesturesToggle" Grid.Column="1" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Animate window snaps" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Glide windows into place instead of snapping instantly."
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="AnimateToggle" Grid.Column="1" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Touchpad debug overlay" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Show live touchpad contacts for troubleshooting."
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="DebugToggle" Grid.Column="1" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- SNAPPING -->
+                    <StackPanel x:Name="SnappingPane" Spacing="12" Visibility="Collapsed">
+                        <TextBlock Text="Snapping" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Thirds grid modifier" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Hold a key while swiping to target a 3x3 grid cell."
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="GridToggle" Grid.Column="1" Toggled="OnGridToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Modifier key" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Which key engages thirds snapping."
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ComboBox x:Name="ModifierCombo" Grid.Column="1" MinWidth="120"
+                                          VerticalAlignment="Center"
+                                          SelectionChanged="OnModifierChanged">
+                                    <ComboBoxItem Content="Shift" />
+                                    <ComboBoxItem Content="Ctrl" />
+                                    <ComboBoxItem Content="Alt" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Touch sensitivity" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="Lower values ignore vertical drift during a sideways swipe."
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Forgiving" VerticalAlignment="Center"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <Slider x:Name="SensitivitySlider" Grid.Column="1" Margin="12,0"
+                                            Minimum="0" Maximum="1" StepFrequency="0.05"
+                                            ValueChanged="OnSensitivityChanged" />
+                                    <TextBlock Grid.Column="2" Text="Twitchy" VerticalAlignment="Center"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- APPEARANCE -->
+                    <StackPanel x:Name="AppearancePane" Spacing="12" Visibility="Collapsed">
+                        <TextBlock Text="Appearance" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Use Windows accent color" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Match the snap overlay highlight to your accent color."
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OverlayAccentToggle" Grid.Column="1" Toggled="OnAccentToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Overlay color" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="Used when not following the accent color."
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <StackPanel x:Name="SwatchPanel" Orientation="Horizontal" Spacing="8" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- UPDATES -->
+                    <StackPanel x:Name="UpdatesPane" Spacing="12" Visibility="Collapsed">
+                        <TextBlock Text="Updates" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock x:Name="UpdateStatus" Text="Checking for updates..."
+                                               Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock x:Name="UpdateSub" Text=""
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button x:Name="DownloadBtn" Content="Download" Visibility="Collapsed"
+                                            Style="{StaticResource AccentButtonStyle}" Click="DownloadBtn_Click" />
+                                    <Button x:Name="CheckBtn" Content="Check now" Click="CheckBtn_Click" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Text="What's new" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="2,4,0,0" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel x:Name="ChangelogPanel" Spacing="8" />
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ABOUT -->
+                    <StackPanel x:Name="AboutPane" Spacing="12" Visibility="Collapsed">
+                        <TextBlock Text="About" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Swoosh" Style="{StaticResource SubtitleTextBlockStyle}" />
+                                <TextBlock x:Name="VersionText" Text="v0.0.0"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="Swish-style window snapping gestures for the Windows Precision Touchpad."
+                                           TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Style="{StaticResource BodyTextBlockStyle}" />
+                                <HyperlinkButton Content="github.com/bwya77/swoosh"
+                                                 NavigateUri="https://github.com/bwya77/swoosh"
+                                                 Padding="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+        </muxc:NavigationView>
+    </Grid>
+</Window>

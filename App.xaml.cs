@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using Swoosh.Settings;
-using Swoosh.UI;
 using Swoosh.Updates;
 using Forms = System.Windows.Forms;
 
@@ -12,12 +14,15 @@ public partial class App : System.Windows.Application
 {
     private SwooshController? _controller;
     private Forms.NotifyIcon? _tray;
-    private Forms.ToolStripMenuItem? _gesturesItem;
     private readonly SettingsStore _settings = new();
     private readonly UpdateChecker _updates = new();
-    private SettingsWindow? _settingsWindow;
     private string? _updateUrl;
-    private bool _syncingTray;
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_RESTORE = 9;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -33,68 +38,105 @@ public partial class App : System.Windows.Application
 
     private void BuildTray()
     {
-        var menu = new Forms.ContextMenuStrip();
-
-        var settingsItem = new Forms.ToolStripMenuItem("Settings...");
-        settingsItem.Font = new Font(settingsItem.Font, System.Drawing.FontStyle.Bold);
-        settingsItem.Click += (_, _) => OpenSettings();
-
-        _gesturesItem = new Forms.ToolStripMenuItem("Gestures enabled")
-        {
-            Checked = _settings.Current.GesturesEnabled,
-            CheckOnClick = true,
-        };
-        _gesturesItem.CheckedChanged += (_, _) =>
-        {
-            if (_syncingTray) return;
-            var s = _settings.Current.Clone();
-            s.GesturesEnabled = _gesturesItem.Checked;
-            _settings.Save(s);
-        };
-
-        var quitItem = new Forms.ToolStripMenuItem("Quit Swoosh");
-        quitItem.Click += (_, _) => Shutdown();
-
-        menu.Items.Add(settingsItem);
-        menu.Items.Add(_gesturesItem);
-        menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add(quitItem);
-
         _tray = new Forms.NotifyIcon
         {
             Icon = SystemIcons.Application,
             Text = "Swoosh",
             Visible = true,
-            ContextMenuStrip = menu,
         };
+        // OS-owned dark-themed context menu (immune to the phantom-click dismissal that
+        // killed the custom WPF popup - Windows runs the menu's own modal loop).
+        _tray.ContextMenuStrip = UI.TrayMenu.Create(
+            getGestures: () => _settings.Current.GesturesEnabled,
+            onSettings: OpenSettings,
+            onToggleGestures: () =>
+            {
+                var s = _settings.Current.Clone();
+                s.GesturesEnabled = !s.GesturesEnabled;
+                _settings.Save(s);
+            },
+            onQuit: () => Shutdown());
         _tray.DoubleClick += (_, _) => OpenSettings();
         _tray.BalloonTipClicked += (_, _) => OpenUpdateUrl();
     }
 
     private void OpenSettings()
     {
-        if (_settingsWindow is { IsLoaded: true })
+        try
         {
-            if (_settingsWindow.WindowState == WindowState.Minimized)
-                _settingsWindow.WindowState = WindowState.Normal;
-            _settingsWindow.Activate();
-            return;
+            // If the settings app is already open, just bring it to the foreground.
+            var existing = Process.GetProcessesByName("Swoosh.Settings");
+            foreach (var p in existing)
+            {
+                if (p.MainWindowHandle != IntPtr.Zero)
+                {
+                    ShowWindow(p.MainWindowHandle, SW_RESTORE);
+                    SetForegroundWindow(p.MainWindowHandle);
+                    return;
+                }
+            }
+            if (existing.Length > 0) return; // starting up or has no window yet: don't spawn a second one
+
+            var exe = ResolveSettingsExe();
+            if (exe == null)
+            {
+                _tray?.ShowBalloonTip(4000, "Swoosh",
+                    "Settings app (Swoosh.Settings.exe) was not found.", Forms.ToolTipIcon.Warning);
+                return;
+            }
+            Process.Start(new ProcessStartInfo(exe)
+            {
+                UseShellExecute = false,
+                WorkingDirectory = Path.GetDirectoryName(exe)!,
+            });
         }
-        _settingsWindow = new SettingsWindow(_settings, _updates);
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
-        _settingsWindow.Show();
-        _settingsWindow.Activate();
+        catch { /* nothing actionable if the settings app can't launch */ }
+    }
+
+    /// <summary>
+    /// Find Swoosh.Settings.exe: next to the main exe (release layout, optionally in a
+    /// "Settings" subfolder), or in the WinUI project's bin folder for local dev runs.
+    /// </summary>
+    private static string? ResolveSettingsExe()
+    {
+        string baseDir = AppContext.BaseDirectory;
+        string[] candidates =
+        {
+            Path.Combine(baseDir, "Settings", "Swoosh.Settings.exe"),
+            Path.Combine(baseDir, "Swoosh.Settings.exe"),
+        };
+        foreach (var c in candidates)
+            if (File.Exists(c)) return c;
+
+        // Dev fallback: walk up to the repo root (has Swoosh.sln), take the newest build.
+        var dir = new DirectoryInfo(baseDir);
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "Swoosh.sln")))
+            dir = dir.Parent;
+        if (dir != null)
+        {
+            var projBin = Path.Combine(dir.FullName, "Swoosh.Settings", "bin");
+            if (Directory.Exists(projBin))
+            {
+                return Directory.GetFiles(projBin, "Swoosh.Settings.exe", SearchOption.AllDirectories)
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .FirstOrDefault();
+            }
+        }
+        return null;
     }
 
     private void OnSettingsChanged(AppSettings s)
     {
-        _controller?.ApplySettings(s);
-        if (_gesturesItem != null && _gesturesItem.Checked != s.GesturesEnabled)
+        // External edits from the settings app arrive on the watcher's background
+        // thread; marshal to the UI thread before touching the controller.
+        if (!Dispatcher.CheckAccess())
         {
-            _syncingTray = true;
-            _gesturesItem.Checked = s.GesturesEnabled;
-            _syncingTray = false;
+            Dispatcher.BeginInvoke(() => OnSettingsChanged(s));
+            return;
         }
+        _controller?.ApplySettings(s);
+        // The tray flyout is rebuilt from current settings each time it opens, so
+        // there is no persistent menu item to keep in sync here.
     }
 
     private async Task CheckForUpdatesAsync(bool manual)
@@ -157,6 +199,7 @@ public partial class App : System.Windows.Application
     {
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
         _controller?.Dispose();
+        _settings.Dispose();
         base.OnExit(e);
     }
 }

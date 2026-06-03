@@ -17,4 +17,15 @@
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
 
+  <!-- The standalone WinUI 3 settings app lives in this subfolder of the repo root.
+       Exclude it from the WPF app's default globbing so it builds as its own project. -->
+  <ItemGroup>
+    <Compile Remove="Swoosh.Settings\**" />
+    <Page Remove="Swoosh.Settings\**" />
+    <ApplicationDefinition Remove="Swoosh.Settings\**" />
+    <None Remove="Swoosh.Settings\**" />
+    <EmbeddedResource Remove="Swoosh.Settings\**" />
+    <Content Remove="Swoosh.Settings\**" />
+  </ItemGroup>
+
 </Project>

@@ -38,6 +38,7 @@ public static class Win32
     public const long WS_THICKFRAME = 0x00040000;
 
     public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+    public const uint MONITOR_DEFAULTTONULL = 0x00000000;
 
     // Extended window styles for the click-through overlay.
     public const int GWL_EXSTYLE = -20;
@@ -54,9 +55,33 @@ public static class Win32
     public const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
     public const int DWMSBT_MAINWINDOW = 2;  // Mica
     public const int DWMSBT_TRANSIENTWINDOW = 3; // Acrylic
+    public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    public const int DWMWCP_ROUND = 2;       // full radius
+    public const int DWMWCP_ROUNDSMALL = 3;   // tighter radius (menus/popups)
 
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MARGINS { public int Left, Right, Top, Bottom; }
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
+
+    /// <summary>Apply a translucent Acrylic backdrop + dark/light framing + rounded corners
+    /// to a flyout-style window (e.g. the tray menu). No-op before Win11.</summary>
+    public static void EnableAcrylicFlyout(IntPtr hwnd, bool dark)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        int d = dark ? 1 : 0;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref d, sizeof(int));
+        int backdrop = DWMSBT_TRANSIENTWINDOW; // Acrylic
+        DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
+        int pref = DWMWCP_ROUND;
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int));
+        var m = new MARGINS { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+        DwmExtendFrameIntoClientArea(hwnd, ref m);
+    }
 
     /// <summary>Apply a Mica backdrop + dark titlebar to a Win11 window (no-op pre-Win11).</summary>
     public static void EnableMicaDark(IntPtr hwnd)
@@ -65,6 +90,17 @@ public static class Win32
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, sizeof(int));
         int backdrop = DWMSBT_MAINWINDOW;
         DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
+    }
+
+    /// <summary>Give a top-level popup (e.g. the tray menu) Win11 rounded corners and
+    /// dark-mode framing. No-op before Windows 11; harmless on older builds.</summary>
+    public static void EnableRoundedDark(IntPtr hwnd, bool smallRadius = true)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        int dark = 1;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+        int pref = smallRadius ? DWMWCP_ROUNDSMALL : DWMWCP_ROUND;
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int));
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -169,6 +205,70 @@ public static class Win32
 
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetFocus(IntPtr hWnd);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    /// <summary>Force a window to the foreground reliably, defeating the foreground-lock
+    /// that makes a bare SetForegroundWindow fail for tray-spawned popups.</summary>
+    public static void ForceForeground(IntPtr hwnd)
+    {
+        IntPtr fg = GetForegroundWindow();
+        uint fgThread = GetWindowThreadProcessId(fg, IntPtr.Zero);
+        uint thisThread = GetCurrentThreadId();
+        if (fgThread != thisThread)
+            AttachThreadInput(fgThread, thisThread, true);
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
+        if (fgThread != thisThread)
+            AttachThreadInput(fgThread, thisThread, false);
+    }
+
+    // Low-level mouse hook (used to dismiss the tray flyout on an outside click).
+    public const int WH_MOUSE_LL = 14;
+    public const int WM_LBUTTONDOWN = 0x0201;
+    public const int WM_RBUTTONDOWN = 0x0204;
+    public const int WM_MBUTTONDOWN = 0x0207;
+    public const int WM_NCLBUTTONDOWN = 0x00A1;
+    public const int WM_NCRBUTTONDOWN = 0x00A4;
+    public const uint LLMHF_INJECTED = 0x00000001;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSLLHOOKSTRUCT
+    {
+        public POINT pt;
+        public uint mouseData;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn,
+        IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr GetModuleHandle(string? lpModuleName);
 
     [DllImport("user32.dll")]
     public static extern int GetWindowTextLength(IntPtr hWnd);

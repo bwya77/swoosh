@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>Swoosh.SettingsApp</RootNamespace>
+    <AssemblyName>Swoosh.Settings</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;arm64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>0.1.0</Version>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <!-- Self-contained Windows App Runtime bundles an AI/ML runtime we never call;
+         the release workflow deletes those native DLLs after publish to trim size. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260508005" />
+  </ItemGroup>
+
+  <!-- Bundle the curated changelog so "What's new" shows hand-written notes
+       instead of raw commit messages from GitHub. -->
+  <ItemGroup>
+    <Content Include="..\CHANGELOG.md" Link="CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Share the settings model, persistence, and update checker with the main app
+       by linking the source rather than maintaining a separate library. -->
+  <ItemGroup>
+    <Compile Include="..\Settings\AppSettings.cs" Link="Shared\AppSettings.cs" />
+    <Compile Include="..\Settings\SettingsStore.cs" Link="Shared\SettingsStore.cs" />
+    <Compile Include="..\Updates\UpdateChecker.cs" Link="Shared\UpdateChecker.cs" />
+  </ItemGroup>
+
+</Project>
