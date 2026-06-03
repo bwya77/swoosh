@@ -36,16 +36,29 @@ newest build.
 | Down         | Minimize          |
 | Diagonal     | Quarter           |
 
-A translucent preview shows the target zone as you swipe; lift to commit.
+A translucent preview shows the target zone as you swipe; lift to commit. The
+preview glides smoothly between zones and the window animates into place rather
+than snapping instantly.
+
+## Thirds and the 3x3 grid
+
+Hold a **modifier key** (default **Shift**, configurable to Ctrl or Alt in
+settings) while you swipe and the screen snaps to a **3x3 grid** instead of the
+normal halves and quarters. As you move left to right the preview steps through
+left third, left two-thirds, centered third, right two-thirds, then right third,
+and the same vertically. Diagonal swipes land the window in any of the four 1/3
+by 1/3 corner cells. Release the modifier to go back to halves and quarters.
 
 ## Move across monitors and virtual desktops
 
 Press and hold two fingers on the titlebar, then swipe to send the window to
 another monitor or virtual desktop. A small **mini-map HUD** appears at the
-cursor: a rounded square stands in for the monitor, the target zone lights up in
-blue as you move, and a second square appears when a virtual desktop sits to the
+cursor: a rounded square stands in for the monitor, the target zone lights up as
+you move, and a second square appears when a virtual desktop sits to the
 side so you can see where the window will land. The HUD stays up after a move so
-you can keep going to the next screen or step back to the previous one.
+you can keep going to the next screen or step back to the previous one. The
+target zone lights up in your Windows accent color by default, or any color you
+pick in settings.
 
 ## Five-finger free move
 
@@ -71,6 +84,25 @@ fallback uses **Ctrl+Alt+Shift**:
 - `Ctrl+Alt+Shift+U/I/J/K` for the top-left, top-right, bottom-left, or bottom-right quarter
 
 The hotkey acts on the window **under the cursor**.
+
+## Settings
+
+Open **Settings...** from the tray icon for a polished WinUI-style window with a
+left navigation pane:
+
+- the current **version** and a short **changelog**, plus a **Check for updates**
+  button
+- toggle **gestures** and the **touchpad debug overlay**
+- toggle the smooth **snap animation**
+- enable the **grid modifier** and choose the key (Shift, Ctrl, or Alt) for 3x3
+  snapping
+- a **touch sensitivity** slider that controls how easily a swipe is read as
+  diagonal versus straight
+- pick the **overlay color** from a set of swatches, or have it follow your
+  **Windows accent color**
+
+Swoosh also checks GitHub for a newer release on startup and lets you know in the
+tray if one is available.
 
 ## How it works
 
@@ -111,6 +143,7 @@ Swap `win-arm64` for `win-x64` on Intel or AMD hardware.
 
 Runs in the system tray. Right-click the tray icon for:
 
+- **Settings...** to open the settings window
 - **Gestures enabled** as the master toggle
 - **Touchpad debug overlay** that shows live finger contacts (use this to confirm
   the touchpad is being decoded on your machine)
@@ -130,10 +163,8 @@ from there. You can also start a build by hand from the **Actions** tab using
 ## Roadmap
 
 - Pinch-in to close, pinch-out to fullscreen
-- Chained swipes for thirds (half, then one third, then two thirds)
-- Settings window with per-gesture toggles and sensitivity
-- Snap layouts (2x2, 3x2, 3x3 grids)
-- Magic Mouse and modifier-key gesture support
+- Magic Mouse gesture support
+- Saveable custom snap layouts
 
 ## Notes
 

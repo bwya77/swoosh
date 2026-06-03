@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows;
+using Swoosh.Settings;
+using Swoosh.UI;
 using Swoosh.Updates;
 using Forms = System.Windows.Forms;
 
@@ -11,13 +13,20 @@ public partial class App : System.Windows.Application
     private SwooshController? _controller;
     private Forms.NotifyIcon? _tray;
     private Forms.ToolStripMenuItem? _gesturesItem;
+    private readonly SettingsStore _settings = new();
     private readonly UpdateChecker _updates = new();
+    private SettingsWindow? _settingsWindow;
     private string? _updateUrl;
+    private bool _syncingTray;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
         _controller = new SwooshController();
+        _controller.ApplySettings(_settings.Current);
+        _settings.Changed += OnSettingsChanged;
+
         BuildTray();
         _ = CheckForUpdatesAsync(manual: false);
     }
@@ -26,40 +35,29 @@ public partial class App : System.Windows.Application
     {
         var menu = new Forms.ContextMenuStrip();
 
+        var settingsItem = new Forms.ToolStripMenuItem("Settings...");
+        settingsItem.Font = new Font(settingsItem.Font, System.Drawing.FontStyle.Bold);
+        settingsItem.Click += (_, _) => OpenSettings();
+
         _gesturesItem = new Forms.ToolStripMenuItem("Gestures enabled")
         {
-            Checked = true,
+            Checked = _settings.Current.GesturesEnabled,
             CheckOnClick = true,
         };
         _gesturesItem.CheckedChanged += (_, _) =>
         {
-            if (_controller != null) _controller.GesturesEnabled = _gesturesItem.Checked;
+            if (_syncingTray) return;
+            var s = _settings.Current.Clone();
+            s.GesturesEnabled = _gesturesItem.Checked;
+            _settings.Save(s);
         };
 
-        var debugItem = new Forms.ToolStripMenuItem("Touchpad debug overlay");
-        debugItem.Click += (_, _) => _controller?.ToggleDebugOverlay();
-
-        var updateItem = new Forms.ToolStripMenuItem("Check for updates...");
-        updateItem.Click += async (_, _) => await CheckForUpdatesAsync(manual: true);
-
-        var aboutItem = new Forms.ToolStripMenuItem("About Swoosh");
-        aboutItem.Click += (_, _) => Forms.MessageBox.Show(
-            "Swoosh — Swish-style window gestures for Windows.\n\n" +
-            "• Hover a window's titlebar, then two-finger swipe on the touchpad:\n" +
-            "   ← left half   → right half   ↑ maximize   ↓ minimize\n" +
-            "   diagonals → quarters\n\n" +
-            "• Keyboard fallback: Win+Alt+Arrows (halves/max/min),\n" +
-            "   Win+Alt+U/I/J/K (quarters).",
-            "Swoosh", Forms.MessageBoxButtons.OK, Forms.MessageBoxIcon.Information);
-
-        var quitItem = new Forms.ToolStripMenuItem("Quit");
+        var quitItem = new Forms.ToolStripMenuItem("Quit Swoosh");
         quitItem.Click += (_, _) => Shutdown();
 
+        menu.Items.Add(settingsItem);
         menu.Items.Add(_gesturesItem);
-        menu.Items.Add(debugItem);
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add(updateItem);
-        menu.Items.Add(aboutItem);
         menu.Items.Add(quitItem);
 
         _tray = new Forms.NotifyIcon
@@ -69,7 +67,34 @@ public partial class App : System.Windows.Application
             Visible = true,
             ContextMenuStrip = menu,
         };
+        _tray.DoubleClick += (_, _) => OpenSettings();
         _tray.BalloonTipClicked += (_, _) => OpenUpdateUrl();
+    }
+
+    private void OpenSettings()
+    {
+        if (_settingsWindow is { IsLoaded: true })
+        {
+            if (_settingsWindow.WindowState == WindowState.Minimized)
+                _settingsWindow.WindowState = WindowState.Normal;
+            _settingsWindow.Activate();
+            return;
+        }
+        _settingsWindow = new SettingsWindow(_settings, _updates);
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+        _settingsWindow.Activate();
+    }
+
+    private void OnSettingsChanged(AppSettings s)
+    {
+        _controller?.ApplySettings(s);
+        if (_gesturesItem != null && _gesturesItem.Checked != s.GesturesEnabled)
+        {
+            _syncingTray = true;
+            _gesturesItem.Checked = s.GesturesEnabled;
+            _syncingTray = false;
+        }
     }
 
     private async Task CheckForUpdatesAsync(bool manual)
@@ -87,8 +112,6 @@ public partial class App : System.Windows.Application
         }
         else if (manual)
         {
-            // Only speak up on the "no update" / "couldn't check" paths when the
-            // user explicitly asked, so the automatic startup check stays silent.
             _tray?.ShowBalloonTip(
                 4000,
                 "Swoosh",

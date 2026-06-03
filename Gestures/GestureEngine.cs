@@ -44,6 +44,18 @@ public sealed class GestureEngine
     public event Action<SwipeDirection>? GestureCompleted;
     public event Action? GestureCancelled;
 
+    /// <summary>True while the thirds modifier is held: enables fine column/row third
+    /// snapping and uses a smaller dead-zone so small adjustments still register.</summary>
+    public bool ThirdsMode { get; set; }
+
+    /// <summary>Dead-zone used while <see cref="ThirdsMode"/> is active.</summary>
+    public double ThirdsDeadZone { get; set; } = 0.03;
+
+    /// <summary>Raw signed centroid delta (dx, dy) from the swipe start, fired every
+    /// two-finger frame. Pad Y grows downward. Lets the controller pick a thirds target
+    /// by magnitude rather than just an 8-way direction.</summary>
+    public event Action<double, double>? SwipeRaw;
+
     /// <summary>Fired once when two fingers have rested long enough (hold engaged).</summary>
     public event Action? HoldEngaged;
 
@@ -170,6 +182,7 @@ public sealed class GestureEngine
             double dy = cy - _startY;
             double dist = Math.Sqrt(dx * dx + dy * dy);
             _maxDist = Math.Max(_maxDist, dist);
+            SwipeRaw?.Invoke(dx, dy);
 
             // Decide between snap-swipe and press-and-hold. A hold engages only
             // if the fingers stayed near the landing point for the dwell time.
@@ -214,7 +227,7 @@ public sealed class GestureEngine
                     DesktopMove?.Invoke(dir);
                 }
             }
-            else if (dist >= DeadZone)
+            else if (dist >= (ThirdsMode ? ThirdsDeadZone : DeadZone))
             {
                 _currentDir = Classify(dx, dy);
                 double progress = Math.Clamp(dist / CommitDistance, 0, 1);

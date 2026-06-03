@@ -18,6 +18,9 @@ public sealed class UpdateChecker
 
     public sealed record UpdateInfo(Version Latest, string Tag, string HtmlUrl);
 
+    /// <summary>One published release, used to render the in-app changelog.</summary>
+    public sealed record ReleaseNote(string Name, string Tag, string Body, DateTimeOffset? Published, string HtmlUrl);
+
     /// <summary>The running build's version, normalized to Major.Minor.Build.</summary>
     public Version CurrentVersion
     {
@@ -61,6 +64,48 @@ public sealed class UpdateChecker
         catch
         {
             return null; // network / parse / cancellation: treat as "no update info"
+        }
+    }
+
+    /// <summary>
+    /// Fetch recent published releases (newest first) for the in-app changelog.
+    /// Returns an empty list on any failure so the UI can show a friendly message.
+    /// </summary>
+    public async Task<IReadOnlyList<ReleaseNote>> ReleasesAsync(int max = 20, CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"https://api.github.com/repos/{Owner}/{Repo}/releases?per_page={max}";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.UserAgent.ParseAdd("Swoosh-UpdateChecker");
+            req.Headers.Accept.ParseAdd("application/vnd.github+json");
+
+            using var resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return Array.Empty<ReleaseNote>();
+
+            var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<ReleaseNote>();
+
+            var list = new List<ReleaseNote>();
+            foreach (var r in doc.RootElement.EnumerateArray())
+            {
+                if (r.TryGetProperty("draft", out var d) && d.GetBoolean()) continue;
+                string tag = r.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
+                string name = r.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                string body = r.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+                string html = r.TryGetProperty("html_url", out var h) ? h.GetString() ?? "" : "";
+                DateTimeOffset? pub = r.TryGetProperty("published_at", out var p) &&
+                    p.ValueKind == JsonValueKind.String && p.TryGetDateTimeOffset(out var dto)
+                    ? dto : null;
+                if (string.IsNullOrWhiteSpace(name)) name = tag;
+                list.Add(new ReleaseNote(name, tag, body, pub, html));
+            }
+            return list;
+        }
+        catch
+        {
+            return Array.Empty<ReleaseNote>();
         }
     }
 

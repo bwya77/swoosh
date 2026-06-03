@@ -93,7 +93,7 @@ public sealed class WindowSnapper
     {
         int x = w.Left, y = w.Top, cw = w.Width, ch = w.Height;
         int halfW = cw / 2, halfH = ch / 2;
-        int thirdW = cw / 3;
+        int thirdW = cw / 3, thirdH = ch / 3;
         return zone switch
         {
             SnapZone.LeftHalf => R(x, y, halfW, ch),
@@ -104,9 +104,23 @@ public sealed class WindowSnapper
             SnapZone.TopRight => R(x + halfW, y, cw - halfW, halfH),
             SnapZone.BottomLeft => R(x, y + halfH, halfW, ch - halfH),
             SnapZone.BottomRight => R(x + halfW, y + halfH, cw - halfW, ch - halfH),
+            // Full-height columns.
             SnapZone.LeftThird => R(x, y, thirdW, ch),
             SnapZone.CenterThird => R(x + thirdW, y, thirdW, ch),
             SnapZone.RightThird => R(x + 2 * thirdW, y, cw - 2 * thirdW, ch),
+            SnapZone.LeftTwoThird => R(x, y, 2 * thirdW, ch),
+            SnapZone.RightTwoThird => R(x + thirdW, y, cw - thirdW, ch),
+            // Full-width rows.
+            SnapZone.TopThird => R(x, y, cw, thirdH),
+            SnapZone.CenterRowThird => R(x, y + thirdH, cw, thirdH),
+            SnapZone.BottomThird => R(x, y + 2 * thirdH, cw, ch - 2 * thirdH),
+            SnapZone.TopTwoThird => R(x, y, cw, 2 * thirdH),
+            SnapZone.BottomTwoThird => R(x, y + thirdH, cw, ch - thirdH),
+            // Corner 1/3 x 1/3 cells.
+            SnapZone.ThirdTopLeft => R(x, y, thirdW, thirdH),
+            SnapZone.ThirdTopRight => R(x + 2 * thirdW, y, cw - 2 * thirdW, thirdH),
+            SnapZone.ThirdBottomLeft => R(x, y + 2 * thirdH, thirdW, ch - 2 * thirdH),
+            SnapZone.ThirdBottomRight => R(x + 2 * thirdW, y + 2 * thirdH, cw - 2 * thirdW, ch - 2 * thirdH),
             SnapZone.Center => R(x + cw / 6, y + ch / 6, cw * 2 / 3, ch * 2 / 3),
             SnapZone.Maximize => w,
             _ => w,

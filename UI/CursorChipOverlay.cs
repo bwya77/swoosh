@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using Swoosh.Native;
@@ -42,8 +43,18 @@ public sealed class CursorChipOverlay
 
     private static readonly Brush WhiteEdge = Freeze(new SolidColorBrush(Color.FromArgb(245, 255, 255, 255)));
     private static readonly Brush ScreenBg = Freeze(new SolidColorBrush(Color.FromArgb(96, 22, 24, 30)));
-    private static readonly Brush BlueSolid = Freeze(new SolidColorBrush(Color.FromArgb(235, 10, 132, 255)));
-    private static readonly Brush BlueFaint = Freeze(new SolidColorBrush(Color.FromArgb(70, 10, 132, 255)));
+
+    private static readonly Brush DefaultSolid = Freeze(new SolidColorBrush(Color.FromArgb(235, 10, 132, 255)));
+
+    // Highlight brushes, recolored from settings (Windows accent or a custom color).
+    private Brush _solid = DefaultSolid;
+    private Brush _faint = Freeze(new SolidColorBrush(Color.FromArgb(70, 10, 132, 255)));
+
+    // Whether the snap fill glides between zones (mirrors the window-move animation).
+    private bool _animate = true;
+
+    private static readonly Duration FillDuration = new(TimeSpan.FromMilliseconds(210));
+    private static readonly IEasingFunction FillEase = new CubicEase { EasingMode = EasingMode.EaseOut };
 
     private static Brush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
 
@@ -69,6 +80,20 @@ public sealed class CursorChipOverlay
     /// <summary>Native handle of the HUD window once shown (else Zero). Used to carry
     /// the overlay across a virtual-desktop switch so it stays visible.</summary>
     public IntPtr Handle => _win == null ? IntPtr.Zero : new WindowInteropHelper(_win).Handle;
+
+    /// <summary>Apply live appearance settings: whether the snap fill animates between
+    /// zones, and the highlight color (the Windows accent color or a custom hex).</summary>
+    public void ApplyAppearance(bool animate, bool useAccent, string customHex)
+    {
+        _animate = animate;
+
+        Color c = AccentColors.Resolve(useAccent, customHex);
+        _solid = Freeze(new SolidColorBrush(Color.FromArgb(235, c.R, c.G, c.B)));
+        _faint = Freeze(new SolidColorBrush(Color.FromArgb(70, c.R, c.G, c.B)));
+
+        // Recolor anything currently on screen so the change is visible immediately.
+        if (_singleFill is { Visibility: Visibility.Visible }) _singleFill.Background = _solid;
+    }
 
     private void EnsureWindow()
     {
@@ -166,7 +191,7 @@ public sealed class CursorChipOverlay
 
         var fill = new Border
         {
-            Background = BlueSolid,
+            Background = DefaultSolid,
             CornerRadius = new CornerRadius(0),
             Visibility = Visibility.Collapsed,
         };
@@ -235,19 +260,64 @@ public sealed class CursorChipOverlay
     {
         if (_singleFill == null) return;
         var frac = ZoneFraction(zone);
-        if (frac == null) { _singleFill.Visibility = Visibility.Collapsed; return; }
+        if (frac == null)
+        {
+            ClearFillAnimations();
+            _singleFill.Visibility = Visibility.Collapsed;
+            return;
+        }
 
         double innerW = SingleChipW - 2 * Stroke;
         double innerH = ChipH - 2 * Stroke;
         var (x0, y0, x1, y1) = frac.Value;
 
-        _singleFill.Width = Math.Max(0, (x1 - x0) * innerW);
-        _singleFill.Height = Math.Max(0, (y1 - y0) * innerH);
+        double tw = Math.Max(0, (x1 - x0) * innerW);
+        double th = Math.Max(0, (y1 - y0) * innerH);
+        double tl = x0 * innerW;
+        double tt = y0 * innerH;
+
         _singleFill.CornerRadius = new CornerRadius(zone == SnapZone.Center ? 4 : 0);
-        _singleFill.Background = BlueSolid;
-        Canvas.SetLeft(_singleFill, x0 * innerW);
-        Canvas.SetTop(_singleFill, y0 * innerH);
+        _singleFill.Background = _solid;
+
+        bool wasVisible = _singleFill.Visibility == Visibility.Visible;
         _singleFill.Visibility = Visibility.Visible;
+
+        // Glide between zones only when already on screen; the first appearance snaps in.
+        if (_animate && wasVisible)
+        {
+            AnimateTo(_singleFill, FrameworkElement.WidthProperty, tw);
+            AnimateTo(_singleFill, FrameworkElement.HeightProperty, th);
+            AnimateTo(_singleFill, Canvas.LeftProperty, tl);
+            AnimateTo(_singleFill, Canvas.TopProperty, tt);
+        }
+        else
+        {
+            SetImmediate(_singleFill, FrameworkElement.WidthProperty, tw);
+            SetImmediate(_singleFill, FrameworkElement.HeightProperty, th);
+            SetImmediate(_singleFill, Canvas.LeftProperty, tl);
+            SetImmediate(_singleFill, Canvas.TopProperty, tt);
+        }
+    }
+
+    private static void AnimateTo(UIElement el, DependencyProperty prop, double to)
+    {
+        var anim = new DoubleAnimation(to, FillDuration) { EasingFunction = FillEase };
+        el.BeginAnimation(prop, anim, HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private static void SetImmediate(UIElement el, DependencyProperty prop, double value)
+    {
+        el.BeginAnimation(prop, null); // drop any running animation so the value sticks
+        el.SetValue(prop, value);
+    }
+
+    private void ClearFillAnimations()
+    {
+        if (_singleFill == null) return;
+        _singleFill.BeginAnimation(FrameworkElement.WidthProperty, null);
+        _singleFill.BeginAnimation(FrameworkElement.HeightProperty, null);
+        _singleFill.BeginAnimation(Canvas.LeftProperty, null);
+        _singleFill.BeginAnimation(Canvas.TopProperty, null);
     }
 
     /// <summary>Show the desktop mini-map: <paramref name="count"/> squares with the
@@ -277,12 +347,12 @@ public sealed class CursorChipOverlay
                 var fill = _stripFills[i];
                 if (i == currentIndex)
                 {
-                    fill.Background = BlueSolid;
+                    fill.Background = _solid;
                     fill.Visibility = Visibility.Visible;
                 }
                 else if (i == leanIdx && leanIdx >= 0 && leanIdx < count)
                 {
-                    fill.Background = BlueFaint;
+                    fill.Background = _faint;
                     fill.Visibility = Visibility.Visible;
                 }
                 else fill.Visibility = Visibility.Collapsed;
@@ -326,6 +396,17 @@ public sealed class CursorChipOverlay
         SnapZone.LeftThird => (0, 0, 1.0 / 3, 1),
         SnapZone.CenterThird => (1.0 / 3, 0, 2.0 / 3, 1),
         SnapZone.RightThird => (2.0 / 3, 0, 1, 1),
+        SnapZone.LeftTwoThird => (0, 0, 2.0 / 3, 1),
+        SnapZone.RightTwoThird => (1.0 / 3, 0, 1, 1),
+        SnapZone.TopThird => (0, 0, 1, 1.0 / 3),
+        SnapZone.CenterRowThird => (0, 1.0 / 3, 1, 2.0 / 3),
+        SnapZone.BottomThird => (0, 2.0 / 3, 1, 1),
+        SnapZone.TopTwoThird => (0, 0, 1, 2.0 / 3),
+        SnapZone.BottomTwoThird => (0, 1.0 / 3, 1, 1),
+        SnapZone.ThirdTopLeft => (0, 0, 1.0 / 3, 1.0 / 3),
+        SnapZone.ThirdTopRight => (2.0 / 3, 0, 1, 1.0 / 3),
+        SnapZone.ThirdBottomLeft => (0, 2.0 / 3, 1.0 / 3, 1),
+        SnapZone.ThirdBottomRight => (2.0 / 3, 2.0 / 3, 1, 1),
         SnapZone.Minimize => (0.32, 0.82, 0.68, 1.0),
         _ => null,
     };
@@ -361,6 +442,10 @@ public sealed class CursorChipOverlay
         CancelHideTimer();
         _lastKey = "";
         _lastPlace = (-99999, 0, 0, 0);
+        // Reset the snap fill so the next gesture's first zone appears instantly
+        // instead of gliding from wherever the previous gesture left it.
+        ClearFillAnimations();
+        if (_singleFill != null) _singleFill.Visibility = Visibility.Collapsed;
         if (_win is { IsVisible: true }) _win.Hide();
     }
 

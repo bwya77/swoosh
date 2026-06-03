@@ -1,0 +1,415 @@
+<Window x:Class="Swoosh.UI.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Swoosh Settings"
+        Width="760" Height="580"
+        MinWidth="720" MinHeight="540"
+        WindowStartupLocation="CenterScreen"
+        Background="#FF1B1B1B"
+        Foreground="#FFF2F2F2"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        TextOptions.TextFormattingMode="Ideal"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="Accent" Color="#FF4CC2FF"/>
+        <SolidColorBrush x:Key="CardBrush" Color="#FF262626"/>
+        <SolidColorBrush x:Key="CardBorder" Color="#22FFFFFF"/>
+        <SolidColorBrush x:Key="Subtle" Color="#FFA6A6A6"/>
+        <SolidColorBrush x:Key="TrackOff" Color="#FF3D3D3D"/>
+        <SolidColorBrush x:Key="NavBg" Color="#FF202020"/>
+
+        <!-- Modern toggle switch built from a CheckBox -->
+        <Style x:Key="ToggleSwitch" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Background="Transparent">
+                            <Border x:Name="Track" Width="42" Height="24" CornerRadius="12"
+                                    Background="{StaticResource TrackOff}"
+                                    BorderBrush="#55FFFFFF" BorderThickness="1"/>
+                            <Ellipse x:Name="Thumb" Width="14" Height="14" Fill="#FFD8D8D8"
+                                     HorizontalAlignment="Left" Margin="6,0,0,0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="Thumb" Property="Fill" Value="#FF101010"/>
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,6,0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Thumb" Property="Width" Value="16"/>
+                                <Setter TargetName="Thumb" Property="Height" Value="16"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource CardBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="18,4"/>
+            <Setter Property="Margin" Value="0,0,0,14"/>
+        </Style>
+
+        <Style x:Key="PaneTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="2,0,0,16"/>
+        </Style>
+
+        <Style x:Key="RowTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="#FFF2F2F2"/>
+        </Style>
+
+        <Style x:Key="RowDesc" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource Subtle}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
+
+        <Style x:Key="AccentButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Accent}"/>
+            <Setter Property="Foreground" Value="#FF0A0A0A"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Opacity" Value="0.88"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="b" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GhostButton" TargetType="Button" BasedOn="{StaticResource AccentButton}">
+            <Setter Property="Background" Value="#33FFFFFF"/>
+            <Setter Property="Foreground" Value="#FFF2F2F2"/>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Minimal accent slider -->
+        <Style x:Key="SwSlider" TargetType="Slider">
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="1"/>
+            <Setter Property="SmallChange" Value="0.05"/>
+            <Setter Property="LargeChange" Value="0.1"/>
+            <Setter Property="IsSnapToTickEnabled" Value="True"/>
+            <Setter Property="TickFrequency" Value="0.05"/>
+            <Setter Property="Width" Value="180"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid VerticalAlignment="Center" Height="20">
+                            <Border Height="4" CornerRadius="2" Background="{StaticResource TrackOff}"/>
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="Slider.DecreaseLarge" Focusable="False" IsTabStop="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="4" CornerRadius="2" Background="{StaticResource Accent}"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False" IsTabStop="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Width="16" Height="16">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse x:Name="t" Width="16" Height="16" Fill="#FFF2F2F2"/>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="t" Property="Fill" Value="{StaticResource Accent}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Left-nav item: rounded highlight + accent bar when selected -->
+        <Style x:Key="NavItem" TargetType="ListBoxItem">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="b" CornerRadius="6" Background="Transparent" Padding="12,9">
+                            <Grid>
+                                <Rectangle x:Name="bar" Width="3" Height="16" RadiusX="1.5" RadiusY="1.5"
+                                           HorizontalAlignment="Left" Fill="{StaticResource Accent}"
+                                           Visibility="Collapsed"/>
+                                <TextBlock Text="{TemplateBinding Content}" FontSize="13.5"
+                                           Margin="12,0,0,0" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#14FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#26FFFFFF"/>
+                                <Setter TargetName="bar" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="190"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left navigation -->
+        <Border Grid.Column="0" Background="{StaticResource NavBg}"
+                BorderBrush="#14FFFFFF" BorderThickness="0,0,1,0">
+            <DockPanel Margin="16,20,16,16">
+                <StackPanel DockPanel.Dock="Top" Margin="6,0,0,18">
+                    <TextBlock Text="Swoosh" FontSize="22" FontWeight="SemiBold"/>
+                    <Border HorizontalAlignment="Left" CornerRadius="9" Background="#22FFFFFF"
+                            Padding="9,3" Margin="0,8,0,0">
+                        <TextBlock x:Name="VersionPill" Text="v0.0.0" FontSize="11.5" FontWeight="SemiBold"/>
+                    </Border>
+                </StackPanel>
+
+                <ListBox x:Name="Nav" DockPanel.Dock="Top" Background="Transparent"
+                         BorderThickness="0" Foreground="#FFF2F2F2"
+                         ItemContainerStyle="{StaticResource NavItem}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListBoxItem Content="General"/>
+                    <ListBoxItem Content="Snapping"/>
+                    <ListBoxItem Content="Updates"/>
+                    <ListBoxItem Content="About"/>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- Content -->
+        <Grid Grid.Column="1" Margin="30,26,30,24">
+
+            <!-- GENERAL -->
+            <StackPanel x:Name="GeneralPane">
+                <TextBlock Text="General" Style="{StaticResource PaneTitle}"/>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock Text="Gestures enabled" Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="Master switch for all touchpad gestures." Style="{StaticResource RowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="GesturesToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"/>
+                        </Grid>
+                        <Border Height="1" Background="#14FFFFFF"/>
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock Text="Animate window movements" Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="Glide windows into place instead of snapping instantly." Style="{StaticResource RowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="AnimateToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"/>
+                        </Grid>
+                        <Border Height="1" Background="#14FFFFFF"/>
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock Text="Touchpad debug overlay" Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="Show live finger contacts to validate tracking." Style="{StaticResource RowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="DebugToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- SNAPPING -->
+            <StackPanel x:Name="SnappingPane" Visibility="Collapsed">
+                <TextBlock Text="Snapping" Style="{StaticResource PaneTitle}"/>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock Text="Snap to thirds" Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="Hold the modifier while swiping to snap into full-height columns and full-width rows. A small push lands two-thirds, a bigger push one-third, and a tiny push the centered third."
+                                           Style="{StaticResource RowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="GridToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"/>
+                        </Grid>
+                        <Border Height="1" Background="#14FFFFFF"/>
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock Text="Modifier key" Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="Held to engage thirds. Swish uses Shift by default." Style="{StaticResource RowDesc}"/>
+                            </StackPanel>
+                            <ComboBox x:Name="ModifierCombo" Grid.Column="1" VerticalAlignment="Center">
+                                <ComboBoxItem Content="Shift"/>
+                                <ComboBoxItem Content="Ctrl"/>
+                                <ComboBoxItem Content="Alt"/>
+                            </ComboBox>
+                        </Grid>
+                        <Border Height="1" Background="#14FFFFFF"/>
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock Text="Touch sensitivity" Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="How readily a slightly diagonal swipe lands a corner cell. Lower it if sideways swipes keep drifting into corners or rows."
+                                           Style="{StaticResource RowDesc}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Low" FontSize="12" Foreground="{StaticResource Subtle}"
+                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Slider x:Name="SensitivitySlider" Style="{StaticResource SwSlider}"/>
+                                <TextBlock Text="High" FontSize="12" Foreground="{StaticResource Subtle}"
+                                           VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                        <Border Height="1" Background="#14FFFFFF"/>
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock Text="Use Windows accent color" Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="Match the snap overlay highlight to your system accent color."
+                                           Style="{StaticResource RowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="OverlayAccentToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"/>
+                        </Grid>
+                        <Border Height="1" Background="#14FFFFFF"/>
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                                <TextBlock Text="Overlay color" Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="Pick the highlight color used in the snap preview."
+                                           Style="{StaticResource RowDesc}"/>
+                            </StackPanel>
+                            <StackPanel x:Name="SwatchPanel" Grid.Column="1" Orientation="Horizontal"
+                                        VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- UPDATES -->
+            <StackPanel x:Name="UpdatesPane" Visibility="Collapsed">
+                <TextBlock Text="Updates" Style="{StaticResource PaneTitle}"/>
+                <Border Style="{StaticResource Card}">
+                    <Grid Margin="0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock x:Name="UpdateStatus" Text="Checking..." Style="{StaticResource RowTitle}"/>
+                            <TextBlock x:Name="UpdateSub" Text="" Style="{StaticResource RowDesc}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="DownloadBtn" Content="Download" Style="{StaticResource AccentButton}"
+                                    Visibility="Collapsed" Margin="0,0,8,0"/>
+                            <Button x:Name="CheckBtn" Content="Check for updates" Style="{StaticResource GhostButton}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <!-- ABOUT -->
+            <StackPanel x:Name="AboutPane" Visibility="Collapsed">
+                <TextBlock Text="About" Style="{StaticResource PaneTitle}"/>
+                <Border Style="{StaticResource Card}" Padding="18,16">
+                    <StackPanel>
+                        <TextBlock Text="Swoosh" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="Swish-style window gestures for Windows."
+                                   Style="{StaticResource RowDesc}" Margin="0,3,0,0"/>
+                        <Border Height="1" Background="#14FFFFFF" Margin="0,14"/>
+                        <TextBlock Text="LATEST RELEASE" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{StaticResource Subtle}" Margin="0,0,0,8"/>
+                        <StackPanel x:Name="ChangelogPanel">
+                            <TextBlock Text="Loading release notes..." Style="{StaticResource RowDesc}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

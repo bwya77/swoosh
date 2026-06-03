@@ -88,6 +88,15 @@ public sealed class DebugOverlay
         else _win.Show();
     }
 
+    /// <summary>Force the overlay to a specific visibility (used by settings).</summary>
+    public void SetVisible(bool visible)
+    {
+        if (!visible && _win == null) return; // nothing to hide yet
+        Ensure();
+        if (visible) _win!.Show();
+        else _win!.Hide();
+    }
+
     public void Render(TouchFrame frame)
     {
         if (_win is not { IsVisible: true } || _canvas == null) return;

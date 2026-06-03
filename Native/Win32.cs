@@ -50,6 +50,22 @@ public static class Win32
 
     // DWM
     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    public const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+    public const int DWMSBT_MAINWINDOW = 2;  // Mica
+    public const int DWMSBT_TRANSIENTWINDOW = 3; // Acrylic
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    /// <summary>Apply a Mica backdrop + dark titlebar to a Win11 window (no-op pre-Win11).</summary>
+    public static void EnableMicaDark(IntPtr hwnd)
+    {
+        int on = 1;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, sizeof(int));
+        int backdrop = DWMSBT_MAINWINDOW;
+        DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X; public int Y; }
@@ -204,11 +220,19 @@ public static class Win32
     [DllImport("user32.dll")]
     public static extern bool MessageBeep(uint uType);
 
+    public const byte VK_SHIFT = 0x10;
     public const byte VK_CONTROL = 0x11;
+    public const byte VK_MENU = 0x12; // Alt
     public const byte VK_LWIN = 0x5B;
     public const byte VK_LEFT = 0x25;
     public const byte VK_RIGHT = 0x27;
     public const uint KEYEVENTF_KEYUP = 0x0002;
+
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
+
+    /// <summary>True if the given virtual key is currently held down.</summary>
+    public static bool IsKeyDown(int vKey) => (GetAsyncKeyState(vKey) & 0x8000) != 0;
 
     /// <summary>Switch the active virtual desktop left/right via Win+Ctrl+Arrow.</summary>
     public static void SwitchVirtualDesktop(bool right)

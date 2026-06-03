@@ -316,6 +316,23 @@ public sealed class TouchpadParser
                     dropped += before - cand.Count;
                 }
 
+                // Contact-count clamp. The report's ContactCount is the firmware's
+                // own count of fingers actually down. If more collections still
+                // claim tip-down than that (the classic "lifted one of two fingers
+                // but it still reads down" residue, which the >=3-finger residue
+                // rule never sees), the extras are stale slots. Keep the most
+                // plausible contacts: moving ones first, then the least-frozen.
+                if (ccOk && ccVal < (uint)cand.Count)
+                {
+                    int before = cand.Count;
+                    cand = cand
+                        .OrderByDescending(c => c.moved)
+                        .ThenBy(c => c.frozenMs)
+                        .Take((int)ccVal)
+                        .ToList();
+                    dropped += before - cand.Count;
+                }
+
                 // Always log the low-count region (post-lift phantoms) and any
                 // drop, bypassing the cap — that's the interesting part. Steady
                 // high-finger holds respect the cap so they don't flood the log.

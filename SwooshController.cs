@@ -2,6 +2,7 @@ using Swoosh.Gestures;
 using Swoosh.Hotkeys;
 using Swoosh.Input;
 using Swoosh.Native;
+using Swoosh.Settings;
 using Swoosh.Snapping;
 using Swoosh.UI;
 
@@ -35,6 +36,88 @@ public sealed class SwooshController : IDisposable
 
     public bool GesturesEnabled { get; set; } = true;
 
+    // Thirds: when enabled and the chosen modifier is held during a snap swipe,
+    // the target becomes a full-height column / full-width row third instead of
+    // the default halves and quarters.
+    private bool _gridModifierEnabled = true;
+    private int _gridModifierVk = Win32.VK_SHIFT;
+
+    // Minimum cross-axis / main-axis ratio for a swipe to count as a diagonal (corner
+    // cell) rather than a straight column/row. Driven by the sensitivity slider: higher
+    // sensitivity -> lower ratio -> diagonals trigger more readily.
+    private double _thirdsDiagRatio = 0.65;
+
+    /// <summary>Apply persisted settings to the live engine (no restart needed).</summary>
+    public void ApplySettings(AppSettings s)
+    {
+        GesturesEnabled = s.GesturesEnabled;
+        _snapper.AnimateSnaps = s.AnimateSnaps;
+        _gridModifierEnabled = s.GridModifierEnabled;
+        _gridModifierVk = s.GridModifier switch
+        {
+            GridModifier.Ctrl => Win32.VK_CONTROL,
+            GridModifier.Alt => Win32.VK_MENU,
+            _ => Win32.VK_SHIFT,
+        };
+        _thirdsDiagRatio = 0.9 - 0.5 * Math.Clamp(s.Sensitivity, 0, 1);
+        _chip.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
+        _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
+        _debug.SetVisible(s.DebugOverlay);
+    }
+
+    /// <summary>Resolve a swipe to a zone, honoring the thirds modifier if held.</summary>
+    private SnapZone MapZone(SwipeDirection dir) =>
+        ThirdsActive ? ThirdsZone(_lastVecX, _lastVecY) : SnapZoneMap.FromDirection(dir);
+
+    private bool ThirdsActive => _gridModifierEnabled && Win32.IsKeyDown(_gridModifierVk);
+
+    // Latest raw swipe vector (signed, pad-normalized; Y grows downward), tracked so
+    // thirds targets can be chosen by magnitude at both preview and commit time.
+    private double _lastVecX, _lastVecY;
+
+    // Thirds magnitude bands: below Center -> centered third; below Big -> two-thirds
+    // to that side; beyond -> one-third pinned to that edge.
+    private const double ThirdsCenterBand = 0.06;
+    private const double ThirdsBigBand = 0.13;
+
+    /// <summary>Pick a Swish-style third from the raw swipe vector. A genuine diagonal
+    /// lands a 1/3 x 1/3 corner cell; otherwise the dominant axis gives a full-height
+    /// column or full-width row, sized one-third / two-thirds / centered by magnitude.</summary>
+    private SnapZone ThirdsZone(double dx, double dy)
+    {
+        double ax = Math.Abs(dx), ay = Math.Abs(dy);
+        double mx = Math.Max(ax, ay);
+        if (mx < 0.03) return SnapZone.None;
+
+        // Diagonal: both axes meaningful and balanced enough (per the sensitivity
+        // slider) -> a corner cell. A lower sensitivity demands a more perfect diagonal,
+        // so a sideways swipe with a little vertical drift stays a column.
+        double mn = Math.Min(ax, ay);
+        if (mn >= ThirdsCenterBand && mn / mx >= _thirdsDiagRatio)
+        {
+            bool left = dx < 0, top = dy < 0;
+            return (left, top) switch
+            {
+                (true, true) => SnapZone.ThirdTopLeft,
+                (false, true) => SnapZone.ThirdTopRight,
+                (true, false) => SnapZone.ThirdBottomLeft,
+                _ => SnapZone.ThirdBottomRight,
+            };
+        }
+
+        if (ax >= ay) // horizontal swipe -> full-height column
+        {
+            if (ax < ThirdsCenterBand) return SnapZone.CenterThird;
+            if (dx < 0) return ax < ThirdsBigBand ? SnapZone.LeftTwoThird : SnapZone.LeftThird;
+            return ax < ThirdsBigBand ? SnapZone.RightTwoThird : SnapZone.RightThird;
+        }
+
+        // vertical swipe -> full-width row (pad Y grows downward, so dy<0 is up)
+        if (ay < ThirdsCenterBand) return SnapZone.CenterRowThird;
+        if (dy < 0) return ay < ThirdsBigBand ? SnapZone.TopTwoThird : SnapZone.TopThird;
+        return ay < ThirdsBigBand ? SnapZone.BottomTwoThird : SnapZone.BottomThird;
+    }
+
     public SwooshController()
     {
         _window = new MessageWindow("SwooshMsgWindow");
@@ -47,6 +130,7 @@ public sealed class SwooshController : IDisposable
         _gestures.GestureUpdated += OnGestureUpdated;
         _gestures.GestureCompleted += OnGestureCompleted;
         _gestures.GestureCancelled += OnGestureCancelled;
+        _gestures.SwipeRaw += OnSwipeRaw;
         _gestures.HoldEngaged += OnHoldEngaged;
         _gestures.HoldUpdated += OnHoldUpdated;
         _gestures.DesktopMove += OnDesktopMove;
@@ -60,12 +144,24 @@ public sealed class SwooshController : IDisposable
     {
         _debug.Render(frame);
         if (GesturesEnabled)
+        {
+            // Reflect the live modifier state so the engine uses the smaller thirds
+            // dead-zone the moment the key goes down (even mid-gesture).
+            _gestures.ThirdsMode = ThirdsActive;
             _gestures.Process(frame);
+        }
+    }
+
+    private void OnSwipeRaw(double dx, double dy)
+    {
+        _lastVecX = dx;
+        _lastVecY = dy;
     }
 
     private void OnGestureBegan(int fingers)
     {
         // Arm only when the cursor is over a manageable window's titlebar.
+        _lastVecX = _lastVecY = 0;
         _target = _snapper.ArmTarget(out string diag);
         _armed = _target != IntPtr.Zero;
         if (_armed) _chip.ShowSnap(SnapZone.None, 0);
@@ -81,7 +177,7 @@ public sealed class SwooshController : IDisposable
             _chip.ShowSnap(SnapZone.None, 0);
             return;
         }
-        var zone = SnapZoneMap.FromDirection(dir);
+        var zone = MapZone(dir);
         var work = _snapper.WorkAreaFor(_target);
         Win32.RECT rect = zone == SnapZone.Minimize
             ? MinimizeHint(work)
@@ -94,7 +190,7 @@ public sealed class SwooshController : IDisposable
     {
         _preview.Hide();
         _chip.Hide();
-        var zone = SnapZoneMap.FromDirection(dir);
+        var zone = MapZone(dir);
         Log.Write($"GestureCompleted dir={dir} zone={zone} armed={_armed}");
         if (!_armed) return;
         _snapper.Apply(_target, zone);
