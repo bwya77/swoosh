@@ -40,6 +40,13 @@ A translucent preview shows the target zone as you swipe; lift to commit. The
 preview glides smoothly between zones and the window animates into place rather
 than snapping instantly.
 
+## Pinch to fullscreen and back
+
+With **two fingers over the titlebar**, spread them apart (**pinch-out**) and the
+window goes fullscreen; draw them together (**pinch-in**) to restore it. A live
+preview tracks the pinch so you can see it engage before you commit. The centroid
+has to stay put, so a sideways two-finger swipe is never mistaken for a pinch.
+
 ## Thirds and the 3x3 grid
 
 Hold a **modifier key** (default **Shift**, configurable to Ctrl or Alt in
@@ -162,7 +169,6 @@ from there. You can also start a build by hand from the **Actions** tab using
 
 ## Roadmap
 
-- Pinch-in to close, pinch-out to fullscreen
 - Magic Mouse gesture support
 - Saveable custom snap layouts
 
