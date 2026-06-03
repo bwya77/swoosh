@@ -33,6 +33,12 @@ public sealed class GestureEngine
     /// <summary>Contacts that keep free-move alive once engaged (hysteresis for finger flicker).</summary>
     public int FreeMoveKeepContacts { get; set; } = 4;
 
+    /// <summary>Max duration of a five-finger touch for it to count as a tap (ms).</summary>
+    public long FiveTapMaxMs { get; set; } = 350;
+
+    /// <summary>Max centroid travel allowed during a five-finger touch for it to still count as a tap.</summary>
+    public double FiveTapMaxDist { get; set; } = 0.06;
+
     public event Action<int>? GestureBegan;
     public event Action<SwipeDirection, double>? GestureUpdated;
     public event Action<SwipeDirection>? GestureCompleted;
@@ -53,8 +59,10 @@ public sealed class GestureEngine
     /// <summary>Per-frame normalized centroid delta (dx, dy) while free-moving. Pad Y grows downward.</summary>
     public event Action<double, double>? FreeMoveDelta;
 
-    /// <summary>Fired when the fingers lift and free-move ends.</summary>
-    public event Action? FreeMoveEnded;
+    /// <summary>Fired when the fingers lift and free-move ends. The bool is true when the
+    /// touch was a brief, near-still FIVE-finger tap (Swish-style center the window) rather
+    /// than an actual move.</summary>
+    public event Action<bool>? FreeMoveEnded;
 
     private bool _tracking;
     private bool _cancelled;
@@ -72,6 +80,11 @@ public sealed class GestureEngine
     private bool _freeHasLast;
     private int _freeLastCount;
 
+    // Five-finger tap tracking: a brief, near-still five-finger touch (no real
+    // movement) centers the window instead of free-moving it.
+    private long _freeStartTime;
+    private double _freeStartX, _freeStartY, _freeMaxDist;
+
     public void Process(TouchFrame frame)
     {
         int down = frame.DownCount;
@@ -85,6 +98,8 @@ public sealed class GestureEngine
             {
                 // Full contact count: track the centroid and move the window.
                 var (fx, fy) = Centroid(frame);
+                double tdx = fx - _freeStartX, tdy = fy - _freeStartY;
+                _freeMaxDist = Math.Max(_freeMaxDist, Math.Sqrt(tdx * tdx + tdy * tdy));
                 if (down != _freeLastCount) _freeHasLast = false; // re-anchor across count changes
                 _freeLastCount = down;
                 if (_freeHasLast)
@@ -102,9 +117,15 @@ public sealed class GestureEngine
             }
             else
             {
+                // Decide whether the whole touch was a TAP (brief + near-still)
+                // rather than a real move, then tear down. A five-finger tap is
+                // the conflict-free "center the window" gesture (no OS gesture
+                // claims five-finger taps).
+                long fdur = frame.TimestampMs - _freeStartTime;
+                bool tap = fdur <= FiveTapMaxMs && _freeMaxDist <= FiveTapMaxDist;
                 _free = false;
                 _freeHasLast = false;
-                FreeMoveEnded?.Invoke();
+                FreeMoveEnded?.Invoke(tap);
             }
             return;
         }
@@ -116,6 +137,10 @@ public sealed class GestureEngine
             _free = true;
             _freeHasLast = false;
             _freeLastCount = down;
+            var (sx, sy) = Centroid(frame);
+            _freeStartTime = frame.TimestampMs;
+            _freeStartX = sx; _freeStartY = sy;
+            _freeMaxDist = 0;
             FreeMoveBegan?.Invoke();
             return;
         }
@@ -203,7 +228,8 @@ public sealed class GestureEngine
         }
         else if (down > 2)
         {
-            // 3+ fingers: not our gesture — bail out.
+            // 3 or 4 fingers (5+ is free-move, handled above): abandon any
+            // in-flight 2-finger snap/hold so a stray frame can't commit one.
             CancelIfTracking();
         }
         else // 0 or 1 finger: gesture ended
@@ -253,7 +279,7 @@ public sealed class GestureEngine
     {
         if (_tracking) GestureCancelled?.Invoke();
         _tracking = false;
-        if (_free) { _free = false; _freeHasLast = false; FreeMoveEnded?.Invoke(); }
+        if (_free) { _free = false; _freeHasLast = false; FreeMoveEnded?.Invoke(false); }
     }
 
     private static (double, double) Centroid(TouchFrame f)

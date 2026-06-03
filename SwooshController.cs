@@ -186,10 +186,22 @@ public sealed class SwooshController : IDisposable
             Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE);
     }
 
-    private void OnFreeMoveEnded()
+    private void OnFreeMoveEnded(bool wasTap)
     {
         if (_free && _armed)
+        {
+            if (wasTap)
+            {
+                // A brief, near-still five-finger touch is the Swish-style
+                // "center the window" gesture. Five-finger taps have no native
+                // Windows gesture, so there's no OS conflict to fight. Recenter
+                // the same window we armed (it barely moved during the tap).
+                _preview.Hide();
+                _chip.Hide();
+                _snapper.CenterOnMonitor(_target);
+            }
             Win32.SetForegroundWindow(_target);
+        }
         _free = false;
         _armed = false;
     }

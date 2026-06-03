@@ -171,7 +171,55 @@ public sealed class WindowSnapper
             Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
     }
 
-    // ----- Smooth snap animation (Swish-style ease-out glide) ----------------
+    /// <summary>
+    /// Center the window on its monitor while preserving its current size
+    /// (Swish two-finger double-tap). Restores a maximized/minimized window
+    /// first, then glides the visible frame to the work-area center.
+    /// </summary>
+    public void CenterOnMonitor(IntPtr hwnd)
+    {
+        if (!IsManageable(hwnd)) return;
+
+        bool haveStart = Win32.GetWindowRect(hwnd, out var startRect);
+
+        long style = Win32.GetWindowLong(hwnd, Win32.GWL_STYLE);
+        if ((style & (Win32.WS_MAXIMIZE | Win32.WS_MINIMIZE)) != 0)
+        {
+            CancelAnimation();
+            Win32.ShowWindow(hwnd, Win32.SW_RESTORE);
+            haveStart = Win32.GetWindowRect(hwnd, out startRect);
+        }
+
+        if (!Win32.GetWindowRect(hwnd, out var wr)) return;
+        var work = WorkAreaFor(hwnd);
+
+        // Center the *visible* frame (DWM extended bounds) for pixel-accurate
+        // placement, then back-compute the outer rect. Size is kept as-is.
+        int ml = 0, mt = 0, mr = 0, mb = 0;
+        if (Win32.DwmGetWindowAttribute(hwnd, Win32.DWMWA_EXTENDED_FRAME_BOUNDS,
+                out var fb, System.Runtime.InteropServices.Marshal.SizeOf<Win32.RECT>()) == 0)
+        {
+            ml = fb.Left - wr.Left;
+            mt = fb.Top - wr.Top;
+            mr = wr.Right - fb.Right;
+            mb = wr.Bottom - fb.Bottom;
+        }
+
+        int visW = wr.Width - ml - mr;
+        int visH = wr.Height - mt - mb;
+        int visX = work.Left + (work.Width - visW) / 2;
+        int visY = work.Top + (work.Height - visH) / 2;
+
+        int px = visX - ml;
+        int py = visY - mt;
+        int pw = wr.Width;
+        int ph = wr.Height;
+
+        if (AnimateSnaps && haveStart)
+            AnimateTo(hwnd, startRect, px, py, pw, ph);
+        else
+            Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
+    }
 
     /// <summary>When true, window snaps glide to the target instead of jumping.</summary>
     public bool AnimateSnaps { get; set; } = true;

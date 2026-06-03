@@ -53,6 +53,14 @@ Put **five fingers** on the titlebar and the touchpad becomes a 1:1 proxy for th
 monitor. Move your fingers and the window tracks them live, so you can place it
 anywhere with fine-grained control. Lift to drop it in place.
 
+## Five-finger tap to center
+
+Tap **five fingers** briefly on the titlebar (a quick touch with no movement) and
+the window snaps to the center of its monitor, keeping its current size. This is
+the equivalent of Swish's two-finger double-tap, mapped to five fingers because no
+native Windows gesture claims a five-finger tap, so there's nothing to conflict
+with. A longer or moving five-finger touch is treated as a free move instead.
+
 ## Keyboard fallback
 
 Because PowerToys **FancyZones** already owns `Win+Arrow` and `Win+Alt+Arrow`, the
@@ -80,7 +88,7 @@ RawTouchpadListener --> TouchpadParser --> GestureEngine --> SwooshController --
   where a contact can stay wedged down after a multi-finger lift.
 - **GestureEngine** tracks the finger centroid and classifies the gesture: a
   2-finger swipe into one of 8 snap directions, a press-and-hold swipe into a
-  monitor or desktop move, or a 5-finger free move.
+  monitor or desktop move, a 5-finger free move, or a 5-finger tap to center.
 - **WindowSnapper** computes the target rect from the monitor work area and
   applies it with `SetWindowPos`, compensating for the invisible DWM resize
   border (`DWMWA_EXTENDED_FRAME_BOUNDS`) so the **visible** frame lands exactly
