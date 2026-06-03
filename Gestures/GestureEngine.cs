@@ -50,8 +50,7 @@ public sealed class GestureEngine
     private bool _hold;
     private bool _holdEligible = true;
     private double _maxDist;
-    private DesktopDirection? _holdDir;
-    private bool _holdMoved;
+    private double _holdAnchorX;
 
     public void Process(TouchFrame frame)
     {
@@ -68,8 +67,7 @@ public sealed class GestureEngine
                 _hold = false;
                 _holdEligible = true;
                 _maxDist = 0;
-                _holdDir = null;
-                _holdMoved = false;
+                _holdAnchorX = cx;
                 _startX = _lastX = cx;
                 _startY = _lastY = cy;
                 _startTime = frame.TimestampMs;
@@ -93,28 +91,38 @@ public sealed class GestureEngine
                 else if (_holdEligible && frame.TimestampMs - _startTime >= HoldDelayMs)
                 {
                     _hold = true;
+                    _holdAnchorX = cx; // moves are measured from the dwell point
                     HoldEngaged?.Invoke();
                 }
             }
 
             if (_hold)
             {
-                // Hold mode: the first time horizontal travel crosses the
-                // threshold, commit the move immediately so the desktop slides
-                // over *as you select it*. Release then lands with no further
-                // animation. Only one move per hold.
-                if (!_holdMoved)
+                // Hold mode is a repeatable ratchet: every time horizontal travel
+                // from the current anchor crosses the threshold we move the window
+                // one desktop in that direction and re-anchor at the current
+                // position. The user can keep going the same way (further right)
+                // or reverse (back left) without lifting — the HUD stays up the
+                // whole time. The desktop slides live as each step commits.
+                double ddx = cx - _holdAnchorX;
+                double prog = Math.Clamp(Math.Abs(ddx) / DesktopMoveThreshold, 0, 1);
+
+                // Visual lean: hint the neighbor you are pushing toward before the
+                // step actually commits, so the HUD feels responsive.
+                DesktopDirection? lean = null;
+                if (ddx > DesktopMoveThreshold * 0.3) lean = DesktopDirection.Right;
+                else if (ddx < -DesktopMoveThreshold * 0.3) lean = DesktopDirection.Left;
+                HoldUpdated?.Invoke(lean, prog);
+
+                // Commit a step once travel crosses the full threshold, then
+                // re-anchor so further travel (either way) fires the next step.
+                DesktopDirection? step = null;
+                if (ddx >= DesktopMoveThreshold) step = DesktopDirection.Right;
+                else if (ddx <= -DesktopMoveThreshold) step = DesktopDirection.Left;
+                if (step is { } dir)
                 {
-                    DesktopDirection? d = null;
-                    if (dx >= DesktopMoveThreshold) d = DesktopDirection.Right;
-                    else if (dx <= -DesktopMoveThreshold) d = DesktopDirection.Left;
-                    _holdDir = d;
-                    HoldUpdated?.Invoke(d, Math.Clamp(Math.Abs(dx) / DesktopMoveThreshold, 0, 1));
-                    if (d is { } dir)
-                    {
-                        _holdMoved = true;
-                        DesktopMove?.Invoke(dir);
-                    }
+                    _holdAnchorX = cx;
+                    DesktopMove?.Invoke(dir);
                 }
             }
             else if (dist >= DeadZone)
@@ -152,12 +160,11 @@ public sealed class GestureEngine
             return;
         }
 
-        // Hold mode: the move already fired live as the direction was selected,
-        // so release just settles — no further animation. If no direction was
-        // ever chosen, treat the release as a cancel.
+        // Hold mode: any desktop moves already fired live as the fingers swept,
+        // so release just tears down the HUD — no snap, no further animation.
         if (_hold)
         {
-            if (!_holdMoved) GestureCancelled?.Invoke();
+            GestureCancelled?.Invoke();
             return;
         }
 

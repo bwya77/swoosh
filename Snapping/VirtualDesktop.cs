@@ -131,6 +131,15 @@ public static class VirtualDesktop
     /// there is no neighbor, no view, or the COM call fails.
     /// </summary>
     public static bool MoveAdjacent(IntPtr hwnd, DesktopDirection dir, out string diag)
+        => MoveAdjacent(hwnd, dir, IntPtr.Zero, out diag);
+
+    /// <summary>
+    /// As <see cref="MoveAdjacent(IntPtr, DesktopDirection, out string)"/>, but also
+    /// carries <paramref name="followHwnd"/> (e.g. the cursor HUD overlay) to the
+    /// same target desktop so it stays visible after the switch. The follow is
+    /// best-effort and never changes the result for the primary window.
+    /// </summary>
+    public static bool MoveAdjacent(IntPtr hwnd, DesktopDirection dir, IntPtr followHwnd, out string diag)
     {
         diag = "";
         if (hwnd == IntPtr.Zero) { diag = "no-window"; return false; }
@@ -162,8 +171,28 @@ public static class VirtualDesktop
                 }
 
                 _vdmInternal.MoveViewToDesktop(view, target);
+
+                // Carry the HUD overlay along so it remains on-screen after the
+                // switch, enabling another move from the new desktop.
+                string followDiag = "";
+                if (followHwnd != IntPtr.Zero)
+                {
+                    try
+                    {
+                        int frc = _avc.GetViewForHwnd(followHwnd, out var fview);
+                        if (frc == 0 && fview != null)
+                        {
+                            _vdmInternal.MoveViewToDesktop(fview, target);
+                            SafeRelease(fview);
+                            followDiag = " follow=ok";
+                        }
+                        else followDiag = $" follow=no-view(0x{frc:X8})";
+                    }
+                    catch (Exception fex) { followDiag = $" follow=err(0x{fex.HResult:X8})"; }
+                }
+
                 _vdmInternal.SwitchDesktopWithAnimation(target);   // follow with native slide
-                diag = $"moved(internal,anim) dir={dir} count={count}";
+                diag = $"moved(internal,anim) dir={dir} count={count}{followDiag}";
 
                 SafeRelease(view);
                 SafeRelease(current);
@@ -179,6 +208,52 @@ public static class VirtualDesktop
             catch (Exception ex)
             {
                 diag = $"internal-failed {ex.GetType().Name} 0x{ex.HResult:X8} {ex.Message}";
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Reports the current virtual-desktop topology: the total number of desktops
+    /// and the zero-based index (from the leftmost) of the one currently shown.
+    /// Used to render the HUD mini-map. Returns false on COM failure.
+    /// </summary>
+    public static bool GetLayout(out int count, out int currentIndex, out string diag)
+    {
+        count = 0; currentIndex = 0; diag = "";
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                EnsureCom();
+                count = _vdmInternal!.GetCount();
+
+                var current = _vdmInternal.GetCurrentDesktop();
+                int idx = 0;
+                IVirtualDesktop walker = current;
+                var visited = new List<IVirtualDesktop>();
+                while (_vdmInternal.GetAdjacentDesktop(walker, LeftDirection, out var prev) == 0 && prev != null)
+                {
+                    idx++;
+                    visited.Add(prev);
+                    walker = prev;
+                }
+                currentIndex = idx;
+
+                SafeRelease(current);
+                foreach (var d in visited) SafeRelease(d);
+                diag = $"count={count} idx={idx}";
+                return true;
+            }
+            catch (COMException ex) when (attempt == 0)
+            {
+                diag = $"com-retry 0x{ex.HResult:X8}";
+                ResetCom();
+            }
+            catch (Exception ex)
+            {
+                diag = $"layout-failed {ex.GetType().Name} 0x{ex.HResult:X8}";
                 return false;
             }
         }

@@ -35,8 +35,7 @@ public sealed class CursorChipOverlay
 
     private const double SingleChipW = 94;
     private const double SingleCanvasW = SingleChipW + 2 * Margin;     // 100
-    private const double TwoChipW = 80;
-    private const double TwoCanvasW = 2 * TwoChipW + Gap + 2 * Margin; // 174
+    private const double DeskW = 84;     // one desktop square in the mini-map strip
     private const double CanvasH = ChipH + 2 * Margin;                 // 66
 
     private const double BaseHeightPx = 46; // physical chip-window height at 96 DPI
@@ -52,19 +51,24 @@ public sealed class CursorChipOverlay
     private Canvas? _canvas;
     private DispatcherTimer? _hideTimer;
 
-    // Persistent elements: single-monitor chip.
+    // Persistent elements: single-monitor chip (snap mode).
     private Grid? _single;
     private Canvas? _singleInner;
     private Border? _singleFill;
 
-    // Persistent elements: two-desktop chips.
-    private Grid? _two;
-    private Border? _twoLeftFill;
-    private Border? _twoRightFill;
+    // Desktop mini-map strip: one square per virtual desktop, rebuilt when the
+    // desktop count changes; only the fill brushes change per frame.
+    private Grid? _strip;
+    private readonly List<Border> _stripFills = new();
+    private int _stripCount = -1;
+    private double _stripDesignW = SingleCanvasW;
 
-    private bool _isTwo;
     private string _lastKey = "";
     private (int x, int y, int w, int h) _lastPlace = (-99999, 0, 0, 0);
+
+    /// <summary>Native handle of the HUD window once shown (else Zero). Used to carry
+    /// the overlay across a virtual-desktop switch so it stays visible.</summary>
+    public IntPtr Handle => _win == null ? IntPtr.Zero : new WindowInteropHelper(_win).Handle;
 
     private void EnsureWindow()
     {
@@ -72,9 +76,7 @@ public sealed class CursorChipOverlay
 
         _canvas = new Canvas { Width = SingleCanvasW, Height = CanvasH };
         _single = BuildSingle();
-        _two = BuildTwo();
         _canvas.Children.Add(_single);
-        _canvas.Children.Add(_two);
 
         var box = new Viewbox { Stretch = Stretch.Fill, Child = _canvas };
 
@@ -120,29 +122,38 @@ public sealed class CursorChipOverlay
         return root;
     }
 
-    private Grid BuildTwo()
+    /// <summary>Builds (or rebuilds) the desktop strip for <paramref name="count"/>
+    /// squares laid out left-to-right, each fill covering its whole inner area.</summary>
+    private Grid BuildStrip(int count)
     {
-        var root = new Grid { Width = TwoCanvasW, Height = CanvasH, Visibility = Visibility.Collapsed };
-        var host = new Canvas { Width = TwoCanvasW, Height = CanvasH };
+        double chipsW = count * DeskW + (count - 1) * Gap;
+        double canvasW = chipsW + 2 * Margin;
+        var root = new Grid { Width = canvasW, Height = CanvasH };
+        var host = new Canvas { Width = canvasW, Height = CanvasH };
 
-        var (lScreen, _, lFill) = BuildScreen(TwoChipW);
-        Canvas.SetLeft(lScreen, Margin);
-        Canvas.SetTop(lScreen, Margin);
+        _stripFills.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            var (screen, _, fill) = BuildScreen(DeskW);
+            Canvas.SetLeft(screen, Margin + i * (DeskW + Gap));
+            Canvas.SetTop(screen, Margin);
+            host.Children.Add(screen);
+            ResetFullFill(fill, DeskW);
+            _stripFills.Add(fill);
+        }
 
-        var (rScreen, _, rFill) = BuildScreen(TwoChipW);
-        Canvas.SetLeft(rScreen, Margin + TwoChipW + Gap);
-        Canvas.SetTop(rScreen, Margin);
-
-        host.Children.Add(lScreen);
-        host.Children.Add(rScreen);
         root.Children.Add(host);
-
-        _twoLeftFill = lFill;
-        _twoRightFill = rFill;
-        // For desktop chips the fill always covers the whole inner area.
-        ResetFullFill(lFill, TwoChipW);
-        ResetFullFill(rFill, TwoChipW);
+        _stripDesignW = canvasW;
         return root;
+    }
+
+    private void EnsureStrip(int count)
+    {
+        if (_strip != null && _stripCount == count) return;
+        if (_strip != null) _canvas!.Children.Remove(_strip);
+        _strip = BuildStrip(count);
+        _stripCount = count;
+        _canvas!.Children.Add(_strip);
     }
 
     /// <summary>Builds one monitor: rounded white-edged screen with a clipped inner
@@ -209,7 +220,7 @@ public sealed class CursorChipOverlay
         EnsureWindow();
         if (_win == null) return;
         CancelHideTimer();
-        SetMode(false);
+        SetSingleMode();
 
         string key = $"s|{zone}";
         if (key != _lastKey)
@@ -239,44 +250,63 @@ public sealed class CursorChipOverlay
         _singleFill.Visibility = Visibility.Visible;
     }
 
-    /// <summary>Show the two-desktop chip. <paramref name="confirmed"/> fills the target
-    /// solid blue (the move happened) and auto-hides shortly after; otherwise the aimed
-    /// side gets a faint tint as a hover hint.</summary>
-    public void ShowDesktops(DesktopDirection? target, bool confirmed)
+    /// <summary>Show the desktop mini-map: <paramref name="count"/> squares with the
+    /// current desktop (where the held window lives) filled solid blue, and the neighbor
+    /// you are leaning toward faintly tinted. Stays up until the gesture ends.</summary>
+    public void ShowDesktopStrip(int count, int currentIndex, DesktopDirection? lean)
     {
+        if (count < 1) count = 1;
         EnsureWindow();
         if (_win == null) return;
         CancelHideTimer();
-        SetMode(true);
+        EnsureStrip(count);
+        SetStripMode();
 
-        string key = $"d|{target}|{confirmed}";
+        int leanIdx = lean switch
+        {
+            DesktopDirection.Right => currentIndex + 1,
+            DesktopDirection.Left => currentIndex - 1,
+            _ => -1,
+        };
+
+        string key = $"strip|{count}|{currentIndex}|{leanIdx}";
         if (key != _lastKey)
         {
-            ApplyDesktopFill(_twoLeftFill, target == DesktopDirection.Left, confirmed);
-            ApplyDesktopFill(_twoRightFill, target == DesktopDirection.Right, confirmed);
+            for (int i = 0; i < _stripFills.Count; i++)
+            {
+                var fill = _stripFills[i];
+                if (i == currentIndex)
+                {
+                    fill.Background = BlueSolid;
+                    fill.Visibility = Visibility.Visible;
+                }
+                else if (i == leanIdx && leanIdx >= 0 && leanIdx < count)
+                {
+                    fill.Background = BlueFaint;
+                    fill.Visibility = Visibility.Visible;
+                }
+                else fill.Visibility = Visibility.Collapsed;
+            }
             _lastKey = key;
         }
-        Place(TwoCanvasW, CanvasH);
-
-        if (confirmed) StartHideTimer(520);
+        Place(_stripDesignW, CanvasH);
     }
 
-    private static void ApplyDesktopFill(Border? fill, bool isTarget, bool confirmed)
+    private void SetSingleMode()
     {
-        if (fill == null) return;
-        if (!isTarget) { fill.Visibility = Visibility.Collapsed; return; }
-        fill.Background = confirmed ? BlueSolid : BlueFaint;
-        fill.Visibility = Visibility.Visible;
+        if (_single == null || _canvas == null) return;
+        _single.Visibility = Visibility.Visible;
+        if (_strip != null) _strip.Visibility = Visibility.Collapsed;
+        _canvas.Width = SingleCanvasW;
+        _canvas.Height = CanvasH;
     }
 
-    private void SetMode(bool two)
+    private void SetStripMode()
     {
-        if (_single == null || _two == null || _canvas == null) return;
-        if (_isTwo == two && _canvas.Children.Count > 0) { /* still ensure sizes below */ }
-        _isTwo = two;
-        _single.Visibility = two ? Visibility.Collapsed : Visibility.Visible;
-        _two.Visibility = two ? Visibility.Visible : Visibility.Collapsed;
-        _canvas.Width = two ? TwoCanvasW : SingleCanvasW;
+        if (_single == null || _strip == null || _canvas == null) return;
+        _single.Visibility = Visibility.Collapsed;
+        _strip.Visibility = Visibility.Visible;
+        _canvas.Width = _stripDesignW;
         _canvas.Height = CanvasH;
     }
 
@@ -332,14 +362,6 @@ public sealed class CursorChipOverlay
         _lastKey = "";
         _lastPlace = (-99999, 0, 0, 0);
         if (_win is { IsVisible: true }) _win.Hide();
-    }
-
-    private void StartHideTimer(int ms)
-    {
-        CancelHideTimer();
-        _hideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
-        _hideTimer.Tick += (_, _) => Hide();
-        _hideTimer.Start();
     }
 
     private void CancelHideTimer()

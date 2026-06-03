@@ -21,6 +21,8 @@ public sealed class SwooshController : IDisposable
 
     private IntPtr _target;
     private bool _armed;
+    private int _deskCount = 2;
+    private int _deskIndex;
 
     public bool GesturesEnabled { get; set; } = true;
 
@@ -101,32 +103,37 @@ public sealed class SwooshController : IDisposable
         if (!_armed) return;
         // Audible "click" stand-in for touchpad haptics (not exposed on Windows).
         Win32.MessageBeep(0xFFFFFFFF);
-        _chip.ShowDesktops(null, false);
-        Log.Write("HoldEngaged");
+        if (VirtualDesktop.GetLayout(out int cnt, out int idx, out string ld))
+        {
+            _deskCount = Math.Max(1, cnt);
+            _deskIndex = Math.Clamp(idx, 0, _deskCount - 1);
+        }
+        _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
+        Log.Write($"HoldEngaged layout({ld})");
     }
 
-    private void OnHoldUpdated(DesktopDirection? dir, double progress)
+    private void OnHoldUpdated(DesktopDirection? lean, double progress)
     {
         if (!_armed) return;
-        _chip.ShowDesktops(dir, false);
+        _chip.ShowDesktopStrip(_deskCount, _deskIndex, lean);
     }
 
     private void OnDesktopMove(DesktopDirection dir)
     {
         _preview.Hide();
         if (!_armed) { return; }
-        bool ok = VirtualDesktop.MoveAdjacent(_target, dir, out string diag);
+        // Carry the HUD overlay to the new desktop so it stays visible, and keep
+        // the gesture armed so the user can step to further desktops (or back)
+        // without lifting their fingers. The hold ends only on release.
+        bool ok = VirtualDesktop.MoveAdjacent(_target, dir, _chip.Handle, out string diag);
         Log.Write($"DesktopMove dir={dir} ok={ok} {diag}");
         if (ok)
         {
+            // We follow the window, so the current desktop is now the neighbor.
+            _deskIndex = Math.Clamp(_deskIndex + (dir == DesktopDirection.Right ? 1 : -1), 0, _deskCount - 1);
             Win32.SetForegroundWindow(_target);
-            _chip.ShowDesktops(dir, true); // fill target blue, then auto-hide
+            _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
         }
-        else
-        {
-            _chip.Hide();
-        }
-        _armed = false;
     }
 
     private void OnHotkey(SnapZone zone)
