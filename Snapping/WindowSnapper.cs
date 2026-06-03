@@ -235,6 +235,49 @@ public sealed class WindowSnapper
             Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
     }
 
+    /// <summary>
+    /// Restore a window to an explicit outer rect (the position it held before a
+    /// pinch-out fullscreen). If currently maximized it glides down from full screen
+    /// to the stored rect, matching the snap animation.
+    /// </summary>
+    public void RestoreToRect(IntPtr hwnd, Win32.RECT outer)
+    {
+        if (!IsManageable(hwnd)) return;
+
+        // Capture the full-screen rect BEFORE restoring so the glide starts from there.
+        bool haveStart = Win32.GetWindowRect(hwnd, out var startRect);
+
+        long style = Win32.GetWindowLong(hwnd, Win32.GWL_STYLE);
+        if ((style & (Win32.WS_MAXIMIZE | Win32.WS_MINIMIZE)) != 0)
+        {
+            CancelAnimation();
+            Win32.ShowWindow(hwnd, Win32.SW_RESTORE);
+        }
+
+        int px = outer.Left, py = outer.Top, pw = outer.Width, ph = outer.Height;
+        if (AnimateSnaps && haveStart)
+            AnimateTo(hwnd, startRect, px, py, pw, ph);
+        else
+            Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
+    }
+
+    /// <summary>Native restore (un-maximize) fallback when no stored rect is available.</summary>
+    public void RestoreWindow(IntPtr hwnd)
+    {
+        if (!IsManageable(hwnd)) return;
+        long style = Win32.GetWindowLong(hwnd, Win32.GWL_STYLE);
+        if ((style & (Win32.WS_MAXIMIZE | Win32.WS_MINIMIZE)) != 0)
+        {
+            CancelAnimation();
+            Win32.ShowWindow(hwnd, Win32.SW_RESTORE);
+        }
+    }
+
+    /// <summary>True when the window is currently maximized.</summary>
+    public static bool IsMaximized(IntPtr hwnd) =>
+        hwnd != IntPtr.Zero &&
+        (Win32.GetWindowLong(hwnd, Win32.GWL_STYLE) & Win32.WS_MAXIMIZE) != 0;
+
     /// <summary>When true, window snaps glide to the target instead of jumping.</summary>
     public bool AnimateSnaps { get; set; } = true;
 

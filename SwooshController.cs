@@ -25,6 +25,12 @@ public sealed class SwooshController : IDisposable
     private int _deskCount = 2;
     private int _deskIndex;
 
+    // Pinch-out fullscreen remembers the window's pre-fullscreen rect so a
+    // following pinch-in restores it to exactly where it was.
+    private Win32.RECT _preMaxRect;
+    private IntPtr _preMaxHwnd;
+    private bool _hasPreMax;
+
     // 5-finger free-move state: the window's live top-left (in physical pixels)
     // plus the monitor work-area size used to map pad motion 1:1 onto the screen.
     private bool _free;
@@ -137,6 +143,9 @@ public sealed class SwooshController : IDisposable
         _gestures.FreeMoveBegan += OnFreeMoveBegan;
         _gestures.FreeMoveDelta += OnFreeMoveDelta;
         _gestures.FreeMoveEnded += OnFreeMoveEnded;
+        _gestures.PinchOut += OnPinchOut;
+        _gestures.PinchIn += OnPinchIn;
+        _gestures.PinchUpdated += OnPinchUpdated;
         _hotkeys.Triggered += OnHotkey;
     }
 
@@ -299,6 +308,90 @@ public sealed class SwooshController : IDisposable
             Win32.SetForegroundWindow(_target);
         }
         _free = false;
+        _armed = false;
+    }
+
+    private void OnPinchUpdated(bool outward, double progress)
+    {
+        if (!_armed) return;
+        if (outward)
+        {
+            // Spreading: preview the full-screen target so the user sees it will
+            // take the whole monitor before it commits.
+            var work = _snapper.WorkAreaFor(_target);
+            _preview.ShowZone(work, progress);
+            _chip.ShowSnap(SnapZone.Maximize, progress);
+        }
+        else if (WindowSnapper.IsMaximized(_target) && _hasPreMax && _preMaxHwnd == _target)
+        {
+            // Drawing together on a window we previously fullscreened: preview the
+            // exact rect it will snap back to.
+            _preview.ShowZone(_preMaxRect, progress);
+            ShowRestorePreviewChip(_preMaxRect);
+        }
+        else
+        {
+            // Pinch-in on a window we can't restore: nothing to show.
+            _preview.Hide();
+            _chip.Hide();
+        }
+    }
+
+    private void ShowRestorePreviewChip(Win32.RECT rect)
+    {
+        var work = _snapper.WorkAreaFor(_target);
+        if (work.Width <= 0 || work.Height <= 0) return;
+        double x0 = Math.Clamp((rect.Left - work.Left) / (double)work.Width, 0, 1);
+        double y0 = Math.Clamp((rect.Top - work.Top) / (double)work.Height, 0, 1);
+        double x1 = Math.Clamp((rect.Right - work.Left) / (double)work.Width, 0, 1);
+        double y1 = Math.Clamp((rect.Bottom - work.Top) / (double)work.Height, 0, 1);
+        _chip.ShowFraction(x0, y0, x1, y1, 1);
+    }
+
+    private void OnPinchOut()
+    {
+        // Two fingers spread apart over a titlebar: fullscreen (maximize) the armed
+        // window. Native maximize keeps the OS animation, matching the Up swipe.
+        _preview.Hide();
+        _chip.Hide();
+        if (!_armed) return;
+
+        // Remember the floating rect so a later pinch-in puts it back exactly. Skip
+        // if it's already maximized so we never store the full-screen rect.
+        if (!WindowSnapper.IsMaximized(_target) && Win32.GetWindowRect(_target, out var r))
+        {
+            _preMaxRect = r;
+            _preMaxHwnd = _target;
+            _hasPreMax = true;
+        }
+
+        Win32.MessageBeep(0xFFFFFFFF);
+        _snapper.Apply(_target, SnapZone.Maximize);
+        Win32.SetForegroundWindow(_target);
+        Log.Write("PinchOut -> Maximize");
+        _armed = false;
+    }
+
+    private void OnPinchIn()
+    {
+        // Two fingers drawn together over a titlebar: restore a fullscreened window.
+        _preview.Hide();
+        _chip.Hide();
+        if (!_armed) return;
+        if (!WindowSnapper.IsMaximized(_target)) return; // nothing to restore
+
+        Win32.MessageBeep(0xFFFFFFFF);
+        if (_hasPreMax && _preMaxHwnd == _target)
+        {
+            _snapper.RestoreToRect(_target, _preMaxRect); // back to where it was
+            _hasPreMax = false;
+        }
+        else
+        {
+            _snapper.RestoreWindow(_target); // OS-maximized window: native restore
+        }
+        Win32.SetForegroundWindow(_target);
+        Log.Write("PinchIn -> Restore");
         _armed = false;
     }
 

@@ -256,10 +256,29 @@ public sealed class CursorChipOverlay
         Place(SingleCanvasW, CanvasH);
     }
 
-    private void UpdateSingleFill(SnapZone zone)
+    private void UpdateSingleFill(SnapZone zone) => UpdateSingleFillFrac(ZoneFraction(zone), zone == SnapZone.Center);
+
+    /// <summary>Show the chip highlighting an arbitrary fractional rect of the screen
+    /// (used for the pinch-in restore preview, whose target isn't a fixed snap zone).</summary>
+    public void ShowFraction(double x0, double y0, double x1, double y1, double progress)
+    {
+        EnsureWindow();
+        if (_win == null) return;
+        CancelHideTimer();
+        SetSingleMode();
+
+        string key = $"f|{x0:F3},{y0:F3},{x1:F3},{y1:F3}";
+        if (key != _lastKey)
+        {
+            UpdateSingleFillFrac((x0, y0, x1, y1), rounded: true);
+            _lastKey = key;
+        }
+        Place(SingleCanvasW, CanvasH);
+    }
+
+    private void UpdateSingleFillFrac((double, double, double, double)? frac, bool rounded)
     {
         if (_singleFill == null) return;
-        var frac = ZoneFraction(zone);
         if (frac == null)
         {
             ClearFillAnimations();
@@ -276,7 +295,7 @@ public sealed class CursorChipOverlay
         double tl = x0 * innerW;
         double tt = y0 * innerH;
 
-        _singleFill.CornerRadius = new CornerRadius(zone == SnapZone.Center ? 4 : 0);
+        _singleFill.CornerRadius = new CornerRadius(rounded ? 4 : 0);
         _singleFill.Background = _solid;
 
         bool wasVisible = _singleFill.Visibility == Visibility.Visible;

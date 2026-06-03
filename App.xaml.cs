@@ -99,6 +99,13 @@ public partial class App : System.Windows.Application
 
     private async Task CheckForUpdatesAsync(bool manual)
     {
+        // Local dev builds carry the 0.1.0 sentinel from the csproj (CI stamps the
+        // real 0.1.<run> at publish time), so they would always trail the latest
+        // release and nag on every launch. Skip the SILENT startup check for them;
+        // the manual "Check for updates..." menu item still runs normally.
+        if (!manual && IsDevBuild)
+            return;
+
         var info = await _updates.CheckAsync();
         if (info != null)
         {
@@ -128,6 +135,22 @@ public partial class App : System.Windows.Application
             Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
         }
         catch { /* nothing actionable if the shell can't open a browser */ }
+    }
+
+    /// <summary>
+    /// True for an un-stamped local build: either compiled in Debug, or carrying the
+    /// 0.1.0 version sentinel that the release workflow overrides at publish time.
+    /// </summary>
+    private bool IsDevBuild
+    {
+        get
+        {
+#if DEBUG
+            return true;
+#else
+            return _updates.CurrentVersion <= new Version(0, 1, 0);
+#endif
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

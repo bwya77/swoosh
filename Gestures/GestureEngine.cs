@@ -39,6 +39,18 @@ public sealed class GestureEngine
     /// <summary>Max centroid travel allowed during a five-finger touch for it to still count as a tap.</summary>
     public double FiveTapMaxDist { get; set; } = 0.06;
 
+    /// <summary>Increase in two-finger spread (normalized) needed to trigger a pinch-out fullscreen.</summary>
+    public double PinchEngageDelta { get; set; } = 0.10;
+
+    /// <summary>Minimum spread expansion ratio (end/start) for a pinch-out, so the gesture scales with the starting gap.</summary>
+    public double PinchEngageRatio { get; set; } = 1.45;
+
+    /// <summary>Max centroid travel allowed during a pinch, so a translating swipe is never read as a pinch.</summary>
+    public double PinchMaxCentroidTravel { get; set; } = 0.06;
+
+    /// <summary>Spread change (normalized) at which a pinch starts showing live preview feedback.</summary>
+    public double PinchPreviewDelta { get; set; } = 0.035;
+
     public event Action<int>? GestureBegan;
     public event Action<SwipeDirection, double>? GestureUpdated;
     public event Action<SwipeDirection>? GestureCompleted;
@@ -76,6 +88,15 @@ public sealed class GestureEngine
     /// than an actual move.</summary>
     public event Action<bool>? FreeMoveEnded;
 
+    /// <summary>Fired when two fingers spread apart (pinch-out) over a titlebar: fullscreen the window.</summary>
+    public event Action? PinchOut;
+
+    /// <summary>Fired when two fingers draw together (pinch-in) over a titlebar: restore the window.</summary>
+    public event Action? PinchIn;
+
+    /// <summary>Live pinch feedback before commit: outward (spreading) plus progress 0..1.</summary>
+    public event Action<bool, double>? PinchUpdated;
+
     private bool _tracking;
     private bool _cancelled;
     private double _startX, _startY, _lastX, _lastY;
@@ -86,6 +107,12 @@ public sealed class GestureEngine
     private bool _holdEligible = true;
     private double _maxDist;
     private double _holdAnchorX;
+
+    // Pinch-out (two fingers spreading) to fullscreen. Tracked from the gesture's
+    // initial finger gap; fires once when the gap grows past the thresholds while
+    // the centroid stays roughly fixed.
+    private double _startSpread;
+    private bool _pinchFired;
 
     private bool _free;
     private double _freeLastX, _freeLastY;
@@ -172,6 +199,8 @@ public sealed class GestureEngine
                 _startX = _lastX = cx;
                 _startY = _lastY = cy;
                 _startTime = frame.TimestampMs;
+                _startSpread = Spread(frame);
+                _pinchFired = false;
                 GestureBegan?.Invoke(2);
                 return;
             }
@@ -183,6 +212,37 @@ public sealed class GestureEngine
             double dist = Math.Sqrt(dx * dx + dy * dy);
             _maxDist = Math.Max(_maxDist, dist);
             SwipeRaw?.Invoke(dx, dy);
+
+            // Pinch over a titlebar: two fingers spreading apart fullscreens the
+            // window; drawing together restores it (Swish-style). Checked before the
+            // hold/snap logic so a still-centroid pinch is never mistaken for a
+            // desktop-move hold or a tiny swipe, and gated on small centroid travel so
+            // a translating swipe can never trigger it. Live feedback is emitted as the
+            // gap changes; the action commits once it passes the distance + ratio gates.
+            if (_pinchFired) return;
+            double spread = Spread(frame);
+            double gain = spread - _startSpread;
+            bool centroidFixed = _maxDist <= PinchMaxCentroidTravel;
+
+            if (!_hold && centroidFixed && Math.Abs(gain) >= PinchPreviewDelta)
+            {
+                _holdEligible = false; // an active gap change is a pinch, not a dwell
+                bool outward = gain > 0;
+                double prog = Math.Clamp(Math.Abs(gain) / PinchEngageDelta, 0, 1);
+                PinchUpdated?.Invoke(outward, prog);
+
+                bool ratioOk = outward
+                    ? (_startSpread <= 0.0001 || spread >= _startSpread * PinchEngageRatio)
+                    : (_startSpread > 0.0001 && spread <= _startSpread / PinchEngageRatio);
+
+                if (Math.Abs(gain) >= PinchEngageDelta && ratioOk)
+                {
+                    _pinchFired = true;
+                    if (outward) PinchOut?.Invoke();
+                    else PinchIn?.Invoke();
+                }
+                return; // while pinching, never also run the snap/hold logic
+            }
 
             // Decide between snap-swipe and press-and-hold. A hold engages only
             // if the fingers stayed near the landing point for the dwell time.
@@ -257,6 +317,13 @@ public sealed class GestureEngine
         _tracking = false;
         long dur = endTime - _startTime;
 
+        // A pinch-out already fired its action live; release just tears down.
+        if (_pinchFired)
+        {
+            GestureCancelled?.Invoke();
+            return;
+        }
+
         if (_cancelled || dur > MaxDurationMs)
         {
             GestureCancelled?.Invoke();
@@ -301,6 +368,23 @@ public sealed class GestureEngine
         foreach (var c in f.Contacts)
             if (c.TipDown) { sx += c.X; sy += c.Y; n++; }
         return n == 0 ? (0, 0) : (sx / n, sy / n);
+    }
+
+    /// <summary>Normalized distance between the two tip-down contacts (the finger
+    /// gap). Returns 0 when fewer than two fingers are down. Order-independent.</summary>
+    private static double Spread(TouchFrame f)
+    {
+        double ax = 0, ay = 0, bx = 0, by = 0; int n = 0;
+        foreach (var c in f.Contacts)
+        {
+            if (!c.TipDown) continue;
+            if (n == 0) { ax = c.X; ay = c.Y; }
+            else if (n == 1) { bx = c.X; by = c.Y; }
+            n++;
+        }
+        if (n < 2) return 0;
+        double dx = bx - ax, dy = by - ay;
+        return Math.Sqrt(dx * dx + dy * dy);
     }
 
     /// <summary>Classify a normalized delta into an 8-way direction. Pad Y grows downward.</summary>
