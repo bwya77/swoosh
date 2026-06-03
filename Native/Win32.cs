@@ -166,6 +166,21 @@ public static class Win32
     [DllImport("user32.dll")]
     public static extern uint GetDpiForWindow(IntPtr hWnd);
 
+    [DllImport("shcore.dll")]
+    public static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    /// <summary>Effective DPI of the monitor currently under the mouse cursor (falls back to 96).</summary>
+    public static uint GetDpiForCursor()
+    {
+        if (GetCursorPos(out var pt))
+        {
+            IntPtr mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            if (mon != IntPtr.Zero && GetDpiForMonitor(mon, 0, out uint dx, out _) == 0 && dx > 0)
+                return dx;
+        }
+        return 96;
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetClassName(IntPtr hWnd, char[] lpClassName, int nMaxCount);
 

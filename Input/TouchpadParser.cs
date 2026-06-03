@@ -28,14 +28,22 @@ public sealed class TouchpadParser
     private string _lastSig = "";
     private readonly Dictionary<ushort, (uint x, uint y)> _prevPos = new();
 
-    // Stuck-contact rejection. A real fingertip jitters at the sensor's
-    // least-significant bit every few frames; a firmware-stuck phantom reports
-    // the exact same raw coordinate forever. Any slot that holds a byte-identical
-    // position for longer than StuckMs is treated as a phantom and dropped,
-    // independent of the (sometimes-wrong) firmware Contact Count. Any movement
-    // instantly un-sticks it.
-    private const long StuckMs = 700;
+    // Freeze tracking: how long a slot has held a byte-identical raw position.
     private readonly Dictionary<ushort, (uint x, uint y, long sinceMs)> _stillSince = new();
+
+    // Phantom rejection (intermittent firmware-stuck contact). This device
+    // sometimes wedges a finger collection at a fixed raw coordinate that never
+    // moves and never lifts. We can't drop "any frozen slot" — during a real
+    // press-and-hold the user's two fingers freeze too. The discriminator that
+    // works: the phantom is the only thing on the pad when it appears (a hold
+    // always shows TWO contacts), so we LEARN the phantom's coordinate only from
+    // a LONE contact that has been frozen past LearnMs, then suppress only that
+    // exact frozen coordinate. A real finger that lands there and moves reclaims
+    // the spot (we unlearn). Two-finger holds are never at a learned lone coord,
+    // so they survive.
+    private const long LearnMs = 1200;
+    private const uint PhantomTol = 3;
+    private (uint x, uint y)? _phantomPos;
 
     private DeviceLayout? GetLayout(IntPtr device)
     {
@@ -162,11 +170,10 @@ public sealed class TouchpadParser
                 if (layout.HasContactCount && !ccOk)
                     continue;
 
-                // Gather every slot that currently claims a finger is down,
-                // tracking whether each moved since the previous report.
-                var cand = new List<(int id, double nx, double ny, ushort col, bool moved)>();
+                // Gather every slot that currently claims a finger is down, with
+                // its raw position and how long it has been byte-frozen there.
+                var cand = new List<(int id, double nx, double ny, ushort col, bool moved, uint rawX, uint rawY, long frozenMs)>();
                 long now = Environment.TickCount64;
-                int stuckDropped = 0;
                 foreach (ushort col in layout.FingerCollections)
                 {
                     uint usageLen = (uint)usageBuf.Length;
@@ -195,53 +202,50 @@ public sealed class TouchpadParser
                     bool moved = !_prevPos.TryGetValue(col, out var prev) || prev.x != rawX || prev.y != rawY;
                     _prevPos[col] = (rawX, rawY);
 
-                    // Stuck-phantom rejection: if this slot has reported the exact
-                    // same raw coordinate continuously for longer than StuckMs, it
-                    // is a frozen firmware contact, not a real finger. Drop it.
-                    bool stuck = false;
+                    // Track how long this slot has held a byte-identical position.
+                    long frozenMs = 0;
                     if (_stillSince.TryGetValue(col, out var ss) && ss.x == rawX && ss.y == rawY)
-                    {
-                        if (now - ss.sinceMs >= StuckMs) stuck = true;
-                    }
+                        frozenMs = now - ss.sinceMs;
                     else
-                    {
                         _stillSince[col] = (rawX, rawY, now);
-                    }
-                    if (stuck) { stuckDropped++; continue; }
 
                     double nx = Math.Clamp((rawX - layout.LogicalMinX) / spanX, 0, 1);
                     double ny = Math.Clamp((rawY - layout.LogicalMinY) / spanY, 0, 1);
-                    cand.Add((id, nx, ny, col, moved));
+                    cand.Add((id, nx, ny, col, moved, rawX, rawY, frozenMs));
                 }
 
-                // The firmware's Contact Count is the authoritative number of
-                // live fingers. Some touchpads (Bradley's Surface included) have
-                // a buggy slot whose TipSwitch is permanently stuck on at a
-                // frozen position — it is never counted in Contact Count. When
-                // more slots claim tip-down than Contact Count allows, drop the
-                // stale (non-moving) phantoms, keeping moving contacts first.
-                int budget = layout.HasContactCount ? (int)ccVal : cand.Count;
-                if (budget < 0) budget = 0;
-                string rawDetail = string.Join(" ", cand.Select(c =>
-                    $"id{c.id}@({c.nx:F2},{c.ny:F2}){(c.moved ? "M" : "S")}"));
-                int rawCount = cand.Count;
-                if (cand.Count > budget)
+                // Phantom rejection by lone-learned signature. Learn the stuck
+                // contact's coordinate ONLY when it is the sole contact and has
+                // been frozen past LearnMs (a real hold always shows two contacts,
+                // so a held finger can never be captured here). Once learned,
+                // suppress that exact coordinate whenever it sits frozen. If a
+                // contact at the learned coordinate is MOVING, it's a real finger
+                // reclaiming the spot — keep it and forget the phantom.
+                static bool Near(uint a, uint b) => (a > b ? a - b : b - a) <= PhantomTol;
+
+                if (_phantomPos is { } cur)
                 {
-                    var kept = cand.Where(c => c.moved).ToList();
-                    if (kept.Count > budget)
-                        kept = kept.Take(budget).ToList();
-                    else
-                        foreach (var c in cand.Where(c => !c.moved).OrderBy(c => c.id))
-                        {
-                            if (kept.Count >= budget) break;
-                            kept.Add(c);
-                        }
-                    cand = kept;
+                    int idx = cand.FindIndex(c => Near(c.rawX, cur.x) && Near(c.rawY, cur.y));
+                    if (idx >= 0 && cand[idx].moved) _phantomPos = null;
+                }
+
+                if (cand.Count == 1 && !cand[0].moved && cand[0].frozenMs >= LearnMs)
+                    _phantomPos = (cand[0].rawX, cand[0].rawY);
+
+                int dropped = 0;
+                if (_phantomPos is { } pp)
+                {
+                    int before = cand.Count;
+                    cand = cand.Where(c => c.moved || !(Near(c.rawX, pp.x) && Near(c.rawY, pp.y))).ToList();
+                    dropped = before - cand.Count;
                 }
 
                 if (_diagCount < DiagMax)
                 {
-                    string sig = $"rid={reportId} cc={ccVal} raw={rawCount} stuck={stuckDropped} kept={cand.Count} [{rawDetail}]";
+                    string rawDetail = string.Join(" ", cand.Select(c =>
+                        $"id{c.id}@({c.nx:F2},{c.ny:F2}){(c.moved ? "M" : "S")}f{c.frozenMs}"));
+                    string ghostStr = _phantomPos is { } pq ? $"({pq.x},{pq.y})" : "none";
+                    string sig = $"rid={reportId} cc={ccVal} ghost={ghostStr} drop={dropped} n={cand.Count} [{rawDetail}]";
                     if (sig != _lastSig) { Swoosh.Log.Write(sig); _lastSig = sig; _diagCount++; }
                 }
 

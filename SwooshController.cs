@@ -16,6 +16,7 @@ public sealed class SwooshController : IDisposable
     private readonly WindowSnapper _snapper = new();
     private readonly HotkeyListener _hotkeys;
     private readonly PreviewOverlay _preview = new();
+    private readonly CursorChipOverlay _chip = new();
     private readonly DebugOverlay _debug = new();
 
     private IntPtr _target;
@@ -53,14 +54,17 @@ public sealed class SwooshController : IDisposable
         // Arm only when the cursor is over a manageable window's titlebar.
         _target = _snapper.ArmTarget(out string diag);
         _armed = _target != IntPtr.Zero;
+        if (_armed) _chip.ShowSnap(SnapZone.None, 0);
         Log.Write($"GestureBegan fingers={fingers} armed={_armed} {diag}");
     }
 
     private void OnGestureUpdated(SwipeDirection dir, double progress)
     {
-        if (!_armed || dir == SwipeDirection.None || progress <= 0)
+        if (!_armed) { _preview.Hide(); _chip.Hide(); return; }
+        if (dir == SwipeDirection.None || progress <= 0)
         {
             _preview.Hide();
+            _chip.ShowSnap(SnapZone.None, 0);
             return;
         }
         var zone = SnapZoneMap.FromDirection(dir);
@@ -69,11 +73,13 @@ public sealed class SwooshController : IDisposable
             ? MinimizeHint(work)
             : WindowSnapper.ZoneRect(work, zone);
         _preview.ShowZone(rect, progress);
+        _chip.ShowSnap(zone, progress);
     }
 
     private void OnGestureCompleted(SwipeDirection dir)
     {
         _preview.Hide();
+        _chip.Hide();
         var zone = SnapZoneMap.FromDirection(dir);
         Log.Write($"GestureCompleted dir={dir} zone={zone} armed={_armed}");
         if (!_armed) return;
@@ -86,6 +92,7 @@ public sealed class SwooshController : IDisposable
     private void OnGestureCancelled()
     {
         _preview.Hide();
+        _chip.Hide();
         _armed = false;
     }
 
@@ -94,14 +101,14 @@ public sealed class SwooshController : IDisposable
         if (!_armed) return;
         // Audible "click" stand-in for touchpad haptics (not exposed on Windows).
         Win32.MessageBeep(0xFFFFFFFF);
-        ShowHoldBanner(null);
+        _chip.ShowDesktops(null, false);
         Log.Write("HoldEngaged");
     }
 
     private void OnHoldUpdated(DesktopDirection? dir, double progress)
     {
         if (!_armed) return;
-        ShowHoldBanner(dir);
+        _chip.ShowDesktops(dir, false);
     }
 
     private void OnDesktopMove(DesktopDirection dir)
@@ -110,24 +117,16 @@ public sealed class SwooshController : IDisposable
         if (!_armed) { return; }
         bool ok = VirtualDesktop.MoveAdjacent(_target, dir, out string diag);
         Log.Write($"DesktopMove dir={dir} ok={ok} {diag}");
-        if (ok) Win32.SetForegroundWindow(_target);
+        if (ok)
+        {
+            Win32.SetForegroundWindow(_target);
+            _chip.ShowDesktops(dir, true); // fill target blue, then auto-hide
+        }
+        else
+        {
+            _chip.Hide();
+        }
         _armed = false;
-    }
-
-    private void ShowHoldBanner(DesktopDirection? dir)
-    {
-        var work = _snapper.WorkAreaFor(_target);
-        uint dpi = Win32.GetDpiForWindow(_target);
-        if (dpi == 0) dpi = 96;
-        int w = (int)(560 * dpi / 96.0), h = (int)(96 * dpi / 96.0);
-        int x = work.Left + (work.Width - w) / 2;
-        int y = work.Top + (work.Height - h) / 2;
-        var area = new Win32.RECT { Left = x, Top = y, Right = x + w, Bottom = y + h };
-
-        string left = dir == DesktopDirection.Left ? "◀\u2009" : "◁\u2009";
-        string right = dir == DesktopDirection.Right ? "\u2009▶" : "\u2009▷";
-        string text = $"{left}  Move to desktop  {right}";
-        _preview.ShowHint(area, text);
     }
 
     private void OnHotkey(SnapZone zone)
@@ -156,6 +155,7 @@ public sealed class SwooshController : IDisposable
         _touchpad.Dispose();
         _hotkeys.Dispose();
         _preview.Close();
+        _chip.Close();
         _debug.Close();
         _window.Dispose();
     }
