@@ -52,6 +52,11 @@ public sealed class TouchpadParser
     private readonly List<(uint x, uint y)> _phantoms = new();
     private readonly HashSet<ushort> _peakResidue = new();
 
+    // Highest contact count reached in the current touch sequence (reset on full
+    // lift). Lets Rule 2 distinguish "press is collapsing" from "press is at peak"
+    // so a steady 2-finger hold is never mistaken for stuck residue.
+    private int _peakDown;
+
     private DeviceLayout? GetLayout(IntPtr device)
     {
         if (_devices.TryGetValue(device, out var cached))
@@ -261,6 +266,7 @@ public sealed class TouchpadParser
                 }
 
                 int curDown = cand.Count;
+                if (curDown > _peakDown) _peakDown = curDown;
 
                 // Pad genuinely empty → nothing can be stuck. Wipe all residue and
                 // learned phantom coords so they never accumulate across gestures.
@@ -268,12 +274,13 @@ public sealed class TouchpadParser
                 {
                     _peakResidue.Clear();
                     _phantoms.Clear();
+                    _peakDown = 0;
                 }
 
-                // Remember every collection present during a >=3-finger press.
-                // Real fingers get cleared on tip-up (gather loop); a stuck slot
-                // never lifts, so it survives in this set.
-                if (curDown >= 3)
+                // Remember every collection present during a multi-finger (>=2)
+                // press. Real fingers get cleared on tip-up (gather loop); a stuck
+                // slot never lifts, so it survives in this set.
+                if (curDown >= 2)
                     foreach (var c in cand) _peakResidue.Add(c.col);
 
                 // Unlearn any phantom position now occupied by a MOVING contact.
@@ -291,17 +298,23 @@ public sealed class TouchpadParser
                 int dropped = 0;
 
                 // Rule 2 — MASS-RELEASE RESIDUE (collection-tracked). Once a
-                // >=3-finger press collapses to <=2, any collection still down that
-                // was part of that press is the stuck firmware slot. Drop it now,
-                // unconditionally (the pad goes silent on a motionless stuck
-                // contact, so we cannot wait on a freeze timer) and learn its coord
-                // so a slot that churns id/collection but stays put is still caught.
-                if (curDown <= 2 && _peakResidue.Count > 0)
+                // multi-finger press starts collapsing (curDown drops below the
+                // peak it reached this sequence), any collection still down that
+                // is FROZEN is a stuck firmware slot. We drop it the instant it
+                // freezes — no wait on a freeze timer, because the pad goes SILENT
+                // on a motionless stuck contact and a longer timer would never
+                // receive another frame. Learning its coord makes the suppression
+                // durable (the phantom-coord block below kills it every later
+                // frame, even after this residue set is reset). The !moved guard is
+                // what keeps a real finger that keeps MOVING after its partners lift
+                // alive across any transition (5->2, 2->1, ...); only a genuinely
+                // stuck slot, which freezes within a frame, is ever dropped.
+                if (_peakResidue.Count > 0 && curDown < _peakDown)
                 {
                     var kept = new List<(int id, double nx, double ny, ushort col, bool moved, uint rawX, uint rawY, long frozenMs)>();
                     foreach (var c in cand)
                     {
-                        if (_peakResidue.Contains(c.col)) { Learn(c.rawX, c.rawY); dropped++; }
+                        if (_peakResidue.Contains(c.col) && !c.moved) { Learn(c.rawX, c.rawY); dropped++; }
                         else kept.Add(c);
                     }
                     cand = kept;
@@ -331,6 +344,19 @@ public sealed class TouchpadParser
                         .Take((int)ccVal)
                         .ToList();
                     dropped += before - cand.Count;
+                }
+
+                // Post-drop reset. If every contact this frame was dropped as
+                // phantom residue (final list empty, yet the raw report still
+                // claimed fingers down), the real gesture is over and only stuck
+                // slots remain. Clear the residue set and peak so a held-high
+                // _peakDown from an earlier 5-finger press can't keep tripping
+                // Rule 2 against later 2-finger gestures. Learned phantom coords
+                // are kept, so the stuck slot stays suppressed by coordinate.
+                if (cand.Count == 0 && curDown > 0)
+                {
+                    _peakResidue.Clear();
+                    _peakDown = 0;
                 }
 
                 // Always log the low-count region (post-lift phantoms) and any
