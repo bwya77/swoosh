@@ -1,0 +1,29 @@
+name: Tests
+
+# Runs the unit-test suite on every push and PR to main so the snapping geometry and
+# settings serialization are verified on every change.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Test
+        run: dotnet test Swoosh.Tests/Swoosh.Tests.csproj -c Release --logger "console;verbosity=normal"

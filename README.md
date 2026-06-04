@@ -1,7 +1,9 @@
 # Swoosh
 
 [![Build & Release](https://github.com/bwya77/swoosh/actions/workflows/release.yml/badge.svg)](https://github.com/bwya77/swoosh/actions/workflows/release.yml)
+[![Tests](https://github.com/bwya77/swoosh/actions/workflows/tests.yml/badge.svg)](https://github.com/bwya77/swoosh/actions/workflows/tests.yml)
 [![CodeQL](https://github.com/bwya77/swoosh/actions/workflows/codeql.yml/badge.svg)](https://github.com/bwya77/swoosh/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/bwya77/swoosh/badge)](https://securityscorecards.dev/viewer/?uri=github.com/bwya77/swoosh)
 [![Latest release](https://img.shields.io/github/v/release/bwya77/swoosh?sort=semver)](https://github.com/bwya77/swoosh/releases/latest)
 [![Downloads](https://badgen.net/github/assets-dl/bwya77/swoosh)](https://github.com/bwya77/swoosh/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -182,6 +184,42 @@ and publishes a GitHub Release tagged `v0.1.<run number>`. To start a new versio
 series, edit the `0.1.` prefix in that workflow and the run number keeps counting
 from there. You can also start a build by hand from the **Actions** tab using
 **Run workflow**.
+
+## Security & privacy
+
+Swoosh is a local utility built to be easy to trust and easy to verify.
+
+- **No telemetry, no data collection.** The only network request is an optional
+  update check against the public GitHub Releases API.
+- **Least privilege.** It registers for raw touchpad input, moves the window under
+  the cursor via standard Win32 APIs, and (only if you enable "Start with Windows")
+  writes a single per-user `HKCU\…\Run` value. No elevation, no machine-wide changes.
+- **Signed releases.** Binaries are code-signed with **Azure Trusted Signing**
+  (verified publisher). See [SIGNING.md](SIGNING.md).
+- **Verifiable builds.** Every release zip carries a signed
+  [SLSA build provenance attestation](https://github.com/bwya77/swoosh/attestations)
+  and a `SHA256SUMS.txt`.
+- **Automated scanning in CI.** CodeQL (SAST), OpenSSF Scorecard, and Dependabot
+  (dependency alerts + automated fixes) run on every change and on a schedule.
+- **Tested.** Core snapping geometry and settings serialization are covered by unit
+  tests run on every push and PR.
+
+Verify a download:
+
+```powershell
+# Authenticode signature (verified publisher)
+Get-AuthenticodeSignature .\Swoosh.exe | Format-List Status, SignerCertificate
+
+# SLSA build provenance — proves it was built by this repo's CI from this source
+gh attestation verify .\Swoosh-<version>-win-<arch>.zip --repo bwya77/swoosh
+
+# SHA-256 against the published SHA256SUMS.txt
+Get-FileHash .\Swoosh-<version>-win-<arch>.zip -Algorithm SHA256
+```
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md). Prefer not to trust a
+prebuilt binary at all? Build it yourself from source (see above) — the result is
+the same app.
 
 ## Roadmap
 

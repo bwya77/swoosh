@@ -16,6 +16,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write       # sign the build provenance attestation
+  attestations: write   # write the build provenance attestation
 
 concurrency:
   group: release-${{ github.ref }}
@@ -115,6 +117,22 @@ jobs:
           Compress-Archive -Path publish/win-arm64/* -DestinationPath "Swoosh-$v-win-arm64.zip" -Force
           Get-ChildItem *.zip | ForEach-Object { Write-Host "$($_.Name)  $([math]::Round($_.Length/1MB,1)) MB" }
 
+      # Publish SHA-256 checksums so users can verify the integrity of a download.
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-FileHash Swoosh-*.zip -Algorithm SHA256 |
+            ForEach-Object { '{0}  {1}' -f $_.Hash.ToLower(), (Split-Path $_.Path -Leaf) } |
+            Out-File -Encoding ascii SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
+
+      # Signed SLSA build provenance: lets anyone verify a release zip was built by this
+      # repository's CI from this commit, with `gh attestation verify <zip> --repo bwya77/swoosh`.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'Swoosh-*.zip'
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -123,3 +141,4 @@ jobs:
           generate_release_notes: true
           files: |
             Swoosh-*.zip
+            SHA256SUMS.txt
