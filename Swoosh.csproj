@@ -13,7 +13,7 @@
     <RootNamespace>Swoosh</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>Assets\swoosh.ico</ApplicationIcon>
-    <Version>0.1.7</Version>
+    <Version>0.1.8</Version>
     <!-- WPF reads PerMonitorV2 from app.manifest; WinForms' WFAC010 nag is moot here. -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
