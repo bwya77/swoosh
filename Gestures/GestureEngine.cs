@@ -93,8 +93,11 @@ public sealed class GestureEngine
     /// <summary>Fired when enough fingers (default 5) land to begin fine-grained free positioning.</summary>
     public event Action? FreeMoveBegan;
 
-    /// <summary>Per-frame normalized centroid delta (dx, dy) while free-moving. Pad Y grows downward.</summary>
-    public event Action<double, double>? FreeMoveDelta;
+    /// <summary>Per-frame free-transform while five fingers are down: normalized centroid
+    /// delta (dx, dy) to translate the window, plus a multiplicative spread factor
+    /// (current finger-spread / previous frame's spread, ~1.0) to grow or shrink it as the
+    /// hand expands or contracts. Pad Y grows downward.</summary>
+    public event Action<double, double, double>? FreeMoveDelta;
 
     /// <summary>Fired when the fingers lift and free-move ends. The bool is true when the
     /// touch was a brief, near-still FIVE-finger tap (Swish-style center the window) rather
@@ -143,6 +146,15 @@ public sealed class GestureEngine
     private long _freeStartTime;
     private double _freeStartX, _freeStartY, _freeMaxDist;
 
+    // Five-finger resize: the mean finger spread (distance from the contact
+    // centroid) at the start and on the previous frame. Expanding/contracting the
+    // hand scales the window; a small dead-zone around the start spread keeps a
+    // pure move or a tap from nudging the size.
+    private double _freeStartSpread, _freeLastSpread;
+
+    /// <summary>Spread change from the start gap below which no resize is applied.</summary>
+    public double FreeResizeDeadZone { get; set; } = 0.015;
+
     public void Process(TouchFrame frame)
     {
         int down = frame.DownCount;
@@ -156,13 +168,23 @@ public sealed class GestureEngine
             {
                 // Full contact count: track the centroid and move the window.
                 var (fx, fy) = Centroid(frame);
+                double curSpread = SpreadN(frame);
                 double tdx = fx - _freeStartX, tdy = fy - _freeStartY;
                 _freeMaxDist = Math.Max(_freeMaxDist, Math.Sqrt(tdx * tdx + tdy * tdy));
                 if (down != _freeLastCount) _freeHasLast = false; // re-anchor across count changes
                 _freeLastCount = down;
                 if (_freeHasLast)
-                    FreeMoveDelta?.Invoke(fx - _freeLastX, fy - _freeLastY);
-                _freeLastX = fx; _freeLastY = fy; _freeHasLast = true;
+                {
+                    // Only scale once the hand has expanded/contracted past the
+                    // dead-zone from where it started, so a translate or tap doesn't
+                    // resize. The factor is relative to the previous frame so
+                    // re-anchoring after a finger flicker injects no size jump.
+                    double factor = Math.Abs(curSpread - _freeStartSpread) < FreeResizeDeadZone || _freeLastSpread < 1e-4
+                        ? 1.0
+                        : curSpread / _freeLastSpread;
+                    FreeMoveDelta?.Invoke(fx - _freeLastX, fy - _freeLastY, factor);
+                }
+                _freeLastX = fx; _freeLastY = fy; _freeLastSpread = curSpread; _freeHasLast = true;
             }
             else if (down >= FreeMoveKeepContacts)
             {
@@ -199,6 +221,7 @@ public sealed class GestureEngine
             _freeStartTime = frame.TimestampMs;
             _freeStartX = sx; _freeStartY = sy;
             _freeMaxDist = 0;
+            _freeStartSpread = _freeLastSpread = SpreadN(frame);
             FreeMoveBegan?.Invoke();
             return;
         }
@@ -435,6 +458,21 @@ public sealed class GestureEngine
         if (n < 2) return 0;
         double dx = bx - ax, dy = by - ay;
         return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    /// <summary>Mean distance of the tip-down contacts from their centroid - a finger-spread
+    /// metric that works for any contact count (used to scale the window in free-move).
+    /// Returns 0 when fewer than two fingers are down.</summary>
+    private static double SpreadN(TouchFrame f)
+    {
+        double sx = 0, sy = 0; int n = 0;
+        foreach (var c in f.Contacts)
+            if (c.TipDown) { sx += c.X; sy += c.Y; n++; }
+        if (n < 2) return 0;
+        double cx = sx / n, cy = sy / n, s = 0;
+        foreach (var c in f.Contacts)
+            if (c.TipDown) { double dx = c.X - cx, dy = c.Y - cy; s += Math.Sqrt(dx * dx + dy * dy); }
+        return s / n;
     }
 
     /// <summary>Classify a normalized delta into an 8-way direction. Pad Y grows downward.</summary>

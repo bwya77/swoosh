@@ -35,10 +35,18 @@ public sealed class SwooshController : IDisposable
     // plus the monitor work-area size used to map pad motion 1:1 onto the screen.
     private bool _free;
     private double _freeWinX, _freeWinY;
+    private double _freeWinW, _freeWinH;
     private int _freeWorkW = 1, _freeWorkH = 1;
 
     /// <summary>How much screen the window covers per unit of pad travel (1.0 = pad spans the monitor).</summary>
     private const double FreeMoveScale = 1.0;
+
+    /// <summary>Amplifies the raw hand-spread ratio so a modest expand/contract makes a
+    /// noticeable size change.</summary>
+    private const double FreeResizeGain = 1.6;
+
+    /// <summary>Smallest window the five-finger resize will shrink to (physical pixels).</summary>
+    private const int MinFreeW = 260, MinFreeH = 180;
 
     public bool GesturesEnabled { get; set; } = true;
 
@@ -375,7 +383,12 @@ public sealed class SwooshController : IDisposable
             Win32.ShowWindow(_target, Win32.SW_RESTORE);
 
         _free = true;
-        if (Win32.GetWindowRect(_target, out var wr)) { _freeWinX = wr.Left; _freeWinY = wr.Top; }
+        if (Win32.GetWindowRect(_target, out var wr))
+        {
+            _freeWinX = wr.Left; _freeWinY = wr.Top;
+            _freeWinW = Math.Max(MinFreeW, wr.Right - wr.Left);
+            _freeWinH = Math.Max(MinFreeH, wr.Bottom - wr.Top);
+        }
         var work = _snapper.WorkAreaFor(_target);
         _freeWorkW = Math.Max(1, work.Width);
         _freeWorkH = Math.Max(1, work.Height);
@@ -387,16 +400,31 @@ public sealed class SwooshController : IDisposable
         Log.Write($"FreeMoveBegan armed pos=({_freeWinX:F0},{_freeWinY:F0}) work={_freeWorkW}x{_freeWorkH}");
     }
 
-    private void OnFreeMoveDelta(double ddx, double ddy)
+    private void OnFreeMoveDelta(double ddx, double ddy, double scale)
     {
         if (!_free || !_armed) return;
         // Map normalized pad travel onto the monitor: a full pad sweep moves the
         // window a full work-area span (touchpad acts as the monitor).
         _freeWinX += ddx * _freeWorkW * FreeMoveScale;
         _freeWinY += ddy * _freeWorkH * FreeMoveScale;
+
+        // Expanding/contracting the hand scales the window about its center, so it
+        // grows and shrinks in place while still following the hand's translation.
+        if (scale != 1.0)
+        {
+            double g = Math.Pow(scale, FreeResizeGain);
+            double cx = _freeWinX + _freeWinW / 2.0;
+            double cy = _freeWinY + _freeWinH / 2.0;
+            _freeWinW = Math.Clamp(_freeWinW * g, MinFreeW, _freeWorkW);
+            _freeWinH = Math.Clamp(_freeWinH * g, MinFreeH, _freeWorkH);
+            _freeWinX = cx - _freeWinW / 2.0;
+            _freeWinY = cy - _freeWinH / 2.0;
+        }
+
         Win32.SetWindowPos(_target, IntPtr.Zero,
-            (int)Math.Round(_freeWinX), (int)Math.Round(_freeWinY), 0, 0,
-            Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE);
+            (int)Math.Round(_freeWinX), (int)Math.Round(_freeWinY),
+            (int)Math.Round(_freeWinW), (int)Math.Round(_freeWinH),
+            Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE);
     }
 
     private void OnFreeMoveEnded(bool wasTap)
