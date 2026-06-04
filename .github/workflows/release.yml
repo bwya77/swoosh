@@ -24,6 +24,10 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
+    # Signing turns on automatically once the AZURE_* secrets exist; until then
+    # the sign step is skipped and unsigned builds are published as before.
+    env:
+      HAS_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,6 +83,29 @@ jobs:
                 ForEach-Object { Write-Host "trim $($_.Name)"; Remove-Item $_.FullName -Force -EA SilentlyContinue }
             }
           }
+
+      # Code-sign the launched binaries with Azure Trusted Signing (now "Azure
+      # Artifact Signing") so Windows SmartScreen stops warning on download and
+      # launch-at-login. Skipped automatically until the AZURE_* secrets and the
+      # TRUSTED_SIGNING_* repo variables are configured. Signs before packaging so
+      # the published zips contain signed files. Reputation builds over time; the
+      # warning clears once enough clean installs accrue against this identity.
+      - name: Sign binaries (Azure Trusted Signing)
+        if: env.HAS_SIGNING == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.TRUSTED_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.TRUSTED_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\publish
+          files-folder-filter: exe,dll
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
 
       - name: Package artifacts
         shell: pwsh
