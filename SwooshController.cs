@@ -334,8 +334,6 @@ public sealed class SwooshController : IDisposable
     private void OnHoldEngaged()
     {
         if (!_armed) return;
-        // Audible "click" stand-in for touchpad haptics (not exposed on Windows).
-        Win32.MessageBeep(0xFFFFFFFF);
         if (VirtualDesktop.GetLayout(out int cnt, out int idx, out string ld))
         {
             _deskCount = Math.Max(1, cnt);
@@ -396,7 +394,6 @@ public sealed class SwooshController : IDisposable
         // The window itself is the live feedback here — no snap/desktop HUD.
         _preview.Hide();
         _chip.Hide();
-        Win32.MessageBeep(0xFFFFFFFF);
         Log.Write($"FreeMoveBegan armed pos=({_freeWinX:F0},{_freeWinY:F0}) work={_freeWorkW}x{_freeWorkH}");
     }
 
@@ -503,7 +500,6 @@ public sealed class SwooshController : IDisposable
             _hasPreMax = true;
         }
 
-        Win32.MessageBeep(0xFFFFFFFF);
         _snapper.Apply(_target, SnapZone.Maximize);
         Win32.SetForegroundWindow(_target);
         Log.Write("PinchOut -> Maximize");
@@ -518,7 +514,6 @@ public sealed class SwooshController : IDisposable
         if (!_armed) return;
         if (!WindowSnapper.IsMaximized(_target)) return; // nothing to restore
 
-        Win32.MessageBeep(0xFFFFFFFF);
         if (_hasPreMax && _preMaxHwnd == _target)
         {
             _snapper.RestoreToRect(_target, _preMaxRect); // back to where it was
