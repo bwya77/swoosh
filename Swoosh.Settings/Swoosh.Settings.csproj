@@ -25,8 +25,11 @@
   </ItemGroup>
 
   <!-- Bundle the curated changelog so "What's new" shows hand-written notes
-       instead of raw commit messages from GitHub. -->
+       instead of raw commit messages from GitHub. Embed it in the assembly so it
+       is always available regardless of build configuration or how the exe is
+       launched; also copy it next to the exe as a secondary on-disk fallback. -->
   <ItemGroup>
+    <EmbeddedResource Include="..\CHANGELOG.md" LogicalName="CHANGELOG.md" />
     <Content Include="..\CHANGELOG.md" Link="CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

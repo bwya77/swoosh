@@ -324,6 +324,34 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>Reads the curated CHANGELOG.md. Prefers the copy embedded in the
+    /// assembly (always present regardless of build config or launch path) and falls
+    /// back to a copy next to the exe. Returns null if neither is available.</summary>
+    private static string? ReadBundledChangelog()
+    {
+        try
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            using var stream = asm.GetManifestResourceStream("CHANGELOG.md");
+            if (stream != null)
+            {
+                using var reader = new System.IO.StreamReader(stream);
+                string embedded = reader.ReadToEnd();
+                if (!string.IsNullOrWhiteSpace(embedded)) return embedded;
+            }
+        }
+        catch { /* fall through to disk */ }
+
+        try
+        {
+            string path = System.IO.Path.Combine(AppContext.BaseDirectory, "CHANGELOG.md");
+            if (System.IO.File.Exists(path)) return System.IO.File.ReadAllText(path);
+        }
+        catch { /* ignore */ }
+
+        return null;
+    }
+
     /// <summary>Light cleanup of GitHub's markdown release bodies for plain-text display.</summary>
     private static string CleanBody(string body)
     {
@@ -347,14 +375,7 @@ public sealed partial class MainWindow : Window
     /// Returns false if the file is missing or empty so callers can fall back.</summary>
     private bool TryRenderLocalChangelog()
     {
-        string path = System.IO.Path.Combine(AppContext.BaseDirectory, "CHANGELOG.md");
-        string text;
-        try
-        {
-            if (!System.IO.File.Exists(path)) return false;
-            text = System.IO.File.ReadAllText(path);
-        }
-        catch { return false; }
+        string? text = ReadBundledChangelog();
         if (string.IsNullOrWhiteSpace(text)) return false;
 
         var lines = text.Replace("\r\n", "\n").Split('\n');
