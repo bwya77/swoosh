@@ -101,7 +101,7 @@ jobs:
           signing-account-name: ${{ vars.TRUSTED_SIGNING_ACCOUNT }}
           certificate-profile-name: ${{ vars.TRUSTED_SIGNING_PROFILE }}
           files-folder: ${{ github.workspace }}\publish
-          files-folder-filter: exe,dll
+          files-folder-filter: exe
           files-folder-recurse: true
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
