@@ -303,6 +303,17 @@ public sealed class SwooshController : IDisposable
             return;
         }
         var zone = MapZone(dir);
+        if (zone == SnapZone.None)
+        {
+            // A disabled (gated-off) gesture has no target of its own. Leave the preview
+            // exactly as it is rather than hiding it: a diagonal swipe (e.g. down-right
+            // with Minimize disabled) spends many frames classified as the pure-axis
+            // direction, and hiding on each one killed the overlay's glide so the snap
+            // looked like the window just teleported. Doing nothing keeps the glide to the
+            // real neighbouring zone smooth, and because we never call ZoneRect(None) the
+            // old full-screen "maximize" flash can't happen either.
+            return;
+        }
         var work = _snapper.WorkAreaFor(_target);
         Win32.RECT rect = zone == SnapZone.Minimize
             ? MinimizeHint(work)
@@ -316,7 +327,6 @@ public sealed class SwooshController : IDisposable
         _preview.Hide();
         _chip.Hide();
         var zone = MapZone(dir);
-        Log.Write($"GestureCompleted dir={dir} zone={zone} armed={_armed}");
         if (!_armed) return;
         _snapper.Apply(_target, zone);
         if (zone != SnapZone.Minimize)
