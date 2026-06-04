@@ -15,9 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  id-token: write       # sign the build provenance attestation
-  attestations: write   # write the build provenance attestation
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -26,16 +24,20 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
+    permissions:
+      contents: write       # create the GitHub Release
+      id-token: write       # sign the build provenance attestation
+      attestations: write   # write the build provenance attestation
     # Signing turns on automatically once the AZURE_* secrets exist; until then
     # the sign step is skipped and unsigned builds are published as before.
     env:
       HAS_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           dotnet-version: '8.0.x'
 
@@ -94,7 +96,7 @@ jobs:
       # warning clears once enough clean installs accrue against this identity.
       - name: Sign binaries (Azure Trusted Signing)
         if: env.HAS_SIGNING == 'true'
-        uses: azure/artifact-signing-action@v2
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -129,12 +131,19 @@ jobs:
       # Signed SLSA build provenance: lets anyone verify a release zip was built by this
       # repository's CI from this commit, with `gh attestation verify <zip> --repo bwya77/swoosh`.
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4
+        id: attest
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           subject-path: 'Swoosh-*.zip'
 
+      # Also attach the provenance bundle as a release asset so the provenance is
+      # discoverable on the release itself, not only in the attestations store.
+      - name: Stage provenance bundle
+        shell: pwsh
+        run: Copy-Item "${{ steps.attest.outputs.bundle-path }}" "Swoosh-${{ steps.ver.outputs.version }}.intoto.jsonl"
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           name: Swoosh v${{ steps.ver.outputs.version }}
@@ -142,3 +151,4 @@ jobs:
           files: |
             Swoosh-*.zip
             SHA256SUMS.txt
+            Swoosh-*.intoto.jsonl
