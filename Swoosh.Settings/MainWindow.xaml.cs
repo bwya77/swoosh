@@ -28,6 +28,23 @@ public sealed partial class MainWindow : Window
         { "#0A84FF", "#5AC8FA", "#34C759", "#AF52DE", "#FF2D55", "#FF9500", "#FFD60A", "#8E8E93" };
     private readonly List<Button> _swatches = new();
 
+    // ---- Per-gesture enable tiles (Swish-style) ----------------------------
+    private sealed record GestureDef(string Key, string Name, string Gesture,
+        double X0, double Y0, double X1, double Y1, bool Grid = false);
+
+    private static readonly GestureDef[] Gestures =
+    {
+        new("maximize", "Maximize",    "Swipe up",          0.00, 0.00, 1.00, 1.00),
+        new("halves",   "Halves",      "Swipe left/right",  0.00, 0.00, 0.50, 1.00),
+        new("quarters", "Quarters",    "Swipe diagonally",  0.00, 0.00, 0.50, 0.50),
+        new("minimize", "Minimize",    "Swipe down",        0.28, 0.74, 0.72, 0.94),
+        new("center",   "Center",      "Five-finger tap",   0.24, 0.28, 0.76, 0.72),
+        new("thirds",   "Thirds grid", "Modifier + swipe",  0.00, 0.00, 0.00, 0.00, Grid: true),
+    };
+
+    private readonly Dictionary<string, bool> _gestureEnabled = new();
+    private readonly List<(string Key, Button Card)> _gestureCards = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -40,6 +57,7 @@ public sealed partial class MainWindow : Window
 
         VersionText.Text = $"v{_updates.CurrentVersion}";
         BuildSwatches();
+        BuildGestureCards();
         LoadFrom(_store.Current);
 
         _store.Changed += OnStoreChanged;
@@ -73,9 +91,15 @@ public sealed partial class MainWindow : Window
     {
         _loading = true;
         GesturesToggle.IsOn = s.GesturesEnabled;
+        _gestureEnabled["maximize"] = s.MaximizeEnabled;
+        _gestureEnabled["halves"] = s.HalvesEnabled;
+        _gestureEnabled["quarters"] = s.QuartersEnabled;
+        _gestureEnabled["minimize"] = s.MinimizeEnabled;
+        _gestureEnabled["center"] = s.CenterEnabled;
+        _gestureEnabled["thirds"] = s.GridModifierEnabled;
+        RefreshGestureCards();
         AnimateToggle.IsOn = s.AnimateSnaps;
         DebugToggle.IsOn = s.DebugOverlay;
-        GridToggle.IsOn = s.GridModifierEnabled;
         ModifierCombo.SelectedIndex = s.GridModifier switch
         {
             GridModifier.Ctrl => 1,
@@ -83,8 +107,7 @@ public sealed partial class MainWindow : Window
             _ => 0,
         };
         ModifierCombo.IsEnabled = s.GridModifierEnabled;
-        SensitivitySlider.Value = s.Sensitivity;
-        MonitorMoveToggle.IsOn = s.MonitorMoveEnabled;
+        SensitivitySlider.Value = s.Sensitivity;        MonitorMoveToggle.IsOn = s.MonitorMoveEnabled;
         MonitorModifierCombo.SelectedIndex = s.MonitorMoveModifier switch
         {
             GridModifier.Ctrl => 1,
@@ -102,9 +125,14 @@ public sealed partial class MainWindow : Window
     private AppSettings Collect() => new()
     {
         GesturesEnabled = GesturesToggle.IsOn,
+        MaximizeEnabled = GestureOn("maximize"),
+        HalvesEnabled = GestureOn("halves"),
+        QuartersEnabled = GestureOn("quarters"),
+        MinimizeEnabled = GestureOn("minimize"),
+        CenterEnabled = GestureOn("center"),
         AnimateSnaps = AnimateToggle.IsOn,
         DebugOverlay = DebugToggle.IsOn,
-        GridModifierEnabled = GridToggle.IsOn,
+        GridModifierEnabled = GestureOn("thirds"),
         GridModifier = ModifierCombo.SelectedIndex switch
         {
             1 => GridModifier.Ctrl,
@@ -132,13 +160,6 @@ public sealed partial class MainWindow : Window
     // ---- Control events ----------------------------------------------------
 
     private void OnSettingToggled(object sender, RoutedEventArgs e) => SaveIfReady();
-
-    private void OnGridToggled(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        ModifierCombo.IsEnabled = GridToggle.IsOn;
-        SaveIfReady();
-    }
 
     private void OnModifierChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
@@ -224,6 +245,159 @@ public sealed partial class MainWindow : Window
         byte g = Convert.ToByte(hex.Substring(2, 2), 16);
         byte b = Convert.ToByte(hex.Substring(4, 2), 16);
         return Color.FromArgb(255, r, g, b);
+    }
+
+    // ---- Gesture tiles -----------------------------------------------------
+
+    private bool GestureOn(string key) => !_gestureEnabled.TryGetValue(key, out var v) || v;
+
+    /// <summary>Build the gesture tiles into a responsive, centered wrapping grid. Each tile
+    /// shows a small window-shape HUD of where the gesture snaps, its name, and the gesture
+    /// itself; clicking toggles it on/off (a disabled tile greys out, Swish-style). The grid
+    /// reflows to fewer columns as the window narrows so no tile is ever clipped off-screen.</summary>
+    private void BuildGestureCards()
+    {
+        GestureHost.Children.Clear();
+        _gestureCards.Clear();
+
+        var cards = new List<Button>();
+        foreach (var g in Gestures)
+        {
+            _gestureEnabled[g.Key] = true;
+
+            var content = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
+            content.Children.Add(BuildHud(g));
+            content.Children.Add(new TextBlock
+            {
+                Text = g.Name,
+                FontSize = 13,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = g.Gesture,
+                FontSize = 11,
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+            });
+
+            var card = new Button
+            {
+                Width = 150,
+                Padding = new Thickness(12),
+                CornerRadius = new CornerRadius(8),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                VerticalContentAlignment = VerticalAlignment.Top,
+                Content = content,
+                Tag = g.Key,
+            };
+            card.Click += OnGestureCardClicked;
+            cards.Add(card);
+            _gestureCards.Add((g.Key, card));
+        }
+
+        var repeater = new ItemsRepeater
+        {
+            ItemsSource = cards,
+            Layout = new UniformGridLayout
+            {
+                MinItemWidth = 150,
+                MinItemHeight = 118,
+                MinColumnSpacing = 10,
+                MinRowSpacing = 10,
+                ItemsJustification = UniformGridLayoutItemsJustification.Center,
+            },
+        };
+        GestureHost.Children.Add(repeater);
+    }
+
+    /// <summary>A window-shape HUD: a rounded "screen" frame with a uniform bezel and the
+    /// snap zone filled in the accent color. The thirds tile draws a 3x3 cell grid instead.
+    /// The fill sits inside the bezel so halves/quarters read exactly and rounded corners
+    /// never let the background peek around a sharp fill.</summary>
+    private static FrameworkElement BuildHud(GestureDef g)
+    {
+        const double innerW = 58, innerH = 36, bezel = 3;
+        var accent = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+
+        Grid inner = new()
+        {
+            Width = innerW,
+            Height = innerH,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        if (g.Grid)
+        {
+            for (int c = 0; c < 3; c++) inner.ColumnDefinitions.Add(new ColumnDefinition());
+            for (int r = 0; r < 3; r++) inner.RowDefinitions.Add(new RowDefinition());
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                {
+                    var cell = new Border
+                    {
+                        Margin = new Thickness(1),
+                        CornerRadius = new CornerRadius(1),
+                        Background = accent,
+                    };
+                    Grid.SetColumn(cell, c);
+                    Grid.SetRow(cell, r);
+                    inner.Children.Add(cell);
+                }
+        }
+        else
+        {
+            inner.Children.Add(new Border
+            {
+                Width = Math.Max(2, (g.X1 - g.X0) * innerW),
+                Height = Math.Max(2, (g.Y1 - g.Y0) * innerH),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(g.X0 * innerW, g.Y0 * innerH, 0, 0),
+                CornerRadius = new CornerRadius(2),
+                Background = accent,
+            });
+        }
+
+        return new Border
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(bezel),
+            BorderThickness = new Thickness(1.5),
+            BorderBrush = (Brush)Application.Current.Resources["ControlStrongStrokeColorDefaultBrush"],
+            Background = (Brush)Application.Current.Resources["ControlFillColorDefaultBrush"],
+            CornerRadius = new CornerRadius(6),
+            Child = inner,
+        };
+    }
+
+    private void OnGestureCardClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string key }) return;
+        _gestureEnabled[key] = !GestureOn(key);
+        ApplyGestureVisual(key);
+        if (key == "thirds") ModifierCombo.IsEnabled = GestureOn("thirds");
+        SaveIfReady();
+    }
+
+    private void RefreshGestureCards()
+    {
+        foreach (var (key, _) in _gestureCards) ApplyGestureVisual(key);
+    }
+
+    private void ApplyGestureVisual(string key)
+    {
+        foreach (var (k, card) in _gestureCards)
+        {
+            if (k != key) continue;
+            bool on = GestureOn(key);
+            if (card.Content is UIElement el) el.Opacity = on ? 1.0 : 0.35;
+            return;
+        }
     }
 
     // ---- Navigation --------------------------------------------------------

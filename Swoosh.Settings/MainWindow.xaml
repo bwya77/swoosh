@@ -62,8 +62,8 @@
                 </muxc:NavigationViewItem>
             </muxc:NavigationView.MenuItems>
 
-            <ScrollViewer Padding="28,12,28,28" VerticalScrollBarVisibility="Auto">
-                <Grid>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid Margin="28,12,28,28">
                     <!-- GENERAL -->
                     <StackPanel x:Name="GeneralPane" Spacing="12">
                         <TextBlock Text="General" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
@@ -122,19 +122,15 @@
                         <TextBlock Text="Snapping" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
                         <Border Style="{StaticResource Card}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Spacing="2">
-                                    <TextBlock Text="Thirds grid modifier" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="Hold a key while swiping to target a 3x3 grid cell."
+                            <StackPanel Spacing="10">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Gestures" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Click a gesture to turn it on or off."
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="GridToggle" Grid.Column="1" Toggled="OnGridToggled" />
-                            </Grid>
+                                <StackPanel x:Name="GestureHost" Spacing="10" />
+                            </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource Card}">

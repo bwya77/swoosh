@@ -14,6 +14,21 @@ public sealed class AppSettings
     /// <summary>Master switch for all touchpad gestures.</summary>
     public bool GesturesEnabled { get; set; } = true;
 
+    /// <summary>Swipe up (or pinch out) to fill the screen.</summary>
+    public bool MaximizeEnabled { get; set; } = true;
+
+    /// <summary>Swipe left or right to snap to that half.</summary>
+    public bool HalvesEnabled { get; set; } = true;
+
+    /// <summary>Swipe diagonally to snap to that quarter.</summary>
+    public bool QuartersEnabled { get; set; } = true;
+
+    /// <summary>Swipe down to minimize the window.</summary>
+    public bool MinimizeEnabled { get; set; } = true;
+
+    /// <summary>Five-finger tap to center the window without resizing it.</summary>
+    public bool CenterEnabled { get; set; } = true;
+
     /// <summary>Show the live touchpad debug overlay on launch.</summary>
     public bool DebugOverlay { get; set; } = false;
 

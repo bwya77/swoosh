@@ -42,6 +42,14 @@ public sealed class SwooshController : IDisposable
 
     public bool GesturesEnabled { get; set; } = true;
 
+    // Per-gesture enable flags (Swish-style: each snap gesture can be turned off
+    // individually from the Snapping settings). Default on.
+    private bool _maximizeEnabled = true;
+    private bool _halvesEnabled = true;
+    private bool _quartersEnabled = true;
+    private bool _minimizeEnabled = true;
+    private bool _centerEnabled = true;
+
     // Thirds: when enabled and the chosen modifier is held during a snap swipe,
     // the target becomes a full-height column / full-width row third instead of
     // the default halves and quarters.
@@ -67,6 +75,11 @@ public sealed class SwooshController : IDisposable
     public void ApplySettings(AppSettings s)
     {
         GesturesEnabled = s.GesturesEnabled;
+        _maximizeEnabled = s.MaximizeEnabled;
+        _halvesEnabled = s.HalvesEnabled;
+        _quartersEnabled = s.QuartersEnabled;
+        _minimizeEnabled = s.MinimizeEnabled;
+        _centerEnabled = s.CenterEnabled;
         _snapper.AnimateSnaps = s.AnimateSnaps;
         _gridModifierEnabled = s.GridModifierEnabled;
         _gridModifierVk = s.GridModifier switch
@@ -90,7 +103,19 @@ public sealed class SwooshController : IDisposable
 
     /// <summary>Resolve a swipe to a zone, honoring the thirds modifier if held.</summary>
     private SnapZone MapZone(SwipeDirection dir) =>
-        ThirdsActive ? ThirdsZone(_lastVecX, _lastVecY) : SnapZoneMap.FromDirection(dir);
+        ThirdsActive ? ThirdsZone(_lastVecX, _lastVecY) : Gate(SnapZoneMap.FromDirection(dir));
+
+    /// <summary>Nullify a base snap zone whose gesture has been disabled in settings, so
+    /// the preview shows nothing and the commit is a no-op. Thirds cells are unaffected.</summary>
+    private SnapZone Gate(SnapZone z) => z switch
+    {
+        SnapZone.Maximize => _maximizeEnabled ? z : SnapZone.None,
+        SnapZone.Minimize => _minimizeEnabled ? z : SnapZone.None,
+        SnapZone.LeftHalf or SnapZone.RightHalf => _halvesEnabled ? z : SnapZone.None,
+        SnapZone.TopLeft or SnapZone.TopRight or SnapZone.BottomLeft or SnapZone.BottomRight
+            => _quartersEnabled ? z : SnapZone.None,
+        _ => z,
+    };
 
     private bool ThirdsActive => _gridModifierEnabled && Win32.IsKeyDown(_gridModifierVk);
 
@@ -386,7 +411,8 @@ public sealed class SwooshController : IDisposable
                 // the same window we armed (it barely moved during the tap).
                 _preview.Hide();
                 _chip.Hide();
-                _snapper.CenterOnMonitor(_target);
+                if (_centerEnabled)
+                    _snapper.CenterOnMonitor(_target);
             }
             Win32.SetForegroundWindow(_target);
         }
@@ -438,6 +464,7 @@ public sealed class SwooshController : IDisposable
         _preview.Hide();
         _chip.Hide();
         if (!_armed) return;
+        if (!_maximizeEnabled) { _armed = false; return; }
 
         // Remember the floating rect so a later pinch-in puts it back exactly. Skip
         // if it's already maximized so we never store the full-screen rect.
