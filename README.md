@@ -1,7 +1,11 @@
 # Swoosh
 
 [![Build & Release](https://github.com/bwya77/swoosh/actions/workflows/release.yml/badge.svg)](https://github.com/bwya77/swoosh/actions/workflows/release.yml)
+[![CodeQL](https://github.com/bwya77/swoosh/actions/workflows/codeql.yml/badge.svg)](https://github.com/bwya77/swoosh/actions/workflows/codeql.yml)
 [![Latest release](https://img.shields.io/github/v/release/bwya77/swoosh?sort=semver)](https://github.com/bwya77/swoosh/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/bwya77/swoosh/total)](https://github.com/bwya77/swoosh/releases)
+[![License: MIT](https://img.shields.io/github/license/bwya77/swoosh)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6)
 
 Swish-style window management for Windows. Hover the cursor over a window's
 **titlebar**, then **two-finger swipe** on the Precision Touchpad and the window
