@@ -183,6 +183,44 @@
                                 </Grid>
                             </StackPanel>
                         </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Move to display" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Hold a key and swipe to send the window to the next physical monitor."
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="MonitorMoveToggle" Grid.Column="1" Toggled="OnMonitorMoveToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Move to display modifier" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Which key engages moving the window across monitors."
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ComboBox x:Name="MonitorModifierCombo" Grid.Column="1" MinWidth="120"
+                                          VerticalAlignment="Center"
+                                          SelectionChanged="OnMonitorModifierChanged">
+                                    <ComboBoxItem Content="Shift" />
+                                    <ComboBoxItem Content="Ctrl" />
+                                    <ComboBoxItem Content="Alt" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
                     </StackPanel>
 
                     <!-- APPEARANCE -->

@@ -26,6 +26,13 @@ public sealed class AppSettings
     /// <summary>Which modifier key engages thirds snapping (Swish defaults to Shift).</summary>
     public GridModifier GridModifier { get; set; } = GridModifier.Shift;
 
+    /// <summary>When true, holding the move-to-display modifier during a two-finger swipe
+    /// sends the window to the adjacent physical monitor instead of snapping.</summary>
+    public bool MonitorMoveEnabled { get; set; } = true;
+
+    /// <summary>Which modifier key engages move-to-display (Swish defaults to Alt).</summary>
+    public GridModifier MonitorMoveModifier { get; set; } = GridModifier.Alt;
+
     /// <summary>How readily a slightly diagonal swipe lands a corner cell, 0 (forgiving)
     /// to 1 (twitchy). Lower values make sideways swipes ignore vertical drift.</summary>
     public double Sensitivity { get; set; } = 0.5;

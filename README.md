@@ -67,6 +67,18 @@ you can keep going to the next screen or step back to the previous one. The
 target zone lights up in your Windows accent color by default, or any color you
 pick in settings.
 
+## Move to another display
+
+Hold the **move-to-display modifier** (Alt by default) and swipe two fingers
+over the titlebar to send the window to the adjacent physical monitor. A
+**monitor-map HUD** appears at the cursor showing your current display in the
+center with up, down, left, and right neighbors around it. Only directions that
+have a real monitor are drawn, and the one you are swiping toward lights up so
+you can see where the window will land. Lift your fingers to commit the move.
+The window keeps its relative position and size on the new display, so a
+left-half window stays a left-half window and a maximized window stays
+maximized. Pick the modifier key in settings (Shift, Ctrl, or Alt).
+
 ## Five-finger free move
 
 Put **five fingers** on the titlebar and the touchpad becomes a 1:1 proxy for the

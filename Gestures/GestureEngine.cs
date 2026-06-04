@@ -60,6 +60,10 @@ public sealed class GestureEngine
     /// snapping and uses a smaller dead-zone so small adjustments still register.</summary>
     public bool ThirdsMode { get; set; }
 
+    /// <summary>True while the move-to-display modifier is held: a two-finger swipe
+    /// sends the window to the adjacent physical monitor instead of snapping.</summary>
+    public bool MonitorMoveMode { get; set; }
+
     /// <summary>Dead-zone used while <see cref="ThirdsMode"/> is active.</summary>
     public double ThirdsDeadZone { get; set; } = 0.03;
 
@@ -76,6 +80,15 @@ public sealed class GestureEngine
 
     /// <summary>Fired on release while held, when a desktop direction was chosen.</summary>
     public event Action<DesktopDirection>? DesktopMove;
+
+    /// <summary>Live move-to-display feedback: the cardinal direction currently aimed at
+    /// (null = none yet) plus progress 0..1. Fired while the modifier is held and two
+    /// fingers swipe.</summary>
+    public event Action<MonitorDirection?, double>? MonitorMoveUpdated;
+
+    /// <summary>Fired on release when the move-to-display modifier was held and a
+    /// direction was chosen: send the window to the adjacent monitor.</summary>
+    public event Action<MonitorDirection>? MonitorMove;
 
     /// <summary>Fired when enough fingers (default 5) land to begin fine-grained free positioning.</summary>
     public event Action? FreeMoveBegan;
@@ -107,6 +120,12 @@ public sealed class GestureEngine
     private bool _holdEligible = true;
     private double _maxDist;
     private double _holdAnchorX;
+
+    // Move-to-display: latched at gesture start from MonitorMoveMode. While active a
+    // two-finger swipe aims a 4-way cardinal direction (shown live in the HUD) and
+    // commits the move to the adjacent monitor on finger lift.
+    private bool _monitorActive;
+    private MonitorDirection? _monitorDir;
 
     // Pinch-out (two fingers spreading) to fullscreen. Tracked from the gesture's
     // initial finger gap; fires once when the gap grows past the thresholds while
@@ -201,7 +220,10 @@ public sealed class GestureEngine
                 _startTime = frame.TimestampMs;
                 _startSpread = Spread(frame);
                 _pinchFired = false;
+                _monitorActive = MonitorMoveMode;
+                _monitorDir = null;
                 GestureBegan?.Invoke(2);
+                if (_monitorActive) MonitorMoveUpdated?.Invoke(null, 0);
                 return;
             }
 
@@ -212,6 +234,25 @@ public sealed class GestureEngine
             double dist = Math.Sqrt(dx * dx + dy * dy);
             _maxDist = Math.Max(_maxDist, dist);
             SwipeRaw?.Invoke(dx, dy);
+
+            // Move-to-display mode owns the whole two-finger gesture: aim a 4-way
+            // cardinal direction and show it live in the monitor-map HUD. The move
+            // commits on finger lift (Finalize), so the user can swing between
+            // neighbors before settling. No snap/hold/pinch logic runs here.
+            if (_monitorActive)
+            {
+                MonitorDirection? dir = null;
+                if (dist >= DeadZone)
+                {
+                    dir = Math.Abs(dx) >= Math.Abs(dy)
+                        ? (dx >= 0 ? MonitorDirection.Right : MonitorDirection.Left)
+                        : (dy >= 0 ? MonitorDirection.Down : MonitorDirection.Up);
+                }
+                _monitorDir = dir;
+                double mprog = Math.Clamp(dist / CommitDistance, 0, 1);
+                MonitorMoveUpdated?.Invoke(dir, mprog);
+                return;
+            }
 
             // Pinch over a titlebar: two fingers spreading apart fullscreens the
             // window; drawing together restores it (Swish-style). Checked before the
@@ -321,6 +362,15 @@ public sealed class GestureEngine
         if (_pinchFired)
         {
             GestureCancelled?.Invoke();
+            return;
+        }
+
+        // Move-to-display: commit the chosen neighbor on lift, or just tear down
+        // the HUD if no direction was aimed.
+        if (_monitorActive)
+        {
+            if (_monitorDir is { } md) MonitorMove?.Invoke(md);
+            else GestureCancelled?.Invoke();
             return;
         }
 

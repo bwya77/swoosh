@@ -41,6 +41,13 @@ public sealed class CursorChipOverlay
 
     private const double BaseHeightPx = 46; // physical chip-window height at 96 DPI
 
+    // Monitor-map (move-to-display) layout: a plus of small display squares.
+    private const double MapCellW = 80;
+    private const double MapCellH = 54;
+    private const double MapGap = 9;
+    private const double MapBaseHeightPx = 122; // taller HUD so the 3-row plus is legible
+    private const double MapDisabledOpacity = 0.26; // a direction with no monitor reads as dimmed
+
     private static readonly Brush WhiteEdge = Freeze(new SolidColorBrush(Color.FromArgb(245, 255, 255, 255)));
     private static readonly Brush ScreenBg = Freeze(new SolidColorBrush(Color.FromArgb(96, 22, 24, 30)));
 
@@ -76,6 +83,27 @@ public sealed class CursorChipOverlay
 
     private string _lastKey = "";
     private (int x, int y, int w, int h) _lastPlace = (-99999, 0, 0, 0);
+
+    // Monitor-map mode: a plus of display squares (center + up/down/left/right).
+    private Grid? _map;
+    private Border? _mapUp, _mapDown, _mapLeft, _mapRight, _mapCenter;
+    private Border? _mapUpFill, _mapDownFill, _mapLeftFill, _mapRightFill, _mapCenterFill;
+    private double _mapDesignW = SingleCanvasW, _mapDesignH = CanvasH;
+
+    // The monitor map is anchored to the cursor position captured when the gesture
+    // begins, so tiny pointer jitter while the fingers rest does not make the (large)
+    // HUD twitch frame to frame. Reset when the HUD hides.
+    private bool _mapAnchored;
+    private int _mapAnchorX, _mapAnchorY;
+
+    // Pending placement, re-applied after a WM_DPICHANGED. When the window crosses a
+    // DPI boundary, WPF raises that message asynchronously and resizes the HWND to keep
+    // its WPF Width/Height; we re-pin our exact pixel placement and only then reveal it,
+    // so it never appears at the wrong (tiny/huge) size mid-transition.
+    private double _pendDesignW = SingleCanvasW, _pendDesignH = CanvasH, _pendBasePx = BaseHeightPx;
+    private int _pendCurX, _pendCurY;
+    private bool _pendHaveCursor;
+    private uint _pendDpi = 96;
 
     /// <summary>Native handle of the HUD window once shown (else Zero). Used to carry
     /// the overlay across a virtual-desktop switch so it stays visible.</summary>
@@ -127,9 +155,14 @@ public sealed class CursorChipOverlay
             long ex = Win32.GetWindowLong(h, Win32.GWL_EXSTYLE);
             ex |= Win32.WS_EX_TRANSPARENT | Win32.WS_EX_TOOLWINDOW | Win32.WS_EX_NOACTIVATE | Win32.WS_EX_LAYERED;
             Win32.SetWindowLongPtr(h, Win32.GWL_EXSTYLE, new IntPtr(ex));
+            HwndSource.FromHwnd(h)?.AddHook(WndProc);
         };
+        // Keep the window permanently realized but fully transparent. We never call
+        // Hide()/Show() again: toggling visibility is what leaks the cross-DPI rescale
+        // as a visible twitch. Instead we only animate Opacity, so any WM_DPICHANGED
+        // relayout happens on an already-shown, invisible window.
+        _win.Opacity = 0;
         _win.Show();
-        _win.Hide();
     }
 
     private Grid BuildSingle()
@@ -183,10 +216,13 @@ public sealed class CursorChipOverlay
 
     /// <summary>Builds one monitor: rounded white-edged screen with a clipped inner
     /// canvas and a (hidden) blue fill rectangle. Returns the pieces for later updates.</summary>
-    private static (Border screen, Canvas inner, Border fill) BuildScreen(double chipW)
+    private static (Border screen, Canvas inner, Border fill) BuildScreen(double chipW) =>
+        BuildScreenWH(chipW, ChipH);
+
+    private static (Border screen, Canvas inner, Border fill) BuildScreenWH(double chipW, double chipH)
     {
         double innerW = chipW - 2 * Stroke;
-        double innerH = ChipH - 2 * Stroke;
+        double innerH = chipH - 2 * Stroke;
         double innerCorner = Math.Max(0, Corner - Stroke);
 
         var fill = new Border
@@ -207,7 +243,7 @@ public sealed class CursorChipOverlay
         var screen = new Border
         {
             Width = chipW,
-            Height = ChipH,
+            Height = chipH,
             CornerRadius = new CornerRadius(Corner),
             BorderThickness = new Thickness(Stroke),
             BorderBrush = WhiteEdge,
@@ -227,10 +263,12 @@ public sealed class CursorChipOverlay
 
     private static Geometry FreezeGeom(Geometry g) { g.Freeze(); return g; }
 
-    private static void ResetFullFill(Border fill, double chipW)
+    private static void ResetFullFill(Border fill, double chipW) => ResetFullFillWH(fill, chipW, ChipH);
+
+    private static void ResetFullFillWH(Border fill, double chipW, double chipH)
     {
         double innerW = chipW - 2 * Stroke;
-        double innerH = ChipH - 2 * Stroke;
+        double innerH = chipH - 2 * Stroke;
         fill.Width = innerW;
         fill.Height = innerH;
         Canvas.SetLeft(fill, 0);
@@ -239,7 +277,111 @@ public sealed class CursorChipOverlay
 
     // -------------------------------------------------------------------------
 
-    /// <summary>Show the single-monitor chip with the given snap zone highlighted.</summary>
+    /// <summary>Builds the move-to-display plus: five display squares (center plus
+    /// up/down/left/right neighbors). Neighbor squares are shown only when a monitor
+    /// actually exists in that direction.</summary>
+    private Grid BuildMap()
+    {
+        double cw = 3 * MapCellW + 2 * MapGap;
+        double ch = 3 * MapCellH + 2 * MapGap;
+        var root = new Grid { Width = cw, Height = ch };
+        var host = new Canvas { Width = cw, Height = ch };
+
+        (Border screen, Border fill) Cell(int col, int row)
+        {
+            var (screen, _, fill) = BuildScreenWH(MapCellW, MapCellH);
+            Canvas.SetLeft(screen, col * (MapCellW + MapGap));
+            Canvas.SetTop(screen, row * (MapCellH + MapGap));
+            host.Children.Add(screen);
+            ResetFullFillWH(fill, MapCellW, MapCellH);
+            return (screen, fill);
+        }
+
+        (_mapUp, _mapUpFill) = Cell(1, 0);
+        (_mapLeft, _mapLeftFill) = Cell(0, 1);
+        (_mapCenter, _mapCenterFill) = Cell(1, 1);
+        (_mapRight, _mapRightFill) = Cell(2, 1);
+        (_mapDown, _mapDownFill) = Cell(1, 2);
+
+        root.Children.Add(host);
+        _mapDesignW = cw;
+        _mapDesignH = ch;
+        return root;
+    }
+
+    private void EnsureMap()
+    {
+        if (_map != null) return;
+        _map = BuildMap();
+        _canvas!.Children.Add(_map);
+    }
+
+    private void SetMapMode()
+    {
+        if (_single == null || _map == null || _canvas == null) return;
+        _single.Visibility = Visibility.Collapsed;
+        if (_strip != null) _strip.Visibility = Visibility.Collapsed;
+        _map.Visibility = Visibility.Visible;
+        _canvas.Width = _mapDesignW;
+        _canvas.Height = _mapDesignH;
+    }
+
+    /// <summary>Show the monitor-map plus. Only directions with an actual neighbor
+    /// monitor are drawn; the current display is faintly tinted and the swiped-at
+    /// target (when a monitor exists there) fills solid.</summary>
+    public void ShowMonitorMap(bool up, bool down, bool left, bool right, MonitorDirection? target)
+    {
+        EnsureWindow();
+        if (_win == null) return;
+        CancelHideTimer();
+        EnsureMap();
+        SetMapMode();
+
+        // All five squares stay visible; a direction with no monitor is dimmed so the
+        // layout reads as "you can't go there" rather than vanishing.
+        _mapUp!.Opacity = up ? 1.0 : MapDisabledOpacity;
+        _mapDown!.Opacity = down ? 1.0 : MapDisabledOpacity;
+        _mapLeft!.Opacity = left ? 1.0 : MapDisabledOpacity;
+        _mapRight!.Opacity = right ? 1.0 : MapDisabledOpacity;
+
+        string key = $"map|{up}{down}{left}{right}|{target}";
+        if (key != _lastKey)
+        {
+            // Current monitor: always faintly tinted so the layout reads as "you are here".
+            _mapCenterFill!.Background = _faint;
+            _mapCenterFill.Visibility = Visibility.Visible;
+
+            SetMapTarget(_mapUpFill!, up, target == MonitorDirection.Up);
+            SetMapTarget(_mapDownFill!, down, target == MonitorDirection.Down);
+            SetMapTarget(_mapLeftFill!, left, target == MonitorDirection.Left);
+            SetMapTarget(_mapRightFill!, right, target == MonitorDirection.Right);
+            _lastKey = key;
+        }
+
+        // Anchor to the cursor once per gesture so the HUD holds still while resting.
+        if (!_mapAnchored && Win32.GetCursorPos(out var pt))
+        {
+            _mapAnchorX = pt.X;
+            _mapAnchorY = pt.Y;
+            _mapAnchored = true;
+        }
+        Place(_mapDesignW, _mapDesignH, MapBaseHeightPx, _mapAnchored ? (_mapAnchorX, _mapAnchorY) : null);
+    }
+
+    private void SetMapTarget(Border fill, bool exists, bool isTarget)
+    {
+        if (exists && isTarget)
+        {
+            fill.Background = _solid;
+            fill.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            fill.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     public void ShowSnap(SnapZone zone, double progress)
     {
         EnsureWindow();
@@ -386,6 +528,7 @@ public sealed class CursorChipOverlay
         if (_single == null || _canvas == null) return;
         _single.Visibility = Visibility.Visible;
         if (_strip != null) _strip.Visibility = Visibility.Collapsed;
+        if (_map != null) _map.Visibility = Visibility.Collapsed;
         _canvas.Width = SingleCanvasW;
         _canvas.Height = CanvasH;
     }
@@ -395,6 +538,7 @@ public sealed class CursorChipOverlay
         if (_single == null || _strip == null || _canvas == null) return;
         _single.Visibility = Visibility.Collapsed;
         _strip.Visibility = Visibility.Visible;
+        if (_map != null) _map.Visibility = Visibility.Collapsed;
         _canvas.Width = _stripDesignW;
         _canvas.Height = CanvasH;
     }
@@ -430,30 +574,85 @@ public sealed class CursorChipOverlay
         _ => null,
     };
 
-    private void Place(double designW, double designH)
+    private void Place(double designW, double designH, double basePx = BaseHeightPx, (int x, int y)? fixedCursor = null)
+    {
+        if (_win == null) return;
+
+        _pendDesignW = designW;
+        _pendDesignH = designH;
+        _pendBasePx = basePx;
+        if (fixedCursor is { } fc) { _pendCurX = fc.x; _pendCurY = fc.y; _pendHaveCursor = true; }
+        else if (Win32.GetCursorPos(out var pt)) { _pendCurX = pt.X; _pendCurY = pt.Y; _pendHaveCursor = true; }
+        else _pendHaveCursor = false;
+
+        ApplyPlacement();
+
+        // Reveal only once the window's WPF scale matches the target monitor. If the move
+        // crossed a DPI boundary, WPF raises WM_DPICHANGED asynchronously and the hook
+        // re-pins and reveals then. If no boundary was crossed, this reveals immediately.
+        if (_win.Opacity == 0)
+            _win.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(TryReveal));
+    }
+
+    /// <summary>Size and position the window in physical pixels for the pending cursor and
+    /// that monitor's DPI, and pin a matching WPF Width/Height (in DIPs) so WPF's own
+    /// per-monitor auto-resize converges on the same size instead of snapping the window
+    /// back to its stale design size after a cross-DPI move.</summary>
+    private void ApplyPlacement()
     {
         if (_win == null) return;
 
         uint dpi = Win32.GetDpiForCursor();
+        _pendDpi = dpi;
         double s = dpi / 96.0;
-        int physH = (int)Math.Round(BaseHeightPx * s);
-        int physW = (int)Math.Round(physH * designW / designH);
+        int physH = (int)Math.Round(_pendBasePx * s);
+        int physW = (int)Math.Round(physH * _pendDesignW / _pendDesignH);
+
+        // DIP size is DPI-independent: this is the size WPF must preserve across monitors.
+        _win.Width = physW / s;
+        _win.Height = physH / s;
 
         int x = -10000, y = -10000;
-        if (Win32.GetCursorPos(out var pt))
+        if (_pendHaveCursor)
         {
-            x = pt.X - physW / 2;
-            y = pt.Y + (int)Math.Round(14 * s);
+            x = _pendCurX - physW / 2;
+            y = _pendCurY + (int)Math.Round(14 * s);
         }
 
-        if (!_win.IsVisible) _win.Show();
-
         var place = (x, y, physW, physH);
-        if (place == _lastPlace) return;
-        _lastPlace = place;
+        if (place != _lastPlace)
+        {
+            _lastPlace = place;
+            IntPtr h = new WindowInteropHelper(_win).Handle;
+            Win32.SetWindowPos(h, Win32.HWND_TOPMOST, x, y, physW, physH, Win32.SWP_NOACTIVATE);
+        }
+    }
 
-        IntPtr h = new WindowInteropHelper(_win).Handle;
-        Win32.SetWindowPos(h, Win32.HWND_TOPMOST, x, y, physW, physH, Win32.SWP_NOACTIVATE);
+    /// <summary>Reveal the HUD only when WPF's reported scale matches the cursor monitor's
+    /// DPI, so the window is never shown mid-DPI-transition at the wrong size.</summary>
+    private void TryReveal()
+    {
+        if (_win == null || _win.Opacity != 0) return;
+        uint winDpi = (uint)Math.Round(VisualTreeHelper.GetDpi(_win).PixelsPerDip * 96);
+        if (winDpi == _pendDpi) _win.Opacity = 1;
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_DPICHANGED = 0x02E0;
+        if (msg == WM_DPICHANGED && _win != null)
+        {
+            // WPF updates its composition scale in its own handler for this message. After
+            // that settles, re-pin our exact pixel placement (WPF may have nudged the rect)
+            // and reveal. Render priority runs after WPF's relayout for this DPI change.
+            _win.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                _lastPlace = (-99999, 0, 0, 0); // force re-apply over WPF's auto-resize
+                ApplyPlacement();
+                TryReveal();
+            }));
+        }
+        return IntPtr.Zero;
     }
 
     public void Hide()
@@ -461,11 +660,15 @@ public sealed class CursorChipOverlay
         CancelHideTimer();
         _lastKey = "";
         _lastPlace = (-99999, 0, 0, 0);
+        _mapAnchored = false;
         // Reset the snap fill so the next gesture's first zone appears instantly
         // instead of gliding from wherever the previous gesture left it.
         ClearFillAnimations();
         if (_singleFill != null) _singleFill.Visibility = Visibility.Collapsed;
-        if (_win is { IsVisible: true }) _win.Hide();
+        // Hide by going fully transparent instead of _win.Hide(). Keeping the HWND shown
+        // means the next gesture's cross-DPI move rescales an invisible window rather than
+        // flashing during a Show().
+        if (_win != null) _win.Opacity = 0;
     }
 
     private void CancelHideTimer()

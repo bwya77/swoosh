@@ -48,6 +48,16 @@ public sealed class SwooshController : IDisposable
     private bool _gridModifierEnabled = true;
     private int _gridModifierVk = Win32.VK_SHIFT;
 
+    // Move-to-display: when enabled and the chosen modifier is held during a
+    // two-finger swipe, the window is sent to the adjacent physical monitor
+    // (with a live monitor-map HUD) instead of snapping. Default modifier is Alt.
+    private bool _monitorModifierEnabled = true;
+    private int _monitorModifierVk = Win32.VK_MENU;
+
+    // Monitor topology cached for the duration of a move-to-display gesture.
+    private List<MonitorLayout.Mon>? _monAll;
+    private MonitorLayout.Mon? _monCur;
+
     // Minimum cross-axis / main-axis ratio for a swipe to count as a diagonal (corner
     // cell) rather than a straight column/row. Driven by the sensitivity slider: higher
     // sensitivity -> lower ratio -> diagonals trigger more readily.
@@ -66,6 +76,13 @@ public sealed class SwooshController : IDisposable
             _ => Win32.VK_SHIFT,
         };
         _thirdsDiagRatio = 0.9 - 0.5 * Math.Clamp(s.Sensitivity, 0, 1);
+        _monitorModifierEnabled = s.MonitorMoveEnabled;
+        _monitorModifierVk = s.MonitorMoveModifier switch
+        {
+            GridModifier.Ctrl => Win32.VK_CONTROL,
+            GridModifier.Shift => Win32.VK_SHIFT,
+            _ => Win32.VK_MENU,
+        };
         _chip.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
         _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
         _debug.SetVisible(s.DebugOverlay);
@@ -76,6 +93,9 @@ public sealed class SwooshController : IDisposable
         ThirdsActive ? ThirdsZone(_lastVecX, _lastVecY) : SnapZoneMap.FromDirection(dir);
 
     private bool ThirdsActive => _gridModifierEnabled && Win32.IsKeyDown(_gridModifierVk);
+
+    /// <summary>True while the move-to-display modifier is held.</summary>
+    private bool MonitorMoveActive => _monitorModifierEnabled && Win32.IsKeyDown(_monitorModifierVk);
 
     // Latest raw swipe vector (signed, pad-normalized; Y grows downward), tracked so
     // thirds targets can be chosen by magnitude at both preview and commit time.
@@ -140,6 +160,8 @@ public sealed class SwooshController : IDisposable
         _gestures.HoldEngaged += OnHoldEngaged;
         _gestures.HoldUpdated += OnHoldUpdated;
         _gestures.DesktopMove += OnDesktopMove;
+        _gestures.MonitorMoveUpdated += OnMonitorMoveUpdated;
+        _gestures.MonitorMove += OnMonitorMove;
         _gestures.FreeMoveBegan += OnFreeMoveBegan;
         _gestures.FreeMoveDelta += OnFreeMoveDelta;
         _gestures.FreeMoveEnded += OnFreeMoveEnded;
@@ -155,8 +177,11 @@ public sealed class SwooshController : IDisposable
         if (GesturesEnabled)
         {
             // Reflect the live modifier state so the engine uses the smaller thirds
-            // dead-zone the moment the key goes down (even mid-gesture).
-            _gestures.ThirdsMode = ThirdsActive;
+            // dead-zone the moment the key goes down (even mid-gesture). Move-to-display
+            // takes precedence over thirds when both modifiers are held.
+            bool mm = MonitorMoveActive;
+            _gestures.MonitorMoveMode = mm;
+            _gestures.ThirdsMode = !mm && ThirdsActive;
             _gestures.Process(frame);
         }
     }
@@ -171,10 +196,68 @@ public sealed class SwooshController : IDisposable
     {
         // Arm only when the cursor is over a manageable window's titlebar.
         _lastVecX = _lastVecY = 0;
+        _monAll = null;
+        _monCur = null;
         _target = _snapper.ArmTarget(out string diag);
         _armed = _target != IntPtr.Zero;
-        if (_armed) _chip.ShowSnap(SnapZone.None, 0);
+        if (_armed)
+        {
+            if (MonitorMoveActive)
+            {
+                // Move-to-display: show the physical monitor map instead of the snap chip.
+                CacheMonitors();
+                ShowMonitorMapForTarget(null);
+            }
+            else
+            {
+                _chip.ShowSnap(SnapZone.None, 0);
+            }
+        }
         Log.Write($"GestureBegan fingers={fingers} armed={_armed} {diag}");
+    }
+
+    private void CacheMonitors()
+    {
+        _monAll = MonitorLayout.All();
+        _monCur = MonitorLayout.ForWindow(_target, _monAll);
+    }
+
+    private void ShowMonitorMapForTarget(MonitorDirection? target)
+    {
+        if (_monCur is not { } cur || _monAll is null) return;
+        var (u, d, l, r) = MonitorLayout.Neighbors(cur, _monAll);
+        _chip.ShowMonitorMap(u, d, l, r, target);
+    }
+
+    private void OnMonitorMoveUpdated(MonitorDirection? dir, double progress)
+    {
+        if (!_armed) return;
+        if (_monAll is null) CacheMonitors();
+        _preview.Hide();
+        ShowMonitorMapForTarget(dir);
+    }
+
+    private void OnMonitorMove(MonitorDirection dir)
+    {
+        _preview.Hide();
+        _chip.Hide();
+        if (_armed && _monCur is { } cur && _monAll is not null)
+        {
+            var dst = MonitorLayout.Adjacent(cur, dir, _monAll);
+            if (dst is { } d)
+            {
+                _snapper.MoveToMonitor(_target, cur.Work, d.Work);
+                Win32.SetForegroundWindow(_target);
+                Log.Write($"MonitorMove dir={dir} moved");
+            }
+            else
+            {
+                Log.Write($"MonitorMove dir={dir} no-neighbor");
+            }
+        }
+        _armed = false;
+        _monAll = null;
+        _monCur = null;
     }
 
     private void OnGestureUpdated(SwipeDirection dir, double progress)

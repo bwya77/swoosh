@@ -273,7 +273,78 @@ public sealed class WindowSnapper
         }
     }
 
-    /// <summary>True when the window is currently maximized.</summary>
+    /// <summary>
+    /// Move a window from one monitor's work area to another's, preserving its
+    /// relative position and size (the fraction of the work area it occupied), so
+    /// a left-half window stays a left-half window on the new display and a
+    /// maximized window stays maximized. The visible DWM frame is what gets mapped,
+    /// so the result lines up pixel-accurately on the destination.
+    /// </summary>
+    public void MoveToMonitor(IntPtr hwnd, Win32.RECT srcWork, Win32.RECT dstWork)
+    {
+        if (!IsManageable(hwnd)) return;
+        if (srcWork.Width <= 0 || srcWork.Height <= 0 || dstWork.Width <= 0 || dstWork.Height <= 0) return;
+
+        bool wasMax = IsMaximized(hwnd);
+
+        bool haveStart = Win32.GetWindowRect(hwnd, out var startRect);
+
+        // Restore a maximized/minimized window so it has a real floating rect to map.
+        long style = Win32.GetWindowLong(hwnd, Win32.GWL_STYLE);
+        if ((style & (Win32.WS_MAXIMIZE | Win32.WS_MINIMIZE)) != 0)
+        {
+            CancelAnimation();
+            Win32.ShowWindow(hwnd, Win32.SW_RESTORE);
+        }
+
+        if (!Win32.GetWindowRect(hwnd, out var wr)) return;
+
+        // Work in visible-frame space (DWM extended bounds) for pixel-accurate mapping.
+        int ml = 0, mt = 0, mr = 0, mb = 0;
+        if (Win32.DwmGetWindowAttribute(hwnd, Win32.DWMWA_EXTENDED_FRAME_BOUNDS,
+                out var fb, System.Runtime.InteropServices.Marshal.SizeOf<Win32.RECT>()) == 0)
+        {
+            ml = fb.Left - wr.Left;
+            mt = fb.Top - wr.Top;
+            mr = wr.Right - fb.Right;
+            mb = wr.Bottom - fb.Bottom;
+        }
+
+        double visL = wr.Left + ml, visT = wr.Top + mt;
+        double visW = wr.Width - ml - mr, visH = wr.Height - mt - mb;
+
+        // Fraction of the source work area the visible frame occupies.
+        double fx = (visL - srcWork.Left) / srcWork.Width;
+        double fy = (visT - srcWork.Top) / srcWork.Height;
+        double fw = visW / srcWork.Width;
+        double fh = visH / srcWork.Height;
+
+        // Map the same fraction onto the destination work area.
+        double nvisL = dstWork.Left + fx * dstWork.Width;
+        double nvisT = dstWork.Top + fy * dstWork.Height;
+        double nvisW = fw * dstWork.Width;
+        double nvisH = fh * dstWork.Height;
+
+        int px = (int)Math.Round(nvisL - ml);
+        int py = (int)Math.Round(nvisT - mt);
+        int pw = (int)Math.Round(nvisW + ml + mr);
+        int ph = (int)Math.Round(nvisH + mt + mb);
+
+        if (wasMax)
+        {
+            // Park it on the destination monitor, then re-maximize there so it stays
+            // full-screen on the new display (no glide; native maximize animates).
+            CancelAnimation();
+            Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
+            Win32.ShowWindow(hwnd, Win32.SW_MAXIMIZE);
+            return;
+        }
+
+        if (AnimateSnaps && haveStart)
+            AnimateTo(hwnd, startRect, px, py, pw, ph);
+        else
+            Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
+    }
     public static bool IsMaximized(IntPtr hwnd) =>
         hwnd != IntPtr.Zero &&
         (Win32.GetWindowLong(hwnd, Win32.GWL_STYLE) & Win32.WS_MAXIMIZE) != 0;

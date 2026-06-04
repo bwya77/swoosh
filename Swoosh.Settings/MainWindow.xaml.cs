@@ -84,6 +84,14 @@ public sealed partial class MainWindow : Window
         };
         ModifierCombo.IsEnabled = s.GridModifierEnabled;
         SensitivitySlider.Value = s.Sensitivity;
+        MonitorMoveToggle.IsOn = s.MonitorMoveEnabled;
+        MonitorModifierCombo.SelectedIndex = s.MonitorMoveModifier switch
+        {
+            GridModifier.Ctrl => 1,
+            GridModifier.Alt => 2,
+            _ => 0,
+        };
+        MonitorModifierCombo.IsEnabled = s.MonitorMoveEnabled;
         OverlayAccentToggle.IsOn = s.OverlayUseAccent;
         _overlayColor = s.OverlayColor;
         HighlightSwatch(_overlayColor);
@@ -104,6 +112,13 @@ public sealed partial class MainWindow : Window
             _ => GridModifier.Shift,
         },
         Sensitivity = SensitivitySlider.Value,
+        MonitorMoveEnabled = MonitorMoveToggle.IsOn,
+        MonitorMoveModifier = MonitorModifierCombo.SelectedIndex switch
+        {
+            1 => GridModifier.Ctrl,
+            2 => GridModifier.Alt,
+            _ => GridModifier.Shift,
+        },
         OverlayUseAccent = OverlayAccentToggle.IsOn,
         OverlayColor = _overlayColor,
     };
@@ -126,6 +141,15 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnModifierChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
+
+    private void OnMonitorMoveToggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        MonitorModifierCombo.IsEnabled = MonitorMoveToggle.IsOn;
+        SaveIfReady();
+    }
+
+    private void OnMonitorModifierChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnSensitivityChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 
