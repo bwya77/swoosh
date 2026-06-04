@@ -161,6 +161,24 @@ public sealed class WindowSnapper
         var work = WorkAreaFor(hwnd);
         var target = ZoneRect(work, zone);
 
+        // Inset the target by the configured grid spacing so tiled windows have a
+        // consistent gutter between each other and the work-area edges.
+        if (GridSpacing > 0)
+        {
+            uint sdpi = Win32.GetDpiForWindow(hwnd);
+            if (sdpi == 0) sdpi = 96;
+            int sp = (int)Math.Round(GridSpacing * sdpi / 96.0);
+            // Don't collapse tiny zones into nothing.
+            if (target.Width > 4 * sp && target.Height > 4 * sp)
+                target = new Win32.RECT
+                {
+                    Left = target.Left + sp,
+                    Top = target.Top + sp,
+                    Right = target.Right - sp,
+                    Bottom = target.Bottom - sp,
+                };
+        }
+
         // Compensate for the invisible DWM resize border so the *visible* frame
         // aligns pixel-perfectly with the work-area subdivision (Swish-style).
         int ml = 0, mt = 0, mr = 0, mb = 0;
@@ -351,6 +369,9 @@ public sealed class WindowSnapper
 
     /// <summary>When true, window snaps glide to the target instead of jumping.</summary>
     public bool AnimateSnaps { get; set; } = true;
+
+    /// <summary>Gap in logical pixels left around each snapped window (0 = flush).</summary>
+    public int GridSpacing { get; set; } = 0;
 
     /// <summary>Glide duration in milliseconds.</summary>
     public double AnimationMs { get; set; } = 170;

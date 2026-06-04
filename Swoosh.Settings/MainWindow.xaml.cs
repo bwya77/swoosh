@@ -226,6 +226,11 @@ public sealed partial class MainWindow : Window
         _overlayColor = s.OverlayColor;
         HighlightSwatch(_overlayColor);
         SetSwatchesEnabled(!s.OverlayUseAccent);
+        GridSpacingSlider.Value = Math.Clamp(s.GridSpacing, 0, 10);
+        UpdateGridSpacingLabel(GridSpacingSlider.Value);
+        CancelTimeoutSlider.Value = Math.Clamp(s.CancelTimeoutSeconds, 0, 3);
+        UpdateCancelTimeoutLabel(CancelTimeoutSlider.Value);
+        LivePreviewToggle.IsOn = s.LivePreview;
         _loading = false;
     }
 
@@ -257,6 +262,9 @@ public sealed partial class MainWindow : Window
         },
         OverlayUseAccent = OverlayAccentToggle.IsOn,
         OverlayColor = _overlayColor,
+        GridSpacing = (int)Math.Round(GridSpacingSlider.Value),
+        CancelTimeoutSeconds = CancelTimeoutSlider.Value,
+        LivePreview = LivePreviewToggle.IsOn,
     };
 
     private void SaveIfReady()
@@ -281,6 +289,29 @@ public sealed partial class MainWindow : Window
     private void OnMonitorModifierChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnSensitivityChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
+
+    private void OnGridSpacingChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        UpdateGridSpacingLabel(e.NewValue);
+        SaveIfReady();
+    }
+
+    private void OnCancelTimeoutChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        UpdateCancelTimeoutLabel(e.NewValue);
+        SaveIfReady();
+    }
+
+    private void UpdateGridSpacingLabel(double v)
+    {
+        if (GridSpacingValue != null) GridSpacingValue.Text = $"{(int)Math.Round(v)} px";
+    }
+
+    private void UpdateCancelTimeoutLabel(double v)
+    {
+        if (CancelTimeoutValue != null)
+            CancelTimeoutValue.Text = v <= 0 ? "Off" : $"{v:0.0} s";
+    }
 
     private void OnAccentToggled(object sender, RoutedEventArgs e)
     {

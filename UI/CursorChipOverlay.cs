@@ -67,8 +67,8 @@ public sealed class CursorChipOverlay
     private static readonly IEasingFunction FillEase = new CubicEase { EasingMode = EasingMode.EaseOut };
 
     // Desktop-strip "unfold" reveal: the extra squares slide out from behind the current one.
-    private static readonly Duration RevealDuration = new(TimeSpan.FromMilliseconds(200));
-    private static readonly Duration RevealFadeDuration = new(TimeSpan.FromMilliseconds(150));
+    private static readonly Duration RevealDuration = new(TimeSpan.FromMilliseconds(260));
+    private static readonly Duration RevealFadeDuration = new(TimeSpan.FromMilliseconds(190));
     private static readonly IEasingFunction RevealEase = new CubicEase { EasingMode = EasingMode.EaseOut };
 
     private static Brush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
@@ -76,6 +76,10 @@ public sealed class CursorChipOverlay
     private Window? _win;
     private Canvas? _canvas;
     private DispatcherTimer? _hideTimer;
+    // Reveal state, decoupled from the live Opacity value so a fade-out in progress can be
+    // interrupted by a new reveal. _fadeToken invalidates a pending fade's completion.
+    private bool _shown;
+    private int _fadeToken;
 
     // Persistent elements: single-monitor chip (snap mode).
     private Grid? _single;
@@ -114,6 +118,10 @@ public sealed class CursorChipOverlay
     private int _pendCurX, _pendCurY;
     private bool _pendHaveCursor;
     private uint _pendDpi = 96;
+    // Horizontal anchor: fraction of the design width that should sit under the
+    // cursor (0.5 = centre). The desktop strip sets this to the current desktop's
+    // slot so the active desktop stays under the cursor and the others fan out.
+    private double _pendAnchorFrac = 0.5;
 
     /// <summary>Native handle of the HUD window once shown (else Zero). Used to carry
     /// the overlay across a virtual-desktop switch so it stays visible.</summary>
@@ -535,23 +543,30 @@ public sealed class CursorChipOverlay
             }
             _lastKey = key;
         }
-        Place(_stripDesignW, CanvasH);
+        // Anchor the strip so the current desktop sits under the cursor (where the
+        // dwell chip was), so the others appear to come out of the current monitor.
+        double anchorFrac = 0.5;
+        if (currentIndex >= 0 && currentIndex < _stripLefts.Count && _stripDesignW > 0)
+            anchorFrac = (_stripLefts[currentIndex] + DeskW / 2.0) / _stripDesignW;
+        Place(_stripDesignW, CanvasH, anchorFrac: anchorFrac);
 
         if (animateReveal) AnimateStripReveal(currentIndex);
     }
 
-    /// <summary>Reveal the desktop strip by first showing only the current desktop square
-    /// (centered, where the dwell chip was), then sliding every square out to its slot and
-    /// fading the others in. Mirrors macOS-style "one then the rest unfold". When animation
-    /// is disabled the squares simply appear in place.</summary>
+    /// <summary>Reveal the desktop strip so the other desktops appear to slide out of the
+    /// current one: the current desktop stays solid and fixed in place (it's anchored under
+    /// the cursor), and every other square starts stacked behind it, then slides out to its
+    /// slot and fades in, cascading outward by distance. When animation is disabled the
+    /// squares simply appear in place.</summary>
     private void AnimateStripReveal(int currentIndex)
     {
         int n = _stripScreens.Count;
         if (n == 0) return;
+        if (currentIndex < 0 || currentIndex >= n) currentIndex = 0;
 
-        // Origin = strip centre, which is exactly where the single dwell chip sat, so the
-        // squares appear to bloom out of that one chip with no positional jump.
-        double originLeft = (_stripDesignW - DeskW) / 2.0;
+        // Origin = the current desktop's own slot, so the others bloom out of the current
+        // monitor (which sits under the cursor) rather than from the strip centre.
+        double originLeft = _stripLefts[currentIndex];
 
         for (int i = 0; i < n; i++)
         {
@@ -563,21 +578,21 @@ public sealed class CursorChipOverlay
             screen.BeginAnimation(Canvas.LeftProperty, null);
             screen.BeginAnimation(UIElement.OpacityProperty, null);
 
-            if (!_animate || n == 1)
+            if (!_animate || n == 1 || isCurrent)
             {
+                // The current desktop is the anchor: solid, in its slot, no movement.
                 Canvas.SetLeft(screen, finalLeft);
                 screen.Opacity = 1;
                 continue;
             }
 
             Canvas.SetLeft(screen, originLeft);
-            // The current desktop stays solid the whole time so you visibly "start" from it;
-            // the rest fade in as they slide out.
-            screen.Opacity = isCurrent ? 1 : 0;
+            screen.Opacity = 0;
 
-            // Squares further from the current one start a touch later for a cascading feel.
+            // Squares further from the current one start a touch later and travel a touch
+            // longer, so the strip unfolds outward from the current desktop.
             int distance = Math.Abs(i - currentIndex);
-            var begin = TimeSpan.FromMilliseconds(22 * distance);
+            var begin = TimeSpan.FromMilliseconds(34 * (distance - 1));
 
             var slide = new DoubleAnimation(originLeft, finalLeft, RevealDuration)
             {
@@ -586,15 +601,12 @@ public sealed class CursorChipOverlay
             };
             screen.BeginAnimation(Canvas.LeftProperty, slide);
 
-            if (!isCurrent)
+            var fade = new DoubleAnimation(0, 1, RevealFadeDuration)
             {
-                var fade = new DoubleAnimation(0, 1, RevealFadeDuration)
-                {
-                    BeginTime = begin,
-                    EasingFunction = RevealEase,
-                };
-                screen.BeginAnimation(UIElement.OpacityProperty, fade);
-            }
+                BeginTime = begin,
+                EasingFunction = RevealEase,
+            };
+            screen.BeginAnimation(UIElement.OpacityProperty, fade);
         }
     }
 
@@ -649,13 +661,14 @@ public sealed class CursorChipOverlay
         _ => null,
     };
 
-    private void Place(double designW, double designH, double basePx = BaseHeightPx, (int x, int y)? fixedCursor = null)
+    private void Place(double designW, double designH, double basePx = BaseHeightPx, (int x, int y)? fixedCursor = null, double anchorFrac = 0.5)
     {
         if (_win == null) return;
 
         _pendDesignW = designW;
         _pendDesignH = designH;
         _pendBasePx = basePx;
+        _pendAnchorFrac = anchorFrac;
         if (fixedCursor is { } fc) { _pendCurX = fc.x; _pendCurY = fc.y; _pendHaveCursor = true; }
         else if (Win32.GetCursorPos(out var pt)) { _pendCurX = pt.X; _pendCurY = pt.Y; _pendHaveCursor = true; }
         else _pendHaveCursor = false;
@@ -665,7 +678,7 @@ public sealed class CursorChipOverlay
         // Reveal only once the window's WPF scale matches the target monitor. If the move
         // crossed a DPI boundary, WPF raises WM_DPICHANGED asynchronously and the hook
         // re-pins and reveals then. If no boundary was crossed, this reveals immediately.
-        if (_win.Opacity == 0)
+        if (!_shown)
             _win.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(TryReveal));
     }
 
@@ -690,7 +703,7 @@ public sealed class CursorChipOverlay
         int x = -10000, y = -10000;
         if (_pendHaveCursor)
         {
-            x = _pendCurX - physW / 2;
+            x = _pendCurX - (int)Math.Round(_pendAnchorFrac * physW);
             y = _pendCurY + (int)Math.Round(14 * s);
         }
 
@@ -707,9 +720,16 @@ public sealed class CursorChipOverlay
     /// DPI, so the window is never shown mid-DPI-transition at the wrong size.</summary>
     private void TryReveal()
     {
-        if (_win == null || _win.Opacity != 0) return;
+        if (_win == null || _shown) return;
         uint winDpi = (uint)Math.Round(VisualTreeHelper.GetDpi(_win).PixelsPerDip * 96);
-        if (winDpi == _pendDpi) _win.Opacity = 1;
+        if (winDpi == _pendDpi)
+        {
+            // Interrupt any in-flight fade-out and snap to fully visible.
+            _fadeToken++;
+            _win.BeginAnimation(UIElement.OpacityProperty, null);
+            _win.Opacity = 1;
+            _shown = true;
+        }
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -736,14 +756,36 @@ public sealed class CursorChipOverlay
         _lastKey = "";
         _lastPlace = (-99999, 0, 0, 0);
         _mapAnchored = false;
-        // Reset the snap fill so the next gesture's first zone appears instantly
-        // instead of gliding from wherever the previous gesture left it.
-        ClearFillAnimations();
-        if (_singleFill != null) _singleFill.Visibility = Visibility.Collapsed;
-        // Hide by going fully transparent instead of _win.Hide(). Keeping the HWND shown
-        // means the next gesture's cross-DPI move rescales an invisible window rather than
-        // flashing during a Show().
-        if (_win != null) _win.Opacity = 0;
+        _shown = false;
+        if (_win == null) return;
+
+        int token = ++_fadeToken;
+
+        // With animations off, drop instantly. Otherwise fade the whole HUD out, then
+        // reset the snap fill so the next gesture's first zone appears fresh.
+        if (!_animate)
+        {
+            _win.BeginAnimation(UIElement.OpacityProperty, null);
+            _win.Opacity = 0;
+            ClearFillAnimations();
+            if (_singleFill != null) _singleFill.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var fade = new DoubleAnimation(0, new Duration(TimeSpan.FromMilliseconds(360)))
+        {
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        };
+        fade.Completed += (_, _) =>
+        {
+            // Skip if a newer reveal or hide superseded this fade.
+            if (token != _fadeToken || _win == null) return;
+            _win.BeginAnimation(UIElement.OpacityProperty, null);
+            _win.Opacity = 0;
+            ClearFillAnimations();
+            if (_singleFill != null) _singleFill.Visibility = Visibility.Collapsed;
+        };
+        _win.BeginAnimation(UIElement.OpacityProperty, fade);
     }
 
     private void CancelHideTimer()

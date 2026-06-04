@@ -51,6 +51,15 @@ public sealed class SwooshController : IDisposable
 
     public bool GesturesEnabled { get; set; } = true;
 
+    // Live preview: when on, the real window moves to the target zone as you swipe
+    // (instead of the translucent overlay). The original rect is captured at gesture
+    // start so Esc can restore it.
+    private bool _livePreview;
+    private Win32.RECT _liveOrigRect;
+    private bool _liveWasMax;
+    private bool _liveMoved;
+    private SnapZone _liveZone = SnapZone.None;
+
     // Per-gesture enable flags (Swish-style: each snap gesture can be turned off
     // individually from the Snapping settings). Default on.
     private bool _maximizeEnabled = true;
@@ -90,6 +99,10 @@ public sealed class SwooshController : IDisposable
         _minimizeEnabled = s.MinimizeEnabled;
         _centerEnabled = s.CenterEnabled;
         _snapper.AnimateSnaps = s.AnimateSnaps;
+        _snapper.GridSpacing = Math.Clamp(s.GridSpacing, 0, 10);
+        _gestures.IdleCancelMs = s.CancelTimeoutSeconds > 0
+            ? (long)Math.Round(Math.Clamp(s.CancelTimeoutSeconds, 0, 10) * 1000)
+            : 0;
         _gridModifierEnabled = s.GridModifierEnabled;
         _gridModifierVk = s.GridModifier switch
         {
@@ -108,6 +121,7 @@ public sealed class SwooshController : IDisposable
         _chip.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
         _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
         _debug.SetVisible(s.DebugOverlay);
+        _livePreview = s.LivePreview;
     }
 
     /// <summary>Resolve a swipe to a zone, honoring the thirds modifier if held.</summary>
@@ -208,16 +222,22 @@ public sealed class SwooshController : IDisposable
     private void OnFrame(TouchFrame frame)
     {
         _debug.Render(frame);
-        if (GesturesEnabled)
+        if (!GesturesEnabled) return;
+
+        // Esc aborts an in-progress gesture immediately (the HUD fades out).
+        if ((_armed || _free) && Win32.IsKeyDown(Win32.VK_ESCAPE))
         {
-            // Reflect the live modifier state so the engine uses the smaller thirds
-            // dead-zone the moment the key goes down (even mid-gesture). Move-to-display
-            // takes precedence over thirds when both modifiers are held.
-            bool mm = MonitorMoveActive;
-            _gestures.MonitorMoveMode = mm;
-            _gestures.ThirdsMode = !mm && ThirdsActive;
-            _gestures.Process(frame);
+            _gestures.Cancel();
+            return;
         }
+
+        // Reflect the live modifier state so the engine uses the smaller thirds
+        // dead-zone the moment the key goes down (even mid-gesture). Move-to-display
+        // takes precedence over thirds when both modifiers are held.
+        bool mm = MonitorMoveActive;
+        _gestures.MonitorMoveMode = mm;
+        _gestures.ThirdsMode = !mm && ThirdsActive;
+        _gestures.Process(frame);
     }
 
     private void OnSwipeRaw(double dx, double dy)
@@ -234,6 +254,8 @@ public sealed class SwooshController : IDisposable
         _monCur = null;
         _target = _snapper.ArmTarget(out string diag);
         _armed = _target != IntPtr.Zero;
+        _liveMoved = false;
+        _liveZone = SnapZone.None;
         if (_armed)
         {
             if (MonitorMoveActive)
@@ -244,10 +266,18 @@ public sealed class SwooshController : IDisposable
             }
             else
             {
+                if (_livePreview)
+                {
+                    // Live preview: remember where the window started so a retreat or Esc
+                    // can put it back. The chip HUD still shows; the overlay rectangle is
+                    // replaced by the real window moving.
+                    _liveWasMax = WindowSnapper.IsMaximized(_target);
+                    Win32.GetWindowRect(_target, out _liveOrigRect);
+                }
                 _chip.ShowSnap(SnapZone.None, 0);
             }
         }
-        Log.Write($"GestureBegan fingers={fingers} armed={_armed} {diag}");
+        Log.Write($"GestureBegan fingers={fingers} armed={_armed} live={_livePreview} {diag}");
     }
 
     private void CacheMonitors()
@@ -300,6 +330,13 @@ public sealed class SwooshController : IDisposable
         if (!_armed) { _preview.Hide(); _chip.Hide(); return; }
         if (dir == SwipeDirection.None || progress <= 0)
         {
+            if (_livePreview)
+            {
+                RestoreLiveOriginal();
+                _liveZone = SnapZone.None;
+                _chip.ShowSnap(SnapZone.None, 0);
+                return;
+            }
             _preview.Hide();
             _chip.ShowSnap(SnapZone.None, 0);
             return;
@@ -316,6 +353,23 @@ public sealed class SwooshController : IDisposable
             // old full-screen "maximize" flash can't happen either.
             return;
         }
+
+        if (_livePreview)
+        {
+            // Move the real window to the target zone as a live preview. Only retarget when
+            // the zone actually changes so we don't restart the glide every frame. Minimize
+            // can't be previewed by hiding the window, so it stays put until commit. The chip
+            // HUD still tracks the zone alongside the live window.
+            if (zone != _liveZone)
+            {
+                if (zone == SnapZone.Minimize) RestoreLiveOriginal();
+                else { _snapper.Apply(_target, zone); _liveMoved = true; }
+                _liveZone = zone;
+            }
+            _chip.ShowSnap(zone, progress);
+            return;
+        }
+
         var work = _snapper.WorkAreaFor(_target);
         Win32.RECT rect = zone == SnapZone.Minimize
             ? MinimizeHint(work)
@@ -324,24 +378,46 @@ public sealed class SwooshController : IDisposable
         _chip.ShowSnap(zone, progress);
     }
 
+    /// <summary>Put the window back where it was when a live-preview gesture started
+    /// (used when the swipe retreats below the dead-zone or the gesture is cancelled).</summary>
+    private void RestoreLiveOriginal()
+    {
+        if (!_liveMoved || _target == IntPtr.Zero) return;
+        if (_liveWasMax) _snapper.Apply(_target, SnapZone.Maximize);
+        else _snapper.RestoreToRect(_target, _liveOrigRect);
+        _liveMoved = false;
+    }
+
     private void OnGestureCompleted(SwipeDirection dir)
     {
         _preview.Hide();
         _chip.Hide();
         var zone = MapZone(dir);
         if (!_armed) return;
+        if (zone == SnapZone.None)
+        {
+            // Nothing aimed: in live preview, put the window back where it started.
+            if (_livePreview) RestoreLiveOriginal();
+            _armed = false;
+            _liveMoved = false;
+            return;
+        }
         _snapper.Apply(_target, zone);
-        if (zone != SnapZone.None) _stats.Add();
+        _stats.Add();
         if (zone != SnapZone.Minimize)
             Win32.SetForegroundWindow(_target);
         _armed = false;
+        _liveMoved = false;
     }
 
     private void OnGestureCancelled()
     {
+        // Esc (or a 3+ finger abort): in live preview, restore the window to its start.
+        if (_livePreview) RestoreLiveOriginal();
         _preview.Hide();
         _chip.Hide();
         _armed = false;
+        _liveMoved = false;
     }
 
     private void OnHoldEngaged()

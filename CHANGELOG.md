@@ -4,6 +4,11 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- New "Live window preview" option (off by default): as you swipe, the real window glides to the target zone instead of showing the translucent overlay, so you preview on the actual app. Esc puts it back.
+- New "Grid spacing" slider (0–10px): leave a consistent gap around snapped windows, or keep it at 0 for flush, edge-to-edge snapping.
+- New "Cancel timeout" slider (default 0.8s): rest your fingers still to drop the window into the current zone, or press Esc to cancel and put it back where it started.
+- The HUD now fades out smoothly when you finish, drop, or cancel a gesture instead of vanishing instantly.
+- The virtual-desktop strip now unfolds out of the current desktop (kept under your cursor) rather than blooming from the middle, and the active desktop stays put as you step through them.
 - Swoosh has an app icon now — a soft blue screen with a window snapped and floating over its left half. It shows up in the system tray, the taskbar, File Explorer, the download, and the sign-in (run) entry instead of the generic blank icon.
 - The Settings "What's new" section now links to the full changelog on GitHub instead of rendering an abbreviated copy inline.
 - "Start with Windows" now self-heals: if you move or update Swoosh, it re-points its sign-in entry at the new location the first time you run it from there, so launch-at-login keeps working without re-toggling the setting.

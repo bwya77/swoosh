@@ -330,6 +330,7 @@ public static class Win32
     public const byte VK_SHIFT = 0x10;
     public const byte VK_CONTROL = 0x11;
     public const byte VK_MENU = 0x12; // Alt
+    public const byte VK_ESCAPE = 0x1B;
     public const byte VK_LWIN = 0x5B;
     public const byte VK_LEFT = 0x25;
     public const byte VK_RIGHT = 0x27;

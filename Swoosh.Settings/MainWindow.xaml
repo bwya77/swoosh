@@ -212,6 +212,45 @@
                         </Border>
 
                         <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Grid spacing" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="Gap left around snapped windows, in pixels."
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Slider x:Name="GridSpacingSlider" Grid.Column="0" Margin="0,0,12,0"
+                                            Minimum="0" Maximum="10" StepFrequency="1"
+                                            ValueChanged="OnGridSpacingChanged" />
+                                    <TextBlock x:Name="GridSpacingValue" Grid.Column="1" Text="0 px"
+                                               VerticalAlignment="Center" MinWidth="44"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Live window preview" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Move the real window to the target zone as you swipe, instead of showing the overlay. Esc puts it back."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="LivePreviewToggle" Grid.Column="1" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -247,6 +286,28 @@
                                     <ComboBoxItem Content="Alt" />
                                 </ComboBox>
                             </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Cancel timeout" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="Cancel a gesture by pressing Esc, or by resting your fingers still for this long (0 = never)."
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Slider x:Name="CancelTimeoutSlider" Grid.Column="0" Margin="0,0,12,0"
+                                            Minimum="0" Maximum="3" StepFrequency="0.1"
+                                            ValueChanged="OnCancelTimeoutChanged" />
+                                    <TextBlock x:Name="CancelTimeoutValue" Grid.Column="1" Text="0.8 s"
+                                               VerticalAlignment="Center" MinWidth="44"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Grid>
+                            </StackPanel>
                         </Border>
                     </StackPanel>
 

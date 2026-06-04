@@ -18,6 +18,10 @@ public sealed class GestureEngine
     /// <summary>Max duration of a drag before it is abandoned, in milliseconds.</summary>
     public long MaxDurationMs { get; set; } = 8000;
 
+    /// <summary>Milliseconds the fingers may rest (near-still) mid-gesture before the gesture
+    /// cancels itself. 0 disables the rest-timeout. Esc cancels immediately (see Cancel()).</summary>
+    public long IdleCancelMs { get; set; } = 800;
+
     /// <summary>How long two fingers must rest (near-still) to engage hold mode.</summary>
     public long HoldDelayMs { get; set; } = 320;
 
@@ -119,6 +123,15 @@ public sealed class GestureEngine
     private long _startTime;
     private SwipeDirection _currentDir = SwipeDirection.None;
 
+    // Rest-to-cancel: when the centroid (and finger spread) stay near-still for longer than
+    // IdleCancelMs the gesture aborts. _suppressed latches a cancel (Esc or rest-timeout) so
+    // a new gesture can't immediately re-engage while the same fingers are still down.
+    private long _lastMoveMs;
+    private double _idleAnchorX, _idleAnchorY, _idleSpread;
+    private bool _suppressed;
+    private const double IdleMoveThreshold = 0.008;
+    private const double IdleSpreadThreshold = 0.012;
+
     // Short rolling history of recent centroid samples, used to estimate which way the
     // fingers are travelling *right now*. The 8-way Classify() works off the cumulative
     // vector from the gesture's start, so reversing a swipe (or a constant axis offset
@@ -168,6 +181,14 @@ public sealed class GestureEngine
     public void Process(TouchFrame frame)
     {
         int down = frame.DownCount;
+
+        // A latched cancel (Esc or rest-timeout) stays in effect until every finger
+        // lifts, so the same touch can't immediately re-arm the gesture it just cancelled.
+        if (_suppressed)
+        {
+            if (down == 0) _suppressed = false;
+            return;
+        }
 
         // Fine-grained free-move (default 5 fingers): the touchpad becomes an
         // absolute 1:1 proxy for the monitor. Once engaged it owns the gesture
@@ -256,6 +277,8 @@ public sealed class GestureEngine
                 _pinchFired = false;
                 _monitorActive = MonitorMoveMode;
                 _monitorDir = null;
+                _lastMoveMs = frame.TimestampMs;
+                _idleAnchorX = cx; _idleAnchorY = cy; _idleSpread = _startSpread;
                 GestureBegan?.Invoke(2);
                 if (_monitorActive) MonitorMoveUpdated?.Invoke(null, 0);
                 return;
@@ -269,6 +292,28 @@ public sealed class GestureEngine
             double dist = Math.Sqrt(dx * dx + dy * dy);
             _maxDist = Math.Max(_maxDist, dist);
             SwipeRaw?.Invoke(dx, dy);
+
+            // Rest-to-cancel: reset the idle clock whenever the fingers move or change
+            // spread; if they stay near-still past IdleCancelMs, abandon the gesture and
+            // latch the cancel so the HUD can fade out and the touch can't re-arm.
+            double idleSpread = Spread(frame);
+            bool moved = Math.Abs(cx - _idleAnchorX) >= IdleMoveThreshold
+                      || Math.Abs(cy - _idleAnchorY) >= IdleMoveThreshold
+                      || Math.Abs(idleSpread - _idleSpread) >= IdleSpreadThreshold;
+            if (moved)
+            {
+                _idleAnchorX = cx; _idleAnchorY = cy; _idleSpread = idleSpread;
+                _lastMoveMs = frame.TimestampMs;
+            }
+            else if (IdleCancelMs > 0 && frame.TimestampMs - _lastMoveMs >= IdleCancelMs)
+            {
+                // Resting "drops" the window: commit the current intent exactly as if the
+                // fingers lifted (snap to the previewed zone, or move to the aimed monitor).
+                // Esc is the hard cancel. Latch so the same touch can't re-arm afterwards.
+                _suppressed = true;
+                Finalize(frame.TimestampMs);
+                return;
+            }
 
             // Move-to-display mode owns the whole two-finger gesture: aim a 4-way
             // cardinal direction and show it live in the monitor-map HUD. The move
@@ -330,6 +375,7 @@ public sealed class GestureEngine
                 {
                     _hold = true;
                     _holdAnchorX = cx; // moves are measured from the dwell point
+                    _lastMoveMs = frame.TimestampMs; // fresh rest-timeout once the strip appears
                     HoldEngaged?.Invoke();
                 }
             }
@@ -445,6 +491,27 @@ public sealed class GestureEngine
         if (_tracking) GestureCancelled?.Invoke();
         _tracking = false;
         if (_free) { _free = false; _freeHasLast = false; FreeMoveEnded?.Invoke(false); }
+    }
+
+    /// <summary>Abort the in-progress gesture now (Esc) and latch the cancel so the same
+    /// touch can't re-arm until the fingers lift. Tears down whichever mode is active and
+    /// raises the matching teardown event so the HUD fades out.</summary>
+    public void Cancel()
+    {
+        bool active = _tracking || _free;
+        if (_tracking)
+        {
+            _cancelled = true;
+            _tracking = false;
+            GestureCancelled?.Invoke();
+        }
+        if (_free)
+        {
+            _free = false;
+            _freeHasLast = false;
+            FreeMoveEnded?.Invoke(false);
+        }
+        if (active) _suppressed = true;
     }
 
     private static (double, double) Centroid(TouchFrame f)
