@@ -63,6 +63,11 @@ public sealed class CursorChipOverlay
     private static readonly Duration FillDuration = new(TimeSpan.FromMilliseconds(210));
     private static readonly IEasingFunction FillEase = new CubicEase { EasingMode = EasingMode.EaseOut };
 
+    // Desktop-strip "unfold" reveal: the extra squares slide out from behind the current one.
+    private static readonly Duration RevealDuration = new(TimeSpan.FromMilliseconds(200));
+    private static readonly Duration RevealFadeDuration = new(TimeSpan.FromMilliseconds(150));
+    private static readonly IEasingFunction RevealEase = new CubicEase { EasingMode = EasingMode.EaseOut };
+
     private static Brush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
 
     private Window? _win;
@@ -78,6 +83,8 @@ public sealed class CursorChipOverlay
     // desktop count changes; only the fill brushes change per frame.
     private Grid? _strip;
     private readonly List<Border> _stripFills = new();
+    private readonly List<Border> _stripScreens = new();
+    private readonly List<double> _stripLefts = new();
     private int _stripCount = -1;
     private double _stripDesignW = SingleCanvasW;
 
@@ -190,14 +197,19 @@ public sealed class CursorChipOverlay
         var host = new Canvas { Width = canvasW, Height = CanvasH };
 
         _stripFills.Clear();
+        _stripScreens.Clear();
+        _stripLefts.Clear();
         for (int i = 0; i < count; i++)
         {
             var (screen, _, fill) = BuildScreen(DeskW);
-            Canvas.SetLeft(screen, Margin + i * (DeskW + Gap));
+            double left = Margin + i * (DeskW + Gap);
+            Canvas.SetLeft(screen, left);
             Canvas.SetTop(screen, Margin);
             host.Children.Add(screen);
             ResetFullFill(fill, DeskW);
             _stripFills.Add(fill);
+            _stripScreens.Add(screen);
+            _stripLefts.Add(left);
         }
 
         root.Children.Add(host);
@@ -484,7 +496,7 @@ public sealed class CursorChipOverlay
     /// <summary>Show the desktop mini-map: <paramref name="count"/> squares with the
     /// current desktop (where the held window lives) filled solid blue, and the neighbor
     /// you are leaning toward faintly tinted. Stays up until the gesture ends.</summary>
-    public void ShowDesktopStrip(int count, int currentIndex, DesktopDirection? lean)
+    public void ShowDesktopStrip(int count, int currentIndex, DesktopDirection? lean, bool animateReveal = false)
     {
         if (count < 1) count = 1;
         EnsureWindow();
@@ -521,6 +533,66 @@ public sealed class CursorChipOverlay
             _lastKey = key;
         }
         Place(_stripDesignW, CanvasH);
+
+        if (animateReveal) AnimateStripReveal(currentIndex);
+    }
+
+    /// <summary>Reveal the desktop strip by first showing only the current desktop square
+    /// (centered, where the dwell chip was), then sliding every square out to its slot and
+    /// fading the others in. Mirrors macOS-style "one then the rest unfold". When animation
+    /// is disabled the squares simply appear in place.</summary>
+    private void AnimateStripReveal(int currentIndex)
+    {
+        int n = _stripScreens.Count;
+        if (n == 0) return;
+
+        // Origin = strip centre, which is exactly where the single dwell chip sat, so the
+        // squares appear to bloom out of that one chip with no positional jump.
+        double originLeft = (_stripDesignW - DeskW) / 2.0;
+
+        for (int i = 0; i < n; i++)
+        {
+            var screen = _stripScreens[i];
+            double finalLeft = _stripLefts[i];
+            bool isCurrent = i == currentIndex;
+
+            // Clear any held animation from a previous reveal before re-pinning values.
+            screen.BeginAnimation(Canvas.LeftProperty, null);
+            screen.BeginAnimation(UIElement.OpacityProperty, null);
+
+            if (!_animate || n == 1)
+            {
+                Canvas.SetLeft(screen, finalLeft);
+                screen.Opacity = 1;
+                continue;
+            }
+
+            Canvas.SetLeft(screen, originLeft);
+            // The current desktop stays solid the whole time so you visibly "start" from it;
+            // the rest fade in as they slide out.
+            screen.Opacity = isCurrent ? 1 : 0;
+
+            // Squares further from the current one start a touch later for a cascading feel.
+            int distance = Math.Abs(i - currentIndex);
+            var begin = TimeSpan.FromMilliseconds(22 * distance);
+
+            var slide = new DoubleAnimation(originLeft, finalLeft, RevealDuration)
+            {
+                BeginTime = begin,
+                EasingFunction = RevealEase,
+            };
+            screen.BeginAnimation(Canvas.LeftProperty, slide);
+
+            if (!isCurrent)
+            {
+                var fade = new DoubleAnimation(0, 1, RevealFadeDuration)
+                {
+                    BeginTime = begin,
+                    EasingFunction = RevealEase,
+                };
+                screen.BeginAnimation(UIElement.OpacityProperty, fade);
+            }
+        }
     }
 
     private void SetSingleMode()

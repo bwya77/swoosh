@@ -349,7 +349,7 @@ public sealed class SwooshController : IDisposable
             _deskCount = Math.Max(1, cnt);
             _deskIndex = Math.Clamp(idx, 0, _deskCount - 1);
         }
-        _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
+        _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, animateReveal: true);
         Log.Write($"HoldEngaged layout({ld})");
     }
 
