@@ -119,6 +119,16 @@ public sealed class GestureEngine
     private long _startTime;
     private SwipeDirection _currentDir = SwipeDirection.None;
 
+    // Short rolling history of recent centroid samples, used to estimate which way the
+    // fingers are travelling *right now*. The 8-way Classify() works off the cumulative
+    // vector from the gesture's start, so reversing a swipe (or a constant axis offset
+    // baked in at start-capture) drags that vector back across a pure axis and flashes a
+    // spurious Up/Down (maximize/minimize) or Left/Right. We only accept a pure cardinal
+    // when the live motion is actually along that axis, suppressing the pass-through.
+    private readonly double[] _histX = new double[6];
+    private readonly double[] _histY = new double[6];
+    private int _histCount;
+
     private bool _hold;
     private bool _holdEligible = true;
     private double _maxDist;
@@ -237,6 +247,7 @@ public sealed class GestureEngine
                 _hold = false;
                 _holdEligible = true;
                 _maxDist = 0;
+                _histCount = 0;
                 _holdAnchorX = cx;
                 _startX = _lastX = cx;
                 _startY = _lastY = cy;
@@ -252,6 +263,7 @@ public sealed class GestureEngine
 
             _lastX = cx;
             _lastY = cy;
+            PushHistory(cx, cy);
             double dx = cx - _startX;
             double dy = cy - _startY;
             double dist = Math.Sqrt(dx * dx + dy * dy);
@@ -353,7 +365,7 @@ public sealed class GestureEngine
             }
             else if (dist >= (ThirdsMode ? ThirdsDeadZone : DeadZone))
             {
-                _currentDir = Classify(dx, dy);
+                _currentDir = Stabilize(_currentDir, Classify(dx, dy));
                 double progress = Math.Clamp(dist / CommitDistance, 0, 1);
                 GestureUpdated?.Invoke(_currentDir, progress);
             }
@@ -473,6 +485,66 @@ public sealed class GestureEngine
         foreach (var c in f.Contacts)
             if (c.TipDown) { double dx = c.X - cx, dy = c.Y - cy; s += Math.Sqrt(dx * dx + dy * dy); }
         return s / n;
+    }
+
+    /// <summary>Push a centroid sample into the rolling motion history.</summary>
+    private void PushHistory(double x, double y)
+    {
+        for (int i = _histX.Length - 1; i > 0; i--)
+        {
+            _histX[i] = _histX[i - 1];
+            _histY[i] = _histY[i - 1];
+        }
+        _histX[0] = x;
+        _histY[0] = y;
+        if (_histCount < _histX.Length) _histCount++;
+    }
+
+    /// <summary>Net centroid motion over the last few frames (~recent velocity vector).</summary>
+    private (double dx, double dy) RecentDelta()
+    {
+        int last = _histCount - 1;
+        if (last <= 0) return (0, 0);
+        return (_histX[0] - _histX[last], _histY[0] - _histY[last]);
+    }
+
+    /// <summary>Unit-ish (sx, sy) signs for an 8-way direction; screen-space up is +1.</summary>
+    private static (int sx, int sy) DirComponents(SwipeDirection d) => d switch
+    {
+        SwipeDirection.Left => (-1, 0),
+        SwipeDirection.Right => (1, 0),
+        SwipeDirection.Up => (0, 1),
+        SwipeDirection.Down => (0, -1),
+        SwipeDirection.UpLeft => (-1, 1),
+        SwipeDirection.UpRight => (1, 1),
+        SwipeDirection.DownLeft => (-1, -1),
+        SwipeDirection.DownRight => (1, -1),
+        _ => (0, 0),
+    };
+
+    /// <summary>
+    /// Suppress a pure-cardinal reading that is only happening because the cumulative
+    /// swipe vector is sweeping ACROSS that axis (e.g. dragging right between two corners
+    /// momentarily reads as straight-up). A cardinal is accepted only when the live motion
+    /// is actually travelling along its axis, so Maximize/Minimize and the halves require a
+    /// deliberate swipe in that direction rather than flashing on the way past. Diagonals
+    /// and the first direction of a gesture always pass through unchanged.
+    /// </summary>
+    private SwipeDirection Stabilize(SwipeDirection prev, SwipeDirection cand)
+    {
+        if (cand == prev || prev == SwipeDirection.None) return cand;
+        var (cx, cy) = DirComponents(cand);
+        bool candCardinal = (cx == 0) ^ (cy == 0);
+        if (!candCardinal) return cand;
+
+        var (rdx, rdy) = RecentDelta();
+        double ax = Math.Abs(rdx), ay = Math.Abs(rdy);
+        // Up/Down: zeroed axis is X. If we're sliding sideways at least as fast as
+        // vertically, this vertical reading is a cross-axis pass-through -> keep prev.
+        if (cy != 0 && ax >= ay) return prev;
+        // Left/Right: zeroed axis is Y. Suppress while sweeping vertically.
+        if (cx != 0 && ay >= ax) return prev;
+        return cand;
     }
 
     /// <summary>Classify a normalized delta into an 8-way direction. Pad Y grows downward.</summary>
