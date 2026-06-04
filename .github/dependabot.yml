@@ -14,6 +14,12 @@ updates:
       nuget:
         patterns:
           - "*"
+    ignore:
+      # Stay on the proven WindowsAppSDK 1.x line; a major (2.x) jump changes the
+      # self-contained runtime/packaging and isn't validated by PR checks. Patches
+      # and minor updates within the current major still flow through.
+      - dependency-name: "Microsoft.WindowsAppSDK"
+        update-types: ["version-update:semver-major"]
 
   # Keep the GitHub Actions used in our workflows up to date and patched.
   - package-ecosystem: github-actions
