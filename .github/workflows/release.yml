@@ -32,10 +32,10 @@ jobs:
       HAS_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
@@ -129,12 +129,12 @@ jobs:
       # Signed SLSA build provenance: lets anyone verify a release zip was built by this
       # repository's CI from this commit, with `gh attestation verify <zip> --repo bwya77/swoosh`.
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'Swoosh-*.zip'
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           name: Swoosh v${{ steps.ver.outputs.version }}
