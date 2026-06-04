@@ -3,6 +3,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using Swoosh.Settings;
 using Swoosh.Updates;
@@ -18,6 +19,12 @@ public partial class App : System.Windows.Application
     private readonly UpdateChecker _updates = new();
     private string? _updateUrl;
 
+    // Per-user single-instance guard. Held for the lifetime of the process so a
+    // second launch (e.g. login Run key firing while the app is already up, or a
+    // double click) detects us and exits instead of stacking a second tray icon.
+    private static Mutex? _instanceMutex;
+    private const string InstanceMutexName = "Local\\Swoosh.SingleInstance";
+
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")]
@@ -27,6 +34,16 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Bail out quietly if another Swoosh is already running for this user.
+        _instanceMutex = new Mutex(initiallyOwned: true, InstanceMutexName, out bool isNew);
+        if (!isNew)
+        {
+            _instanceMutex.Dispose();
+            _instanceMutex = null;
+            Shutdown();
+            return;
+        }
 
         _controller = new SwooshController();
         _controller.ApplySettings(_settings.Current);
@@ -202,6 +219,12 @@ public partial class App : System.Windows.Application
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
         _controller?.Dispose();
         _settings.Dispose();
+        if (_instanceMutex != null)
+        {
+            try { _instanceMutex.ReleaseMutex(); } catch { /* not owned */ }
+            _instanceMutex.Dispose();
+            _instanceMutex = null;
+        }
         base.OnExit(e);
     }
 }
