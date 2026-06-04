@@ -8,6 +8,26 @@ The release workflow (`.github/workflows/release.yml`) already contains the
 signing step. It stays dormant until the credentials below are configured, then
 activates automatically on the next build — no code changes needed.
 
+> **Status: configured and verified (June 4, 2026).** Signing is live. The first
+> signed release was **v0.1.19**; its `Swoosh.exe` and `Swoosh.Settings.exe`
+> verify as `Status: Valid`, signed by `CN=Bradley Wyatt` and issued by
+> `Microsoft ID Verified CS AOC CA 03`, with a valid timestamp. SmartScreen
+> reputation builds over the following weeks of clean installs.
+
+## Configured resources
+
+| Resource | Value |
+| --- | --- |
+| Trusted Signing account | `swoosh-signing` |
+| Region / endpoint | North Central US — `https://ncus.codesigning.azure.net/` |
+| Certificate profile | `swoosh` (Public Trust, Individual Developer) |
+| Publisher identity | `CN=Bradley Wyatt, O=Bradley Wyatt, L=Geneva, S=IL, C=US` |
+| CI auth | App Registration `swoosh-signing-ci` with the *Trusted Signing Certificate Profile Signer* role |
+
+The six repo secrets/variables (see the table further down) are already set. The
+workflow signs the launched `*.exe` for both architectures (`win-x64`,
+`win-arm64`) before packaging.
+
 ## Why this and not an EV certificate
 
 | Option | Cost | SmartScreen | Notes |
@@ -62,8 +82,10 @@ company name.
    | Variable | `TRUSTED_SIGNING_PROFILE` | the certificate profile name |
 
 Once these exist, the next push that triggers a release produces signed binaries.
-The workflow signs `*.exe` and `*.dll` for both `win-x64` and `win-arm64` before
-the zips are packaged.
+The workflow signs the launched `*.exe` for both `win-x64` and `win-arm64` before
+the zips are packaged. (It deliberately does **not** sign the bundled .NET /
+WindowsAppSDK runtime DLLs — only the launched executables matter for SmartScreen,
+and signing the whole runtime pushed the step past 15 minutes.)
 
 ## How the workflow guards signing
 
