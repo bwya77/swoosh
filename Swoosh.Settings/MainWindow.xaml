@@ -62,6 +62,21 @@
                 </muxc:NavigationViewItem>
             </muxc:NavigationView.MenuItems>
 
+            <muxc:NavigationView.PaneFooter>
+                <StackPanel x:Name="SwooshCountPanel" Orientation="Horizontal" Spacing="8"
+                            Padding="14,10,14,14" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE8AB;" FontSize="14"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <StackPanel Spacing="-2">
+                        <TextBlock x:Name="SwooshCountText" Text="0"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="SwooshCountLabel" Text="lifetime swooshes"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </muxc:NavigationView.PaneFooter>
+
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <Grid Margin="28,12,28,28">
                     <!-- GENERAL -->
@@ -81,6 +96,22 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
                                 <ToggleSwitch x:Name="GesturesToggle" Grid.Column="1" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Start with Windows" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Launch Swoosh automatically when you sign in."
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="LaunchToggle" Grid.Column="1" Toggled="OnSettingToggled" />
                             </Grid>
                         </Border>
 

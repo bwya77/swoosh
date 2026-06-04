@@ -4,6 +4,12 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- Start Swoosh automatically when you sign in to Windows — toggle it on the General settings page.
+- Track your lifetime swooshes: a running tally of every snap, move, and gesture now lives at the bottom of the Settings navigation pane.
+- Touch sensitivity now starts at a lighter default so gestures register more easily out of the box.
+- Overlay colour swatches no longer turn grey when you hover them, and they stay clearly visible in dark mode with a subtle outline; the selected swatch ring now adapts to light and dark themes.
+- The Settings window's minimize, maximize, and close buttons now match the current theme instead of disappearing.
+- Fixed dark-mode readability: gesture descriptions and changelog text are now properly visible instead of rendering near-black.
 - The virtual-desktop HUD now unfolds smoothly: it starts as the single current desktop and the other desktops slide out from the centre and fade in, instead of popping from one square to many.
 - Turn individual snap gestures on or off from the Snapping settings. Each one is a clickable window-shape tile (Maximize, Halves, Quarters, Minimize, Center, and the thirds grid) that greys out when disabled.
 - Move a window to another monitor: hold Alt (configurable) and swipe, with a monitor-map HUD showing where it will land.

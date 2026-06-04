@@ -50,10 +50,13 @@ public sealed class AppSettings
 
     /// <summary>How readily a slightly diagonal swipe lands a corner cell, 0 (forgiving)
     /// to 1 (twitchy). Lower values make sideways swipes ignore vertical drift.</summary>
-    public double Sensitivity { get; set; } = 0.5;
+    public double Sensitivity { get; set; } = 0.10;
 
     /// <summary>Use the current Windows accent color for the snap overlay highlight.</summary>
     public bool OverlayUseAccent { get; set; } = true;
+
+    /// <summary>Start Swoosh automatically when you sign in to Windows.</summary>
+    public bool LaunchAtLogin { get; set; } = false;
 
     /// <summary>Custom overlay highlight color (hex #RRGGBB) used when not following the accent.</summary>
     public string OverlayColor { get; set; } = "#0A84FF";

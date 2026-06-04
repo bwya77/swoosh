@@ -38,6 +38,7 @@
   <ItemGroup>
     <Compile Include="..\Settings\AppSettings.cs" Link="Shared\AppSettings.cs" />
     <Compile Include="..\Settings\SettingsStore.cs" Link="Shared\SettingsStore.cs" />
+    <Compile Include="..\Settings\SwooshStats.cs" Link="Shared\SwooshStats.cs" />
     <Compile Include="..\Updates\UpdateChecker.cs" Link="Shared\UpdateChecker.cs" />
   </ItemGroup>
 

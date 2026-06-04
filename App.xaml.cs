@@ -30,6 +30,7 @@ public partial class App : System.Windows.Application
 
         _controller = new SwooshController();
         _controller.ApplySettings(_settings.Current);
+        StartupManager.Apply(_settings.Current.LaunchAtLogin);
         _settings.Changed += OnSettingsChanged;
 
         BuildTray();
@@ -135,6 +136,7 @@ public partial class App : System.Windows.Application
             return;
         }
         _controller?.ApplySettings(s);
+        StartupManager.Apply(s.LaunchAtLogin);
         // The tray flyout is rebuilt from current settings each time it opens, so
         // there is no persistent menu item to keep in sync here.
     }

@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly SettingsStore _store = new();
     private readonly UpdateChecker _updates = new();
+    private readonly SwooshStats _stats = new();
     private bool _loading;
     private string? _downloadUrl;
     private string _overlayColor = "#0A84FF";
@@ -45,6 +46,12 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, bool> _gestureEnabled = new();
     private readonly List<(string Key, Button Card)> _gestureCards = new();
 
+    // Code-created TextBlocks that should use the theme-aware "secondary" text
+    // colour. We track them so they recolour on theme change — pulling the brush
+    // from Application.Current.Resources returns a light-theme snapshot that
+    // renders near-black in dark mode.
+    private readonly List<TextBlock> _secondaryTexts = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -55,13 +62,29 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
         ResizeForDpi(860, 680);
 
+        UpdateCaptionButtonColors();
+        RootGrid.ActualThemeChanged += (_, _) =>
+        {
+            UpdateCaptionButtonColors();
+            HighlightSwatch(_overlayColor);
+            RefreshSecondaryTexts();
+        };
+
         VersionText.Text = $"v{_updates.CurrentVersion}";
         BuildSwatches();
         BuildGestureCards();
         LoadFrom(_store.Current);
 
         _store.Changed += OnStoreChanged;
-        Closed += (_, _) => _store.Changed -= OnStoreChanged;
+        Closed += (_, _) =>
+        {
+            _store.Changed -= OnStoreChanged;
+            _stats.Dispose();
+        };
+
+        UpdateSwooshCount(_stats.LifetimeSwooshes);
+        _stats.Changed += n => DispatcherQueue.TryEnqueue(() => UpdateSwooshCount(n));
+        _stats.StartWatching();
 
         RootGrid.Loaded += async (_, _) =>
         {
@@ -70,8 +93,70 @@ public sealed partial class MainWindow : Window
         };
     }
 
+    /// <summary>Render the lifetime swoosh tally in the nav pane footer, with a
+    /// thousands separator and singular/plural label.</summary>
+    private void UpdateSwooshCount(long n)
+    {
+        SwooshCountText.Text = n.ToString("N0");
+        SwooshCountLabel.Text = n == 1 ? "lifetime swoosh" : "lifetime swooshes";
+    }
+
+    /// <summary>Theme-aware "secondary" text colour for code-created TextBlocks.
+    /// Pulling TextFillColorSecondaryBrush from Application.Current.Resources
+    /// returns a fixed light-theme brush (dark text), which is unreadable in dark
+    /// mode, so we resolve the WinUI default per the current actual theme.</summary>
+    private SolidColorBrush SecondaryTextBrush()
+    {
+        bool dark = RootGrid.ActualTheme == ElementTheme.Dark;
+        return new SolidColorBrush(dark
+            ? Color.FromArgb(0xC5, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x9E, 0x00, 0x00, 0x00));
+    }
+
+    /// <summary>Register a TextBlock as using the secondary colour and paint it now.
+    /// Tracked blocks are recoloured on theme change.</summary>
+    private TextBlock TrackSecondary(TextBlock tb)
+    {
+        tb.Foreground = SecondaryTextBrush();
+        _secondaryTexts.Add(tb);
+        return tb;
+    }
+
+    private void RefreshSecondaryTexts()
+    {
+        var brush = SecondaryTextBrush();
+        foreach (var tb in _secondaryTexts)
+            tb.Foreground = brush;
+    }
+
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    /// <summary>Paint the system caption buttons (minimize/maximize/close glyphs) to match
+    /// the current theme. With an extended title bar + Mica these don't reliably follow the
+    /// app theme on their own, leaving black glyphs in dark mode and white glyphs in light
+    /// mode. We set the glyph and hover colours explicitly and keep the backgrounds
+    /// transparent so Mica shows through.</summary>
+    private void UpdateCaptionButtonColors()
+    {
+        var tb = AppWindow.TitleBar;
+        bool dark = RootGrid.ActualTheme == ElementTheme.Dark;
+
+        Color fg = dark ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(255, 0, 0, 0);
+        Color disabled = dark ? Color.FromArgb(120, 255, 255, 255) : Color.FromArgb(120, 0, 0, 0);
+        Color hoverBg = dark ? Color.FromArgb(30, 255, 255, 255) : Color.FromArgb(25, 0, 0, 0);
+        Color pressedBg = dark ? Color.FromArgb(48, 255, 255, 255) : Color.FromArgb(40, 0, 0, 0);
+
+        tb.ButtonForegroundColor = fg;
+        tb.ButtonHoverForegroundColor = fg;
+        tb.ButtonPressedForegroundColor = fg;
+        tb.ButtonInactiveForegroundColor = disabled;
+
+        tb.ButtonBackgroundColor = Colors.Transparent;
+        tb.ButtonInactiveBackgroundColor = Colors.Transparent;
+        tb.ButtonHoverBackgroundColor = hoverBg;
+        tb.ButtonPressedBackgroundColor = pressedBg;
+    }
 
     /// <summary>Resize to a logical (DPI-independent) size. AppWindow.Resize takes
     /// physical pixels, so on a 150%/200% display a raw 800x640 would render tiny.</summary>
@@ -91,6 +176,7 @@ public sealed partial class MainWindow : Window
     {
         _loading = true;
         GesturesToggle.IsOn = s.GesturesEnabled;
+        LaunchToggle.IsOn = s.LaunchAtLogin;
         _gestureEnabled["maximize"] = s.MaximizeEnabled;
         _gestureEnabled["halves"] = s.HalvesEnabled;
         _gestureEnabled["quarters"] = s.QuartersEnabled;
@@ -125,6 +211,7 @@ public sealed partial class MainWindow : Window
     private AppSettings Collect() => new()
     {
         GesturesEnabled = GesturesToggle.IsOn,
+        LaunchAtLogin = LaunchToggle.IsOn,
         MaximizeEnabled = GestureOn("maximize"),
         HalvesEnabled = GestureOn("halves"),
         QuartersEnabled = GestureOn("quarters"),
@@ -193,6 +280,7 @@ public sealed partial class MainWindow : Window
     {
         foreach (var hex in SwatchColors)
         {
+            var color = ParseColor(hex);
             var btn = new Button
             {
                 Width = 32,
@@ -203,9 +291,16 @@ public sealed partial class MainWindow : Window
                 CornerRadius = new CornerRadius(16),
                 BorderThickness = new Thickness(2.5),
                 BorderBrush = new SolidColorBrush(Colors.Transparent),
-                Background = new SolidColorBrush(ParseColor(hex)),
+                Background = new SolidColorBrush(color),
                 Tag = hex,
             };
+            // The default Button style swaps Background to a grey theme brush on
+            // PointerOver/Pressed. Override those per-state brushes so each swatch keeps
+            // its own colour while hovered or pressed instead of turning grey.
+            btn.Resources["ButtonBackground"] = new SolidColorBrush(color);
+            btn.Resources["ButtonBackgroundPointerOver"] = new SolidColorBrush(color);
+            btn.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(color);
+            btn.Resources["ButtonBackgroundDisabled"] = new SolidColorBrush(color);
             ToolTipService.SetToolTip(btn, hex);
             btn.Click += (_, _) => OnSwatchPicked(hex);
             _swatches.Add(btn);
@@ -215,11 +310,28 @@ public sealed partial class MainWindow : Window
 
     private void HighlightSwatch(string hex)
     {
+        // The selection ring must contrast with the window background, not just the swatch:
+        // a white ring vanishes against the light-mode backdrop. Use white on dark themes
+        // and a near-black ring on light themes.
+        bool dark = RootGrid.ActualTheme == ElementTheme.Dark;
+        var selBrush = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(255, 0, 0, 0));
         foreach (var sw in _swatches)
         {
             bool sel = string.Equals((string)sw.Tag, hex, StringComparison.OrdinalIgnoreCase);
-            sw.BorderBrush = new SolidColorBrush(sel ? Colors.White : Colors.Transparent);
+            sw.BorderBrush = sel ? selBrush : UnselectedSwatchStroke();
         }
+    }
+
+    /// <summary>A subtle theme-adaptive outline so every swatch is delineated from the
+    /// window background — without it, darker colours blend into the dark-mode backdrop.
+    /// The selected swatch overrides this with a solid white ring.</summary>
+    private Brush UnselectedSwatchStroke()
+    {
+        if (Application.Current.Resources.TryGetValue("ControlStrokeColorSecondaryBrush", out var res)
+            && res is Brush b)
+            return b;
+        // Fallback: a faint light stroke that still reads on a dark background.
+        return new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
     }
 
     private void SetSwatchesEnabled(bool enabled)
@@ -275,14 +387,13 @@ public sealed partial class MainWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Center,
                 TextAlignment = TextAlignment.Center,
             });
-            content.Children.Add(new TextBlock
+            content.Children.Add(TrackSecondary(new TextBlock
             {
                 Text = g.Gesture,
                 FontSize = 11,
-                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
                 HorizontalAlignment = HorizontalAlignment.Center,
                 TextAlignment = TextAlignment.Center,
-            });
+            }));
 
             var card = new Button
             {
@@ -454,13 +565,12 @@ public sealed partial class MainWindow : Window
 
         if (releases.Count == 0)
         {
-            ChangelogPanel.Children.Add(new TextBlock
+            ChangelogPanel.Children.Add(TrackSecondary(new TextBlock
             {
                 Text = "Couldn't load release notes (offline or rate-limited).",
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            });
+            }));
             return;
         }
 
@@ -472,13 +582,12 @@ public sealed partial class MainWindow : Window
         header.Children.Add(new TextBlock { Text = r.Name, FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         if (r.Published is { } p)
         {
-            var date = new TextBlock
+            var date = TrackSecondary(new TextBlock
             {
                 Text = p.LocalDateTime.ToString("MMM d, yyyy"),
                 FontSize = 11,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            };
+            });
             Grid.SetColumn(date, 1);
             header.Children.Add(date);
         }
@@ -487,14 +596,13 @@ public sealed partial class MainWindow : Window
         var body = CleanBody(r.Body);
         if (!string.IsNullOrWhiteSpace(body))
         {
-            ChangelogPanel.Children.Add(new TextBlock
+            ChangelogPanel.Children.Add(TrackSecondary(new TextBlock
             {
                 Text = body,
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 8, 0, 0),
-                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            });
+            }));
         }
     }
 
@@ -553,7 +661,6 @@ public sealed partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(text)) return false;
 
         var lines = text.Replace("\r\n", "\n").Split('\n');
-        var secondary = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         var sections = new List<(string Header, List<string> Bullets)>();
         (string Header, List<string> Bullets)? current = null;
 
@@ -587,14 +694,13 @@ public sealed partial class MainWindow : Window
             first = false;
             if (bullets.Count > 0)
             {
-                ChangelogPanel.Children.Add(new TextBlock
+                ChangelogPanel.Children.Add(TrackSecondary(new TextBlock
                 {
                     Text = string.Join("\n", bullets),
                     FontSize = 12,
                     TextWrapping = TextWrapping.Wrap,
                     Margin = new Thickness(0, 6, 0, 0),
-                    Foreground = secondary,
-                });
+                }));
             }
         }
         return true;

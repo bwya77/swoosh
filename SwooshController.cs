@@ -19,6 +19,7 @@ public sealed class SwooshController : IDisposable
     private readonly PreviewOverlay _preview = new();
     private readonly CursorChipOverlay _chip = new();
     private readonly DebugOverlay _debug = new();
+    private readonly SwooshStats _stats = new();
 
     private IntPtr _target;
     private bool _armed;
@@ -281,6 +282,7 @@ public sealed class SwooshController : IDisposable
             {
                 _snapper.MoveToMonitor(_target, cur.Work, d.Work);
                 Win32.SetForegroundWindow(_target);
+                _stats.Add();
                 Log.Write($"MonitorMove dir={dir} moved");
             }
             else
@@ -329,6 +331,7 @@ public sealed class SwooshController : IDisposable
         var zone = MapZone(dir);
         if (!_armed) return;
         _snapper.Apply(_target, zone);
+        if (zone != SnapZone.None) _stats.Add();
         if (zone != SnapZone.Minimize)
             Win32.SetForegroundWindow(_target);
         _armed = false;
@@ -374,6 +377,7 @@ public sealed class SwooshController : IDisposable
             _deskIndex = Math.Clamp(_deskIndex + (dir == DesktopDirection.Right ? 1 : -1), 0, _deskCount - 1);
             Win32.SetForegroundWindow(_target);
             _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
+            _stats.Add();
         }
     }
 
@@ -447,7 +451,10 @@ public sealed class SwooshController : IDisposable
                 _preview.Hide();
                 _chip.Hide();
                 if (_centerEnabled)
+                {
                     _snapper.CenterOnMonitor(_target);
+                    _stats.Add();
+                }
             }
             Win32.SetForegroundWindow(_target);
         }
@@ -512,6 +519,7 @@ public sealed class SwooshController : IDisposable
 
         _snapper.Apply(_target, SnapZone.Maximize);
         Win32.SetForegroundWindow(_target);
+        _stats.Add();
         Log.Write("PinchOut -> Maximize");
         _armed = false;
     }
@@ -534,6 +542,7 @@ public sealed class SwooshController : IDisposable
             _snapper.RestoreWindow(_target); // OS-maximized window: native restore
         }
         Win32.SetForegroundWindow(_target);
+        _stats.Add();
         Log.Write("PinchIn -> Restore");
         _armed = false;
     }
@@ -545,6 +554,7 @@ public sealed class SwooshController : IDisposable
         Log.Write($"OnHotkey zone={zone} hwnd=0x{h.ToInt64():X} manageable={man} title='{Win32.GetWindowTitle(h)}'");
         if (!man) return;
         _snapper.Apply(h, zone);
+        if (zone != SnapZone.None) _stats.Add();
         if (zone != SnapZone.Minimize)
             Win32.SetForegroundWindow(h);
     }
@@ -566,6 +576,7 @@ public sealed class SwooshController : IDisposable
         _preview.Close();
         _chip.Close();
         _debug.Close();
+        _stats.Dispose();
         _window.Dispose();
     }
 }
