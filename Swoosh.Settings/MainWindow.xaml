@@ -308,7 +308,15 @@
 
                         <TextBlock Text="What's new" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="2,4,0,0" />
                         <Border Style="{StaticResource Card}">
-                            <StackPanel x:Name="ChangelogPanel" Spacing="8" />
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="See the full list of changes and release notes for every version."
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource BodyTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <HyperlinkButton Content="View changelog on GitHub"
+                                                 NavigateUri="https://github.com/bwya77/swoosh/blob/main/CHANGELOG.md"
+                                                 Padding="0,4,0,0" />
+                            </StackPanel>
                         </Border>
                     </StackPanel>
 
