@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # NuGet packages (the WinUI settings app references Microsoft.WindowsAppSDK).
+  - package-ecosystem: nuget
+    directories:
+      - "/"
+      - "/Swoosh.Settings"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      nuget:
+        patterns:
+          - "*"
+
+  # Keep the GitHub Actions used in our workflows up to date and patched.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -1,0 +1,41 @@
+name: CodeQL
+
+# Static analysis (SAST) of the C# source. Runs on pushes and PRs to main and on a
+# weekly schedule so newly-published CodeQL queries catch issues even without new commits.
+# Uses build-mode "none" (source-only extraction) so the analysis needs no Windows build
+# or Windows App SDK workload and runs quickly on a Linux runner.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '27 4 * * 1'  # every Monday 04:27 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (C#)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # upload results to the Security tab
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          build-mode: none
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:csharp"
