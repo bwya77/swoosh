@@ -49,7 +49,10 @@ public sealed class CursorChipOverlay
     private const double MapDisabledOpacity = 0.26; // a direction with no monitor reads as dimmed
 
     private static readonly Brush WhiteEdge = Freeze(new SolidColorBrush(Color.FromArgb(245, 255, 255, 255)));
-    private static readonly Brush ScreenBg = Freeze(new SolidColorBrush(Color.FromArgb(96, 22, 24, 30)));
+    // Near-opaque dark backdrop so the (user-coloured) highlight fill always reads,
+    // even with a grey accent over a light or busy wallpaper. A mostly-translucent
+    // backdrop blended into bright desktops and washed the contrast out.
+    private static readonly Brush ScreenBg = Freeze(new SolidColorBrush(Color.FromArgb(212, 18, 20, 26)));
 
     private static readonly Brush DefaultSolid = Freeze(new SolidColorBrush(Color.FromArgb(235, 10, 132, 255)));
 

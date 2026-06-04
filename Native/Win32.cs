@@ -23,6 +23,8 @@ public static class Win32
     public const uint SWP_NOACTIVATE = 0x0010;
     public const uint SWP_NOOWNERZORDER = 0x0200;
     public const uint SWP_FRAMECHANGED = 0x0020;
+    public const uint SWP_NOSENDCHANGING = 0x0400;
+    public const uint SWP_ASYNCWINDOWPOS = 0x4000;
 
     // ShowWindow
     public const int SW_RESTORE = 9;

@@ -432,10 +432,16 @@ public sealed class SwooshController : IDisposable
             _freeWinY = cy - _freeWinH / 2.0;
         }
 
+        // ASYNCWINDOWPOS posts the move to the target window's thread instead of
+        // blocking ours waiting for that (possibly heavy) app to repaint, and
+        // NOSENDCHANGING skips the synchronous WM_WINDOWPOSCHANGING round-trip.
+        // Together they keep the window glued to the finger during fast motion
+        // instead of trailing as raw-input frames queue up behind blocked calls.
         Win32.SetWindowPos(_target, IntPtr.Zero,
             (int)Math.Round(_freeWinX), (int)Math.Round(_freeWinY),
             (int)Math.Round(_freeWinW), (int)Math.Round(_freeWinH),
-            Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE);
+            Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE
+                | Win32.SWP_ASYNCWINDOWPOS | Win32.SWP_NOSENDCHANGING);
     }
 
     private void OnFreeMoveEnded(bool wasTap)

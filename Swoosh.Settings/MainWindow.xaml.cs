@@ -88,6 +88,14 @@ public sealed partial class MainWindow : Window
 
         RootGrid.Loaded += async (_, _) =>
         {
+            // Re-apply once the visual tree is loaded: in the constructor
+            // RootGrid.ActualTheme hasn't resolved to the real (system) theme yet,
+            // so the caption glyphs could be painted for the wrong theme and stay
+            // that way if no ActualThemeChanged fires.
+            UpdateCaptionButtonColors();
+            HighlightSwatch(_overlayColor);
+            RefreshSecondaryTexts();
+
             await RunUpdateCheck();
             await LoadChangelog();
         };

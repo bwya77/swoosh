@@ -4,6 +4,9 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- Windows now track your fingers more tightly during a free-move: the move is handed off to the window's own thread instead of waiting on heavy apps to repaint, so they no longer trail behind fast motion.
+- The snap HUD is easier to read: a darker, more solid backdrop keeps the highlighted zone visible with any accent colour (including grey) and over light or busy wallpapers.
+- Fixed the Settings window's minimize, maximize, and close buttons showing as black in dark mode — they now reliably match the current theme on first open.
 - Swoosh now runs as a single instance: launching it again (for example when the sign-in entry fires while it's already open) quietly focuses the existing app instead of stacking a second tray icon.
 - Start Swoosh automatically when you sign in to Windows — toggle it on the General settings page.
 - Track your lifetime swooshes: a running tally of every snap, move, and gesture now lives at the bottom of the Settings navigation pane.
