@@ -61,6 +61,7 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         ResizeForDpi(860, 680);
+        TrySetWindowIcon();
 
         UpdateCaptionButtonColors();
         RootGrid.ActualThemeChanged += (_, _) =>
@@ -175,6 +176,19 @@ public sealed partial class MainWindow : Window
         AppWindow.Resize(new Windows.Graphics.SizeInt32(
             (int)Math.Round(logicalWidth * scale),
             (int)Math.Round(logicalHeight * scale)));
+    }
+
+    /// <summary>Set the window's title-bar and taskbar icon from the swoosh.ico copied
+    /// next to the executable. Best-effort: a missing file just leaves the default.</summary>
+    private void TrySetWindowIcon()
+    {
+        try
+        {
+            string path = System.IO.Path.Combine(AppContext.BaseDirectory, "swoosh.ico");
+            if (System.IO.File.Exists(path))
+                AppWindow.SetIcon(path);
+        }
+        catch { /* non-fatal */ }
     }
 
     // ---- Load / collect ----------------------------------------------------

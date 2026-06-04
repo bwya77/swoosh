@@ -12,7 +12,8 @@
     <AssemblyName>Swoosh</AssemblyName>
     <RootNamespace>Swoosh</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>0.1.6</Version>
+    <ApplicationIcon>Assets\swoosh.ico</ApplicationIcon>
+    <Version>0.1.7</Version>
     <!-- WPF reads PerMonitorV2 from app.manifest; WinForms' WFAC010 nag is moot here. -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
@@ -26,6 +27,14 @@
     <None Remove="Swoosh.Settings\**" />
     <EmbeddedResource Remove="Swoosh.Settings\**" />
     <Content Remove="Swoosh.Settings\**" />
+  </ItemGroup>
+
+  <!-- Embed the app icon so the tray NotifyIcon can load it at runtime (the
+       multi-resolution .ico lets Windows pick the right size for the tray). The
+       same file is the Win32 ApplicationIcon, which gives Explorer / the download
+       / the run dialog their icon. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\swoosh.ico" LogicalName="swoosh.ico" />
   </ItemGroup>
 
 </Project>

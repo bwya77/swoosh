@@ -7,6 +7,7 @@
     <RootNamespace>Swoosh.SettingsApp</RootNamespace>
     <AssemblyName>Swoosh.Settings</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Assets\swoosh.ico</ApplicationIcon>
     <Platforms>x64;arm64</Platforms>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
@@ -22,6 +23,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260508005" />
+  </ItemGroup>
+
+  <!-- Copy the app icon next to the exe so the window can set its title-bar/taskbar
+       icon at runtime via AppWindow.SetIcon. -->
+  <ItemGroup>
+    <Content Include="..\Assets\swoosh.ico" Link="swoosh.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Share the settings model, persistence, and update checker with the main app

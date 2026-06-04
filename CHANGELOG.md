@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- Swoosh has an app icon now — a HUD-style screen with a window snapped to the left half. It shows up in the system tray, the taskbar, File Explorer, the download, and the sign-in (run) entry instead of the generic blank icon.
 - The Settings "What's new" section now links to the full changelog on GitHub instead of rendering an abbreviated copy inline.
 - "Start with Windows" now self-heals: if you move or update Swoosh, it re-points its sign-in entry at the new location the first time you run it from there, so launch-at-login keeps working without re-toggling the setting.
 - Windows now track your fingers more tightly during a free-move: the move is handed off to the window's own thread instead of waiting on heavy apps to repaint, so they no longer trail behind fast motion.

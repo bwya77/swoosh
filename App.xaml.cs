@@ -15,6 +15,7 @@ public partial class App : System.Windows.Application
 {
     private SwooshController? _controller;
     private Forms.NotifyIcon? _tray;
+    private System.Drawing.Icon? _trayIcon;
     private readonly SettingsStore _settings = new();
     private readonly UpdateChecker _updates = new();
     private string? _updateUrl;
@@ -54,11 +55,39 @@ public partial class App : System.Windows.Application
         _ = CheckForUpdatesAsync(manual: false);
     }
 
+    /// <summary>Load the app icon for the tray: prefer the embedded multi-resolution
+    /// .ico (Windows picks the right size for the tray), fall back to the icon baked
+    /// into the executable, then to the generic system icon.</summary>
+    private static System.Drawing.Icon LoadAppIcon()
+    {
+        try
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            using var s = asm.GetManifestResourceStream("swoosh.ico");
+            if (s != null) return new System.Drawing.Icon(s);
+        }
+        catch { /* fall through */ }
+
+        try
+        {
+            var p = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(p))
+            {
+                var i = System.Drawing.Icon.ExtractAssociatedIcon(p);
+                if (i != null) return i;
+            }
+        }
+        catch { /* fall through */ }
+
+        return SystemIcons.Application;
+    }
+
     private void BuildTray()
     {
+        _trayIcon = LoadAppIcon();
         _tray = new Forms.NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = _trayIcon,
             Text = "Swoosh",
             Visible = true,
         };
@@ -217,6 +246,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
+        _trayIcon?.Dispose();
         _controller?.Dispose();
         _settings.Dispose();
         if (_instanceMutex != null)
