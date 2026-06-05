@@ -23,6 +23,10 @@ public sealed class TouchpadParser
 
     private readonly Dictionary<IntPtr, DeviceLayout?> _devices = new();
 
+    // Reused scratch buffer for HidP_GetUsages so the decoder allocates nothing
+    // per report on the hot path.
+    private readonly ushort[] _usageBuf = new ushort[16];
+
     private const int DiagMax = 1500;
     private int _diagCount;
     private string _lastSig = "";
@@ -113,7 +117,8 @@ public sealed class TouchpadParser
         foreach (var vc in valueCaps)
         {
             ushort usage = vc.IsRange != 0 ? vc.RangeUsageMin : vc.NotRangeUsage;
-            Swoosh.Log.Write($"  valcap page=0x{vc.UsagePage:X2} usage=0x{usage:X2} link={vc.LinkCollection} rid={vc.ReportID} isRange={vc.IsRange} cnt={vc.ReportCount} bits={vc.BitSize} lmin={vc.LogicalMin} lmax={vc.LogicalMax}");
+            if (Swoosh.Log.Verbose)
+                Swoosh.Log.Write($"  valcap page=0x{vc.UsagePage:X2} usage=0x{usage:X2} link={vc.LinkCollection} rid={vc.ReportID} isRange={vc.IsRange} cnt={vc.ReportCount} bits={vc.BitSize} lmin={vc.LogicalMin} lmax={vc.LogicalMax}");
             if (vc.UsagePage == Hid.UP_GENERIC && usage == Hid.USAGE_X)
             {
                 hasX.Add(vc.LinkCollection);
@@ -150,26 +155,27 @@ public sealed class TouchpadParser
         return layout;
     }
 
-    /// <summary>Parse all reports contained in a single WM_INPUT HID payload.</summary>
-    public List<TouchFrame> Parse(IntPtr device, byte[] hidData, int sizeHid, int reportCount)
+    /// <summary>
+    /// Parse all reports contained in a single WM_INPUT HID payload. <paramref
+    /// name="dataBase"/> must point at the first report inside a buffer the
+    /// caller keeps pinned for the duration of the call.
+    /// </summary>
+    public List<TouchFrame> Parse(IntPtr device, IntPtr dataBase, int sizeHid, int reportCount)
     {
         var frames = new List<TouchFrame>();
         var layout = GetLayout(device);
         if (layout == null || sizeHid == 0) return frames;
 
-        GCHandle handle = GCHandle.Alloc(hidData, GCHandleType.Pinned);
-        try
+        IntPtr basePtr = dataBase;
+        double spanX = Math.Max(1, layout.LogicalMaxX - layout.LogicalMinX);
+        double spanY = Math.Max(1, layout.LogicalMaxY - layout.LogicalMinY);
+        ushort[] usageBuf = _usageBuf;
+
+        for (int r = 0; r < reportCount; r++)
         {
-            IntPtr basePtr = handle.AddrOfPinnedObject();
-            double spanX = Math.Max(1, layout.LogicalMaxX - layout.LogicalMinX);
-            double spanY = Math.Max(1, layout.LogicalMaxY - layout.LogicalMinY);
-            var usageBuf = new ushort[16];
+            IntPtr report = basePtr + r * sizeHid;
 
-            for (int r = 0; r < reportCount; r++)
-            {
-                IntPtr report = basePtr + r * sizeHid;
-
-                byte reportId = hidData[r * sizeHid];
+            byte reportId = Marshal.ReadByte(report);
                 uint ccVal = 0;
                 bool ccOk = layout.HasContactCount &&
                     Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_DIGITIZER,
@@ -233,7 +239,15 @@ public sealed class TouchpadParser
                 // hold). Real simultaneous fingers always carry DISTINCT contact
                 // ids, so any duplicate id is firmware garbage: keep a single
                 // representative per id (prefer a moving one) and drop the rest.
-                if (cand.Count > 1)
+                // Real simultaneous fingers always carry DISTINCT contact ids, so
+                // duplicates are rare firmware garbage. Cheap O(n^2) pre-scan (n is
+                // at most a handful of contacts) skips the dictionary/list churn on
+                // every clean multi-finger frame; only a real duplicate pays for it.
+                bool hasDup = false;
+                for (int i = 0; i < cand.Count - 1 && !hasDup; i++)
+                    for (int j = i + 1; j < cand.Count; j++)
+                        if (cand[i].id == cand[j].id) { hasDup = true; break; }
+                if (hasDup)
                 {
                     var byId = new Dictionary<int, int>();
                     var deduped = new List<(int id, double nx, double ny, ushort col, bool moved, uint rawX, uint rawY, long frozenMs)>();
@@ -363,7 +377,7 @@ public sealed class TouchpadParser
                 // drop, bypassing the cap — that's the interesting part. Steady
                 // high-finger holds respect the cap so they don't flood the log.
                 bool interesting = curDown <= 2 || dropped > 0;
-                if (interesting || _diagCount < DiagMax)
+                if (Swoosh.Log.Verbose && (interesting || _diagCount < DiagMax))
                 {
                     string rawDetail = string.Join(" ", cand.Select(c =>
                         $"id{c.id}@{c.rawX},{c.rawY}({c.nx:F2},{c.ny:F2}){(c.moved ? "M" : "S")}f{c.frozenMs}"));
@@ -384,11 +398,6 @@ public sealed class TouchpadParser
 
                 frames.Add(frame);
             }
-        }
-        finally
-        {
-            handle.Free();
-        }
         return frames;
     }
 }

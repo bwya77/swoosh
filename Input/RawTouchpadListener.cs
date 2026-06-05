@@ -72,10 +72,11 @@ public sealed class RawTouchpadListener : IDisposable
             int dataLen = sizeHid * count;
             if (dataLen <= 0 || dataOffset + dataLen > _buffer.Length) return;
 
-            var hidData = new byte[dataLen];
-            Array.Copy(_buffer, dataOffset, hidData, 0, dataLen);
-
-            var frames = _parser.Parse(header.hDevice, hidData, sizeHid, count);
+            // The buffer stays pinned for this whole call, so hand the parser a
+            // pointer straight into it instead of allocating and copying a fresh
+            // byte[] for every report batch on the input thread.
+            IntPtr dataBase = ptr + dataOffset;
+            var frames = _parser.Parse(header.hDevice, dataBase, sizeHid, count);
             foreach (var f in frames)
                 FrameDecoded?.Invoke(f);
         }

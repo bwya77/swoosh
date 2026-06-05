@@ -430,7 +430,13 @@ public sealed class SwooshController : IDisposable
             _liveMoved = false;
             return;
         }
-        _snapper.Apply(_target, zone);
+        // Live preview already glided the window to this zone during the swipe.
+        // Re-applying here restarts the glide (or fires a redundant SetWindowPos to
+        // the same spot), which makes the target app repaint at the moment of
+        // commit. Skip it when the live window is already at this zone; any in-flight
+        // glide finishes at the target on its own.
+        if (!(_livePreview && _liveMoved && _liveZone == zone))
+            _snapper.Apply(_target, zone);
         _stats.Add();
         if (zone != SnapZone.Minimize)
         {

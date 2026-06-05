@@ -77,7 +77,7 @@ body:
     id: log
     attributes:
       label: Log
-      description: 'Paste relevant lines from the log. Open it with: notepad "$env:TEMP\swoosh.log"'
+      description: 'Paste relevant lines from the log. Open it with: notepad "$env:TEMP\swoosh.log". For gesture or touchpad detection problems, set the SWOOSH_LOG environment variable to 1, restart Swoosh, reproduce, then paste the log for a detailed per-frame trace.'
       render: text
     validations:
       required: false
