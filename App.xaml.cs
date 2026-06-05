@@ -48,6 +48,17 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // The installer launches us with --enable-startup when the user ticked
+        // "Start Swoosh when I sign in". Persist it as the LaunchAtLogin setting so the
+        // app (the single owner of the Run key) registers it on this very launch.
+        if (e.Args.Any(a => string.Equals(a, "--enable-startup", StringComparison.OrdinalIgnoreCase))
+            && !_settings.Current.LaunchAtLogin)
+        {
+            var s = _settings.Current.Clone();
+            s.LaunchAtLogin = true;
+            _settings.Save(s);
+        }
+
         _controller = new SwooshController();
         _controller.ApplySettings(_settings.Current);
         StartupManager.Apply(_settings.Current.LaunchAtLogin);

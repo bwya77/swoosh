@@ -57,10 +57,16 @@ Name: "{group}\Swoosh"; Filename: "{app}\Swoosh.exe"
 Name: "{autodesktop}\Swoosh"; Filename: "{app}\Swoosh.exe"; Tasks: desktopicon
 
 [Tasks]
+Name: "startupwithwindows"; Description: "Start Swoosh when I sign in to Windows"; GroupDescription: "Startup:"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Run]
-Filename: "{app}\Swoosh.exe"; Description: "Launch Swoosh"; Flags: nowait postinstall skipifsilent
+; Launch after install. When "Start with Windows" was ticked, pass --enable-startup so
+; the app persists the LaunchAtLogin setting and registers the Run key itself (the app
+; stays the single owner of that key). runasoriginaluser drops admin so the tray app and
+; its per-user settings run as the actual user, not the elevated installer account.
+Filename: "{app}\Swoosh.exe"; Parameters: "--enable-startup"; Description: "Launch Swoosh"; Tasks: startupwithwindows; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{app}\Swoosh.exe"; Description: "Launch Swoosh"; Tasks: not startupwithwindows; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
