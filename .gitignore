@@ -100,3 +100,6 @@ tools/variants/
 # Local installer build artifacts
 SwooshSetup-*.exe
 _isstest/
+
+# Local copy of the winget manifests (canonical copy lives in winget-pkgs)
+winget/
