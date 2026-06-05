@@ -154,21 +154,26 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>
-    /// Find Swoosh.Settings.exe: next to the main exe (release layout, optionally in a
-    /// "Settings" subfolder), or in the WinUI project's bin folder for local dev runs.
+    /// Find Swoosh.Settings.exe and return the NEWEST build available: next to the main exe
+    /// (release layout, optionally in a "Settings" subfolder) and, for local dev runs, any
+    /// build under the WinUI project's bin folder. Choosing the newest means a stale copy
+    /// left next to the exe (for example from an earlier publish) never shadows a freshly
+    /// built one.
     /// </summary>
     private static string? ResolveSettingsExe()
     {
         string baseDir = AppContext.BaseDirectory;
-        string[] candidates =
+
+        // Release layout: the exe sits next to the main app (optionally in a subfolder).
+        var nextToExe = new[]
         {
             Path.Combine(baseDir, "Settings", "Swoosh.Settings.exe"),
             Path.Combine(baseDir, "Swoosh.Settings.exe"),
         };
-        foreach (var c in candidates)
-            if (File.Exists(c)) return c;
 
-        // Dev fallback: walk up to the repo root (has Swoosh.sln), take the newest build.
+        // Dev: walk up to the repo root (has Swoosh.sln) and include every build under the
+        // settings project's bin folder.
+        var devBuilds = Array.Empty<string>();
         var dir = new DirectoryInfo(baseDir);
         while (dir != null && !File.Exists(Path.Combine(dir.FullName, "Swoosh.sln")))
             dir = dir.Parent;
@@ -177,12 +182,15 @@ public partial class App : System.Windows.Application
             var projBin = Path.Combine(dir.FullName, "Swoosh.Settings", "bin");
             if (Directory.Exists(projBin))
             {
-                return Directory.GetFiles(projBin, "Swoosh.Settings.exe", SearchOption.AllDirectories)
-                    .OrderByDescending(File.GetLastWriteTimeUtc)
-                    .FirstOrDefault();
+                try { devBuilds = Directory.GetFiles(projBin, "Swoosh.Settings.exe", SearchOption.AllDirectories); }
+                catch { /* ignore enumeration failures, fall back to next-to-exe */ }
             }
         }
-        return null;
+
+        return nextToExe.Concat(devBuilds)
+            .Where(File.Exists)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
     }
 
     private void OnSettingsChanged(AppSettings s)
