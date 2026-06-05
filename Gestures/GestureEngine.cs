@@ -157,6 +157,14 @@ public sealed class GestureEngine
     private bool _holdEligible = true;
     private double _maxDist;
     private double _holdAnchorX;
+
+    // Timestamp of the previous frame while tracking, used to detect input-thread
+    // stalls (e.g. first-gesture JIT warm-up on a cold start). Normal Precision
+    // Touchpad frames arrive every ~8-16ms; a much larger gap is a hiccup whose dead
+    // time must not count toward the hold dwell or rest-to-cancel timers, or a fast
+    // first swipe gets misread as a press-and-hold (and then a virtual-desktop move).
+    private long _lastFrameMs;
+    private const long StallGapMs = 60;
     // In commit-on-release mode, the signed number of desktops currently aimed from the
     // hold-start anchor (previewed target). Committed on lift; 0 means no move.
     private int _holdAimSteps;
@@ -293,6 +301,7 @@ public sealed class GestureEngine
                 _monitorActive = MonitorMoveMode;
                 _monitorDir = null;
                 _lastMoveMs = frame.TimestampMs;
+                _lastFrameMs = frame.TimestampMs;
                 _idleAnchorX = cx; _idleAnchorY = cy; _idleSpread = _startSpread;
                 GestureBegan?.Invoke(2);
                 if (_monitorActive) MonitorMoveUpdated?.Invoke(null, 0);
@@ -302,6 +311,20 @@ public sealed class GestureEngine
             _lastX = cx;
             _lastY = cy;
             PushHistory(cx, cy);
+
+            // Cold-start / hiccup guard: if the input thread stalled (for example the
+            // first-gesture JIT warm-up), wall-clock time jumps far between frames while
+            // the fingers barely moved. Subtract that dead time from the dwell and
+            // rest-to-cancel clocks so a stalled fast swipe is not mistaken for a
+            // press-and-hold (which would turn it into a virtual-desktop move).
+            long frameGap = frame.TimestampMs - _lastFrameMs;
+            if (frameGap > StallGapMs)
+            {
+                _startTime += frameGap;
+                _lastMoveMs += frameGap;
+            }
+            _lastFrameMs = frame.TimestampMs;
+
             double dx = cx - _startX;
             double dy = cy - _startY;
             double dist = Math.Sqrt(dx * dx + dy * dy);
