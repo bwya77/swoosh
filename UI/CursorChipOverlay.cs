@@ -69,6 +69,10 @@ public sealed class CursorChipOverlay
     // call does not hit the registry every frame.
     private long _lastThemeCheckMs;
 
+    // Multiplier on the HUD's physical size (0.65 normal, 1.0 large). The Viewbox scales
+    // the whole design to the physical window, so this shrinks everything proportionally.
+    private double _hudScale = 0.65;
+
     private static readonly Brush DefaultSolid = Freeze(new SolidColorBrush(Color.FromArgb(235, 10, 132, 255)));
 
     // Highlight brushes, recolored from settings (Windows accent or a custom color).
@@ -143,9 +147,10 @@ public sealed class CursorChipOverlay
     public IntPtr Handle => _win == null ? IntPtr.Zero : new WindowInteropHelper(_win).Handle;
 
     /// <summary>Apply live appearance settings: whether the snap fill animates between
-    /// zones, the highlight color (the Windows accent color or a custom hex), and the HUD
-    /// backdrop theme (dark, light, or follow the system light/dark setting).</summary>
-    public void ApplyAppearance(bool animate, bool useAccent, string customHex, HudTheme mode)
+    /// zones, the highlight color (the Windows accent color or a custom hex), the HUD
+    /// backdrop theme (dark, light, or follow the system light/dark setting), and the HUD
+    /// size.</summary>
+    public void ApplyAppearance(bool animate, bool useAccent, string customHex, HudTheme mode, HudSize size)
     {
         _animate = animate;
 
@@ -155,6 +160,15 @@ public sealed class CursorChipOverlay
 
         // Recolor anything currently on screen so the change is visible immediately.
         if (_singleFill is { Visibility: Visibility.Visible }) _singleFill.Background = _solid;
+
+        double scale = size == HudSize.Large ? 1.0 : 0.65;
+        if (scale != _hudScale)
+        {
+            _hudScale = scale;
+            // The Viewbox rescales automatically; force the next Place to reposition by
+            // invalidating the cached placement.
+            _lastPlace = (-99999, 0, 0, 0);
+        }
 
         _hudMode = mode;
         ApplyEffectiveTheme();
@@ -803,7 +817,7 @@ public sealed class CursorChipOverlay
         uint dpi = Win32.GetDpiForCursor();
         _pendDpi = dpi;
         double s = dpi / 96.0;
-        int physH = (int)Math.Round(_pendBasePx * s);
+        int physH = (int)Math.Round(_pendBasePx * s * _hudScale);
         int physW = (int)Math.Round(physH * _pendDesignW / _pendDesignH);
 
         // DIP size is DPI-independent: this is the size WPF must preserve across monitors.

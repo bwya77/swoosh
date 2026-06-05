@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- New "HUD size" option in Settings under Appearance: choose Normal (the default) or Large for the gesture HUD.
 - The gesture HUD can now use a light background. In Settings under Appearance, the new "HUD background" option offers Dark, Light, or Follow system (which matches the Windows light/dark setting and updates on your next gesture when you change it). The highlight color is unchanged.
 - Consolidated the two "Move to display" settings into one. A single dropdown now offers Off, Shift, Ctrl, or Alt, so you pick whether it is on and which key engages it in one place.
 - Fixed the first gesture after a cold start sometimes being misread as a move to another virtual desktop. On the first launch the input thread could briefly stall while warming up, which made a quick swipe look like a press-and-hold. Swoosh now ignores that startup stall, so your first swipe snaps the window as expected.

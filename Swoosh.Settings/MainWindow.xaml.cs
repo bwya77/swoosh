@@ -230,6 +230,7 @@ public sealed partial class MainWindow : Window
             HudTheme.System => 2,
             _ => 0,
         };
+        HudSizeCombo.SelectedIndex = s.HudSize == HudSize.Large ? 1 : 0;
         _overlayColor = s.OverlayColor;
         HighlightSwatch(_overlayColor);
         SetSwatchesEnabled(!s.OverlayUseAccent);
@@ -276,6 +277,7 @@ public sealed partial class MainWindow : Window
             2 => HudTheme.System,
             _ => HudTheme.Dark,
         },
+        HudSize = HudSizeCombo.SelectedIndex == 1 ? HudSize.Large : HudSize.Normal,
         OverlayColor = _overlayColor,
         GridSpacing = (int)Math.Round(GridSpacingSlider.Value),
         CancelTimeoutSeconds = CancelTimeoutSlider.Value,
@@ -299,6 +301,8 @@ public sealed partial class MainWindow : Window
     private void OnMonitorMoveChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnHudBackgroundChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
+
+    private void OnHudSizeChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnSensitivityChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 

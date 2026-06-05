@@ -16,6 +16,13 @@ public enum HudTheme
     System,
 }
 
+/// <summary>On-screen size of the gesture HUD.</summary>
+public enum HudSize
+{
+    Normal,
+    Large,
+}
+
 /// <summary>User-facing, persisted application settings (serialized to JSON).</summary>
 public sealed class AppSettings
 {
@@ -67,6 +74,10 @@ public sealed class AppSettings
     /// Dark (default), Light, or System to follow the Windows app light/dark setting. The
     /// highlight color is unchanged.</summary>
     public HudTheme HudBackground { get; set; } = HudTheme.Dark;
+
+    /// <summary>On-screen size of the gesture HUD. Large renders it bigger than the
+    /// default Normal size.</summary>
+    public HudSize HudSize { get; set; } = HudSize.Normal;
 
     /// <summary>Start Swoosh automatically when you sign in to Windows.</summary>
     public bool LaunchAtLogin { get; set; } = false;

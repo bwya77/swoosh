@@ -383,6 +383,28 @@
                                 </ComboBox>
                             </Grid>
                         </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="HUD size" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Size of the gesture HUD on screen. Small renders it at about half size."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ComboBox x:Name="HudSizeCombo" Grid.Column="1" MinWidth="140"
+                                          VerticalAlignment="Center"
+                                          SelectionChanged="OnHudSizeChanged">
+                                    <ComboBoxItem Content="Normal" />
+                                    <ComboBoxItem Content="Large" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
                     </StackPanel>
 
                     <!-- UPDATES -->
