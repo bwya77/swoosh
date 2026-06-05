@@ -5,7 +5,7 @@
 [![CodeQL](https://github.com/bwya77/swoosh/actions/workflows/codeql.yml/badge.svg)](https://github.com/bwya77/swoosh/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/bwya77/swoosh/badge)](https://securityscorecards.dev/viewer/?uri=github.com/bwya77/swoosh)
 [![Latest release](https://img.shields.io/github/v/release/bwya77/swoosh?sort=semver)](https://github.com/bwya77/swoosh/releases/latest)
-[![Downloads](https://badgen.net/github/assets-dl/bwya77/swoosh)](https://github.com/bwya77/swoosh/releases)
+[![Downloads](https://img.shields.io/github/downloads/bwya77/swoosh/total)](https://github.com/bwya77/swoosh/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6)
 
