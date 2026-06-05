@@ -60,12 +60,15 @@ jobs:
           # Only publish when this version has not been released yet, so a push that
           # does not bump the version never overwrites or duplicates a release.
           $null = gh release view "v$version" 2>&1
-          if ($LASTEXITCODE -eq 0) {
+          $exists = ($LASTEXITCODE -eq 0)
+          $global:LASTEXITCODE = 0
+          if ($exists) {
             Write-Host "Release v$version already exists; building without publishing."
             "should_release=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           } else {
             "should_release=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           }
+          exit 0
 
       # Publish the main tray app (single-file) and the WinUI settings app into a
       # "Settings" subfolder next to it, for each architecture. The tray app looks
