@@ -1,0 +1,90 @@
+name: Bug report
+description: Report a problem with Swoosh
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. The details below help track it down quickly.
+
+        Please do not report security vulnerabilities here. Use the
+        [Security policy](https://github.com/bwya77/swoosh/security/advisories/new)
+        instead.
+
+        Tip: you can gather the basics by running this in PowerShell and pasting the output:
+        ```powershell
+        "OS: $((Get-CimInstance Win32_OperatingSystem).Caption) build $([Environment]::OSVersion.Version)  arch=$env:PROCESSOR_ARCHITECTURE"
+        ```
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Hover the cursor over a window titlebar
+        2. Two-finger swipe left
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Swoosh version
+      description: See Settings, or the release tag you downloaded (for example v0.1.30).
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install Swoosh?
+      options:
+        - Installer (SwooshSetup .exe)
+        - Portable zip
+        - Built from source
+    validations:
+      required: true
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      options:
+        - x64 (Intel or AMD)
+        - arm64 (Surface Pro X, Surface Pro 9 5G, Snapdragon, and similar)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows edition and build
+      description: 'Run winver, or paste the output of: cmd /c ver. Example: Windows 11 Pro 24H2, build 26100.2314'
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and touchpad
+      description: PC model and touchpad if known. Gestures require a Precision Touchpad.
+    validations:
+      required: false
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: 'Paste relevant lines from the log. Open it with: notepad "$env:TEMP\swoosh.log"'
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots or a screen recording, other window tools in use (for example PowerToys FancyZones), and your monitor or DPI setup.
+    validations:
+      required: false
