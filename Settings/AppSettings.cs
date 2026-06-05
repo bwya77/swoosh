@@ -74,5 +74,10 @@ public sealed class AppSettings
     /// Esc restores the window to where it started.</summary>
     public bool LivePreview { get; set; } = false;
 
+    /// <summary>When true, after a snap the cursor follows the window to the same relative
+    /// spot it was grabbed at (for example the middle of the titlebar stays under the
+    /// cursor in the window's new position). Off by default.</summary>
+    public bool MoveCursor { get; set; } = false;
+
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 }

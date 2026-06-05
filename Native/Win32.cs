@@ -160,6 +160,9 @@ public static class Win32
     public static extern bool GetCursorPos(out POINT lpPoint);
 
     [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
     public static extern IntPtr WindowFromPoint(POINT Point);
 
     [DllImport("user32.dll")]

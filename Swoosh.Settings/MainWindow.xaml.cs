@@ -231,6 +231,7 @@ public sealed partial class MainWindow : Window
         CancelTimeoutSlider.Value = Math.Clamp(s.CancelTimeoutSeconds, 0, 3);
         UpdateCancelTimeoutLabel(CancelTimeoutSlider.Value);
         LivePreviewToggle.IsOn = s.LivePreview;
+        MoveCursorToggle.IsOn = s.MoveCursor;
         _loading = false;
     }
 
@@ -265,6 +266,7 @@ public sealed partial class MainWindow : Window
         GridSpacing = (int)Math.Round(GridSpacingSlider.Value),
         CancelTimeoutSeconds = CancelTimeoutSlider.Value,
         LivePreview = LivePreviewToggle.IsOn,
+        MoveCursor = MoveCursorToggle.IsOn,
     };
 
     private void SaveIfReady()

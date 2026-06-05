@@ -4,6 +4,9 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- New "Move cursor with window" setting (off by default): after a snap, the cursor follows the window to the same relative spot it was grabbed at, so the middle of the titlebar stays under the cursor in the window's new position.
+- Fixed a black flash in newly revealed areas when growing a window with the five-finger resize. Resizes now repaint properly instead of expanding ahead of the app's redraw.
+
 - Fixed the version shown in Settings reading 0.1.0 on installed and released builds. It now reads the real build version, which also means installed builds correctly check for updates on startup again.
 - Swooshing a window that wasn't in focus now brings it to the front. Previously it would snap into place but stay hidden behind other windows; now it's reliably raised and activated (with live preview, it comes forward as soon as it starts moving).
 - Swoosh now has a proper signed Windows installer: `SwooshSetup-<arch>.exe` installs to Program Files with a Start Menu shortcut and a clean uninstaller (which also tidies up the sign-in entry). It offers a "Start Swoosh when I sign in to Windows" checkbox that the app picks up as its launch-at-login setting. The portable zip is still available for no-install use.

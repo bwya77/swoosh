@@ -60,6 +60,13 @@ public sealed class SwooshController : IDisposable
     private bool _liveMoved;
     private SnapZone _liveZone = SnapZone.None;
 
+    // Move cursor: when on, capture the cursor's fractional spot within the window at
+    // gesture start, then move the cursor to the same fraction of the window's new rect
+    // after a snap, so the grab point follows the window.
+    private bool _moveCursor;
+    private double _curFracX, _curFracY;
+    private bool _haveCurFrac;
+
     // Per-gesture enable flags (Swish-style: each snap gesture can be turned off
     // individually from the Snapping settings). Default on.
     private bool _maximizeEnabled = true;
@@ -122,6 +129,7 @@ public sealed class SwooshController : IDisposable
         _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
         _debug.SetVisible(s.DebugOverlay);
         _livePreview = s.LivePreview;
+        _moveCursor = s.MoveCursor;
     }
 
     /// <summary>Resolve a swipe to a zone, honoring the thirds modifier if held.</summary>
@@ -256,6 +264,19 @@ public sealed class SwooshController : IDisposable
         _armed = _target != IntPtr.Zero;
         _liveMoved = false;
         _liveZone = SnapZone.None;
+
+        // Capture where the cursor sits inside the window (as a fraction), so a snap can
+        // move the cursor to the same relative spot in the window's new position.
+        _haveCurFrac = false;
+        if (_armed && _moveCursor &&
+            Win32.GetCursorPos(out var cp) && Win32.GetWindowRect(_target, out var wr) &&
+            wr.Width > 0 && wr.Height > 0)
+        {
+            _curFracX = Math.Clamp((cp.X - wr.Left) / (double)wr.Width, 0, 1);
+            _curFracY = Math.Clamp((cp.Y - wr.Top) / (double)wr.Height, 0, 1);
+            _haveCurFrac = true;
+        }
+
         if (_armed)
         {
             if (MonitorMoveActive)
@@ -412,9 +433,25 @@ public sealed class SwooshController : IDisposable
         _snapper.Apply(_target, zone);
         _stats.Add();
         if (zone != SnapZone.Minimize)
+        {
             Win32.ForceForeground(_target);
+            MoveCursorToZone(zone);
+        }
         _armed = false;
         _liveMoved = false;
+        _haveCurFrac = false;
+    }
+
+    /// <summary>If the move-cursor setting is on, move the cursor to the same fraction of
+    /// the snapped window's new rect that it occupied when the gesture started.</summary>
+    private void MoveCursorToZone(SnapZone zone)
+    {
+        if (!_moveCursor || !_haveCurFrac || _target == IntPtr.Zero) return;
+        var work = _snapper.WorkAreaFor(_target);
+        var rect = WindowSnapper.ZoneRect(work, zone);
+        int cx = rect.Left + (int)Math.Round(_curFracX * rect.Width);
+        int cy = rect.Top + (int)Math.Round(_curFracY * rect.Height);
+        Win32.SetCursorPos(cx, cy);
     }
 
     private void OnGestureCancelled()
@@ -515,16 +552,18 @@ public sealed class SwooshController : IDisposable
             _freeWinY = cy - _freeWinH / 2.0;
         }
 
-        // ASYNCWINDOWPOS posts the move to the target window's thread instead of
-        // blocking ours waiting for that (possibly heavy) app to repaint, and
-        // NOSENDCHANGING skips the synchronous WM_WINDOWPOSCHANGING round-trip.
-        // Together they keep the window glued to the finger during fast motion
-        // instead of trailing as raw-input frames queue up behind blocked calls.
+        // For a pure move, post the change asynchronously and skip the changing
+        // notification so the window stays glued to the finger during fast motion. When
+        // resizing, do a synchronous SetWindowPos with the normal notifications instead:
+        // posting an async grow lets the frame expand before the app repaints, which shows
+        // black in the newly revealed area (most visible on WinUI windows).
+        bool resizing = scale != 1.0;
+        uint flags = Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE;
+        if (!resizing) flags |= Win32.SWP_ASYNCWINDOWPOS | Win32.SWP_NOSENDCHANGING;
         Win32.SetWindowPos(_target, IntPtr.Zero,
             (int)Math.Round(_freeWinX), (int)Math.Round(_freeWinY),
             (int)Math.Round(_freeWinW), (int)Math.Round(_freeWinH),
-            Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE
-                | Win32.SWP_ASYNCWINDOWPOS | Win32.SWP_NOSENDCHANGING);
+            flags);
     }
 
     private void OnFreeMoveEnded(bool wasTap)

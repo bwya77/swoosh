@@ -257,6 +257,23 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Move cursor with window" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="After a snap, move the cursor to the same spot in the window's new position (for example, the middle of the titlebar stays under the cursor)."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="MoveCursorToggle" Grid.Column="1" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
                                     <TextBlock Text="Move to display" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <TextBlock Text="Hold a key and swipe to send the window to the next physical monitor."
                                                Style="{StaticResource CaptionTextBlockStyle}"
