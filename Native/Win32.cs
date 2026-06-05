@@ -228,19 +228,30 @@ public static class Win32
     [DllImport("kernel32.dll")]
     public static extern uint GetCurrentThreadId();
 
+    [DllImport("user32.dll")]
+    public static extern bool BringWindowToTop(IntPtr hWnd);
+
     /// <summary>Force a window to the foreground reliably, defeating the foreground-lock
-    /// that makes a bare SetForegroundWindow fail for tray-spawned popups.</summary>
+    /// that makes a bare SetForegroundWindow fail when the caller isn't the active app.
+    /// Also raises the window in the Z-order so it sits above other windows, not just
+    /// activated behind them.</summary>
     public static void ForceForeground(IntPtr hwnd)
     {
+        if (hwnd == IntPtr.Zero) return;
         IntPtr fg = GetForegroundWindow();
         uint fgThread = GetWindowThreadProcessId(fg, IntPtr.Zero);
         uint thisThread = GetCurrentThreadId();
-        if (fgThread != thisThread)
-            AttachThreadInput(fgThread, thisThread, true);
-        SetForegroundWindow(hwnd);
-        SetFocus(hwnd);
-        if (fgThread != thisThread)
-            AttachThreadInput(fgThread, thisThread, false);
+        bool attached = fgThread != thisThread && AttachThreadInput(fgThread, thisThread, true);
+        try
+        {
+            BringWindowToTop(hwnd);
+            SetForegroundWindow(hwnd);
+            SetFocus(hwnd);
+        }
+        finally
+        {
+            if (attached) AttachThreadInput(fgThread, thisThread, false);
+        }
     }
 
     // Low-level mouse hook (used to dismiss the tray flyout on an outside click).

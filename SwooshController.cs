@@ -311,7 +311,7 @@ public sealed class SwooshController : IDisposable
             if (dst is { } d)
             {
                 _snapper.MoveToMonitor(_target, cur.Work, d.Work);
-                Win32.SetForegroundWindow(_target);
+                Win32.ForceForeground(_target);
                 _stats.Add();
                 Log.Write($"MonitorMove dir={dir} moved");
             }
@@ -363,7 +363,14 @@ public sealed class SwooshController : IDisposable
             if (zone != _liveZone)
             {
                 if (zone == SnapZone.Minimize) RestoreLiveOriginal();
-                else { _snapper.Apply(_target, zone); _liveMoved = true; }
+                else
+                {
+                    // Bring the window forward on the first live move so the preview is
+                    // actually visible (not hidden behind other windows).
+                    if (!_liveMoved) Win32.ForceForeground(_target);
+                    _snapper.Apply(_target, zone);
+                    _liveMoved = true;
+                }
                 _liveZone = zone;
             }
             _chip.ShowSnap(zone, progress);
@@ -405,7 +412,7 @@ public sealed class SwooshController : IDisposable
         _snapper.Apply(_target, zone);
         _stats.Add();
         if (zone != SnapZone.Minimize)
-            Win32.SetForegroundWindow(_target);
+            Win32.ForceForeground(_target);
         _armed = false;
         _liveMoved = false;
     }
@@ -451,7 +458,7 @@ public sealed class SwooshController : IDisposable
         {
             // We follow the window, so the current desktop is now the neighbor.
             _deskIndex = Math.Clamp(_deskIndex + (dir == DesktopDirection.Right ? 1 : -1), 0, _deskCount - 1);
-            Win32.SetForegroundWindow(_target);
+            Win32.ForceForeground(_target);
             _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
             _stats.Add();
         }
@@ -538,7 +545,7 @@ public sealed class SwooshController : IDisposable
                     _stats.Add();
                 }
             }
-            Win32.SetForegroundWindow(_target);
+            Win32.ForceForeground(_target);
         }
         _free = false;
         _armed = false;
@@ -600,7 +607,7 @@ public sealed class SwooshController : IDisposable
         }
 
         _snapper.Apply(_target, SnapZone.Maximize);
-        Win32.SetForegroundWindow(_target);
+        Win32.ForceForeground(_target);
         _stats.Add();
         Log.Write("PinchOut -> Maximize");
         _armed = false;
@@ -623,7 +630,7 @@ public sealed class SwooshController : IDisposable
         {
             _snapper.RestoreWindow(_target); // OS-maximized window: native restore
         }
-        Win32.SetForegroundWindow(_target);
+        Win32.ForceForeground(_target);
         _stats.Add();
         Log.Write("PinchIn -> Restore");
         _armed = false;
@@ -638,7 +645,7 @@ public sealed class SwooshController : IDisposable
         _snapper.Apply(h, zone);
         if (zone != SnapZone.None) _stats.Add();
         if (zone != SnapZone.Minimize)
-            Win32.SetForegroundWindow(h);
+            Win32.ForceForeground(h);
     }
 
     private static Win32.RECT MinimizeHint(Win32.RECT work)

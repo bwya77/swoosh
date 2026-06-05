@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- Swooshing a window that wasn't in focus now brings it to the front. Previously it would snap into place but stay hidden behind other windows; now it's reliably raised and activated (with live preview, it comes forward as soon as it starts moving).
 - Swoosh now has a proper signed Windows installer: `SwooshSetup-<arch>.exe` installs to Program Files with a Start Menu shortcut and a clean uninstaller (which also tidies up the sign-in entry). It offers a "Start Swoosh when I sign in to Windows" checkbox that the app picks up as its launch-at-login setting. The portable zip is still available for no-install use.
 - Installed builds can now update themselves: choosing "update" downloads and runs the new signed installer, which closes Swoosh, updates in place, and relaunches it. Portable builds still open the releases page.
 - New "Live window preview" option (off by default): as you swipe, the real window glides to the target zone instead of showing the translucent overlay, so you preview on the actual app. Esc puts it back.
