@@ -22,12 +22,18 @@ public sealed class UpdateChecker
     /// <summary>One published release, used to render the in-app changelog.</summary>
     public sealed record ReleaseNote(string Name, string Tag, string Body, DateTimeOffset? Published, string HtmlUrl);
 
-    /// <summary>The running build's version, normalized to Major.Minor.Build.</summary>
+    /// <summary>The running build's version, normalized to Major.Minor.Build. Reads the
+    /// informational version (which the release build stamps via -p:Version); the bare
+    /// AssemblyVersion isn't stamped and stays at the 0.1.0 default, so it can't be trusted.</summary>
     public Version CurrentVersion
     {
         get
         {
-            var v = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
+            var asm = Assembly.GetExecutingAssembly();
+            var info = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            var parsed = ParseVersion(info);
+            if (parsed != null) return parsed;
+            var v = asm.GetName().Version ?? new Version(0, 0, 0);
             return Normalize(v);
         }
     }
