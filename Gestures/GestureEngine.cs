@@ -23,7 +23,7 @@ public sealed class GestureEngine
     public long IdleCancelMs { get; set; } = 800;
 
     /// <summary>How long two fingers must rest (near-still) to engage hold mode.</summary>
-    public long HoldDelayMs { get; set; } = 320;
+    public long HoldDelayMs { get; set; } = 200;
 
     /// <summary>Max centroid travel allowed during the dwell to still count as a hold.</summary>
     public double HoldRadius { get; set; } = 0.05;

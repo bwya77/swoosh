@@ -129,6 +129,12 @@ public sealed class CursorChipOverlay
     private bool _mapAnchored;
     private int _mapAnchorX, _mapAnchorY;
 
+    // Same idea for the desktop strip: capture the cursor once when the strip first appears
+    // so the HUD holds still (and the reveal animation stays smooth) while the fingers rest,
+    // instead of re-placing the window to follow micro-drift on every hold-update frame.
+    private bool _stripAnchored;
+    private int _stripAnchorX, _stripAnchorY;
+
     // Pending placement, re-applied after a WM_DPICHANGED. When the window crosses a
     // DPI boundary, WPF raises that message asynchronously and resizes the HWND to keep
     // its WPF Width/Height; we re-pin our exact pixel placement and only then reveal it,
@@ -236,6 +242,7 @@ public sealed class CursorChipOverlay
         _stripLefts.Clear();
         _map = null;
         _mapAnchored = false;
+        _stripAnchored = false;
         _shown = false;
         _lastKey = "";
         _lastPlace = (-99999, 0, 0, 0);
@@ -667,22 +674,38 @@ public sealed class CursorChipOverlay
             }
             _lastKey = key;
         }
+
+        // Prime the reveal start-state (collapse the other desktops onto the current one)
+        // BEFORE placing/resizing the window. Otherwise the SetWindowPos resize inside Place
+        // can trigger a paint that catches the strip fully expanded for a frame, so it
+        // flashes the final layout, vanishes, then blooms.
+        if (animateReveal) PrimeStripReveal(currentIndex);
+
         // Anchor the strip so the current desktop sits under the cursor (where the
         // dwell chip was), so the others appear to come out of the current monitor.
         double anchorFrac = 0.5;
         if (currentIndex >= 0 && currentIndex < _stripLefts.Count && _stripDesignW > 0)
             anchorFrac = (_stripLefts[currentIndex] + DeskW / 2.0) / _stripDesignW;
-        Place(_stripDesignW, CanvasH, anchorFrac: anchorFrac);
+        // Anchor to the cursor once per gesture so the strip holds still while the fingers
+        // rest, keeping the reveal smooth instead of jittering as the window chases cursor
+        // micro-drift on every hold-update frame.
+        if (!_stripAnchored && Win32.GetCursorPos(out var anchorPt))
+        {
+            _stripAnchorX = anchorPt.X;
+            _stripAnchorY = anchorPt.Y;
+            _stripAnchored = true;
+        }
+        Place(_stripDesignW, CanvasH, fixedCursor: _stripAnchored ? (_stripAnchorX, _stripAnchorY) : null, anchorFrac: anchorFrac);
 
-        if (animateReveal) AnimateStripReveal(currentIndex);
+        // Now that the window is placed and sized, start the bloom from the primed state.
+        if (animateReveal) RunStripReveal(currentIndex);
     }
 
-    /// <summary>Reveal the desktop strip so the other desktops appear to slide out of the
-    /// current one: the current desktop stays solid and fixed in place (it's anchored under
-    /// the cursor), and every other square starts stacked behind it, then slides out to its
-    /// slot and fades in, cascading outward by distance. When animation is disabled the
-    /// squares simply appear in place.</summary>
-    private void AnimateStripReveal(int currentIndex)
+    /// <summary>Set the reveal start-state synchronously: the current desktop sits solid in
+    /// its slot; every other square is collapsed onto the current one and made invisible.
+    /// Called before the window is placed/resized so a resize-driven paint never catches the
+    /// strip fully expanded. When animation is disabled, every square just sits in its slot.</summary>
+    private void PrimeStripReveal(int currentIndex)
     {
         int n = _stripScreens.Count;
         if (n == 0) return;
@@ -707,11 +730,32 @@ public sealed class CursorChipOverlay
                 // The current desktop is the anchor: solid, in its slot, no movement.
                 Canvas.SetLeft(screen, finalLeft);
                 screen.Opacity = 1;
-                continue;
             }
+            else
+            {
+                Canvas.SetLeft(screen, originLeft);
+                screen.Opacity = 0;
+            }
+        }
+    }
 
-            Canvas.SetLeft(screen, originLeft);
-            screen.Opacity = 0;
+    /// <summary>Start the reveal animations from the primed start-state: each non-current
+    /// square slides out to its slot and fades in, cascading outward from the current desktop
+    /// by distance. Assumes <see cref="PrimeStripReveal"/> already set the collapsed state.</summary>
+    private void RunStripReveal(int currentIndex)
+    {
+        if (!_animate) return;
+        int n = _stripScreens.Count;
+        if (n <= 1) return;
+        if (currentIndex < 0 || currentIndex >= n) currentIndex = 0;
+
+        double originLeft = _stripLefts[currentIndex];
+
+        for (int i = 0; i < n; i++)
+        {
+            if (i == currentIndex) continue;
+            var screen = _stripScreens[i];
+            double finalLeft = _stripLefts[i];
 
             // Squares further from the current one start a touch later and travel a touch
             // longer, so the strip unfolds outward from the current desktop.
@@ -880,6 +924,7 @@ public sealed class CursorChipOverlay
         _lastKey = "";
         _lastPlace = (-99999, 0, 0, 0);
         _mapAnchored = false;
+        _stripAnchored = false;
         _shown = false;
         if (_win == null) return;
 

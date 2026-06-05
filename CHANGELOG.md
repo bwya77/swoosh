@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- The virtual-desktop reveal is smoother and snappier. The desktop strip now holds still while your fingers rest (instead of drifting with the cursor), no longer flashes the full strip for a frame before animating, and starts appearing a bit sooner after you begin holding.
 - New "HUD size" option in Settings under Appearance: choose Normal (the default) or Large for the gesture HUD.
 - The gesture HUD can now use a light background. In Settings under Appearance, the new "HUD background" option offers Dark, Light, or Follow system (which matches the Windows light/dark setting and updates on your next gesture when you change it). The highlight color is unchanged.
 - Consolidated the two "Move to display" settings into one. A single dropdown now offers Off, Shift, Ctrl, or Alt, so you pick whether it is on and which key engages it in one place.
