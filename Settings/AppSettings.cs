@@ -8,6 +8,14 @@ public enum GridModifier
     Alt,
 }
 
+/// <summary>Backdrop theme for the gesture HUD (snap chip, desktop strip, monitor map).</summary>
+public enum HudTheme
+{
+    Dark,
+    Light,
+    System,
+}
+
 /// <summary>User-facing, persisted application settings (serialized to JSON).</summary>
 public sealed class AppSettings
 {
@@ -54,6 +62,11 @@ public sealed class AppSettings
 
     /// <summary>Use the current Windows accent color for the snap overlay highlight.</summary>
     public bool OverlayUseAccent { get; set; } = true;
+
+    /// <summary>Backdrop theme for the gesture HUD (snap chip, desktop strip, monitor map).
+    /// Dark (default), Light, or System to follow the Windows app light/dark setting. The
+    /// highlight color is unchanged.</summary>
+    public HudTheme HudBackground { get; set; } = HudTheme.Dark;
 
     /// <summary>Start Swoosh automatically when you sign in to Windows.</summary>
     public bool LaunchAtLogin { get; set; } = false;

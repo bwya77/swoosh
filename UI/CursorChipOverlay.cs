@@ -5,7 +5,9 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using Swoosh.Native;
+using Swoosh.Settings;
 using Swoosh.Snapping;
 using Brushes = System.Windows.Media.Brushes;
 using Brush = System.Windows.Media.Brush;
@@ -53,6 +55,19 @@ public sealed class CursorChipOverlay
     // even with a grey accent over a light or busy wallpaper. A mostly-translucent
     // backdrop blended into bright desktops and washed the contrast out.
     private static readonly Brush ScreenBg = Freeze(new SolidColorBrush(Color.FromArgb(212, 18, 20, 26)));
+
+    // Light HUD theme: near-white backdrop with a soft grey bezel, chosen via settings.
+    private static readonly Brush LightEdge = Freeze(new SolidColorBrush(Color.FromArgb(235, 150, 156, 166)));
+    private static readonly Brush LightScreenBg = Freeze(new SolidColorBrush(Color.FromArgb(232, 244, 246, 249)));
+
+    // Active backdrop/bezel brushes (swapped by the HUD theme setting). Default dark.
+    private HudTheme _hudMode = HudTheme.Dark;
+    private bool _lightHud;
+    private Brush _screenBg = ScreenBg;
+    private Brush _screenEdge = WhiteEdge;
+    // Throttle for re-reading the system theme when following it, so a per-frame Show
+    // call does not hit the registry every frame.
+    private long _lastThemeCheckMs;
 
     private static readonly Brush DefaultSolid = Freeze(new SolidColorBrush(Color.FromArgb(235, 10, 132, 255)));
 
@@ -128,8 +143,9 @@ public sealed class CursorChipOverlay
     public IntPtr Handle => _win == null ? IntPtr.Zero : new WindowInteropHelper(_win).Handle;
 
     /// <summary>Apply live appearance settings: whether the snap fill animates between
-    /// zones, and the highlight color (the Windows accent color or a custom hex).</summary>
-    public void ApplyAppearance(bool animate, bool useAccent, string customHex)
+    /// zones, the highlight color (the Windows accent color or a custom hex), and the HUD
+    /// backdrop theme (dark, light, or follow the system light/dark setting).</summary>
+    public void ApplyAppearance(bool animate, bool useAccent, string customHex, HudTheme mode)
     {
         _animate = animate;
 
@@ -139,6 +155,76 @@ public sealed class CursorChipOverlay
 
         // Recolor anything currently on screen so the change is visible immediately.
         if (_singleFill is { Visibility: Visibility.Visible }) _singleFill.Background = _solid;
+
+        _hudMode = mode;
+        ApplyEffectiveTheme();
+    }
+
+    /// <summary>Resolve the backdrop theme to light or dark (reading the system setting when
+    /// following it) and rebuild the HUD if it differs from what is currently built.</summary>
+    private void ApplyEffectiveTheme()
+    {
+        bool light = _hudMode switch
+        {
+            HudTheme.Light => true,
+            HudTheme.Dark => false,
+            _ => SystemUsesLightTheme(),
+        };
+        if (light == _lightHud) return;
+
+        _lightHud = light;
+        _screenBg = light ? LightScreenBg : ScreenBg;
+        _screenEdge = light ? LightEdge : WhiteEdge;
+        // The backdrop is baked into each screen Border when built, so rebuild the whole
+        // HUD visual tree to pick up the new theme. It is only shown during a gesture, so
+        // tearing it down here just means the next gesture builds fresh.
+        RebuildForTheme();
+    }
+
+    /// <summary>When following the system theme, re-resolve it (throttled) before showing,
+    /// but never tear down a HUD that is currently visible mid-gesture.</summary>
+    private void SyncSystemTheme()
+    {
+        if (_hudMode != HudTheme.System || _shown) return;
+        long now = Environment.TickCount64;
+        if (now - _lastThemeCheckMs < 750) return;
+        _lastThemeCheckMs = now;
+        ApplyEffectiveTheme();
+    }
+
+    private static bool SystemUsesLightTheme()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            if (key?.GetValue("AppsUseLightTheme") is int v) return v != 0;
+        }
+        catch { /* default to dark on any failure */ }
+        return false;
+    }
+
+    /// <summary>Discard the HUD window and all cached visual pieces so the next gesture
+    /// rebuilds them with the current backdrop/bezel brushes.</summary>
+    private void RebuildForTheme()
+    {
+        CancelHideTimer();
+        _win?.Close();
+        _win = null;
+        _canvas = null;
+        _single = null;
+        _singleInner = null;
+        _singleFill = null;
+        _strip = null;
+        _stripCount = -1;
+        _stripFills.Clear();
+        _stripScreens.Clear();
+        _stripLefts.Clear();
+        _map = null;
+        _mapAnchored = false;
+        _shown = false;
+        _lastKey = "";
+        _lastPlace = (-99999, 0, 0, 0);
     }
 
     private void EnsureWindow()
@@ -237,12 +323,13 @@ public sealed class CursorChipOverlay
         _canvas!.Children.Add(_strip);
     }
 
-    /// <summary>Builds one monitor: rounded white-edged screen with a clipped inner
-    /// canvas and a (hidden) blue fill rectangle. Returns the pieces for later updates.</summary>
-    private static (Border screen, Canvas inner, Border fill) BuildScreen(double chipW) =>
+    /// <summary>Builds one monitor: rounded screen with a clipped inner canvas and a
+    /// (hidden) highlight fill rectangle. Backdrop and bezel follow the active HUD theme.
+    /// Returns the pieces for later updates.</summary>
+    private (Border screen, Canvas inner, Border fill) BuildScreen(double chipW) =>
         BuildScreenWH(chipW, ChipH);
 
-    private static (Border screen, Canvas inner, Border fill) BuildScreenWH(double chipW, double chipH)
+    private (Border screen, Canvas inner, Border fill) BuildScreenWH(double chipW, double chipH)
     {
         double innerW = chipW - 2 * Stroke;
         double innerH = chipH - 2 * Stroke;
@@ -269,15 +356,15 @@ public sealed class CursorChipOverlay
             Height = chipH,
             CornerRadius = new CornerRadius(Corner),
             BorderThickness = new Thickness(Stroke),
-            BorderBrush = WhiteEdge,
-            Background = ScreenBg,
+            BorderBrush = _screenEdge,
+            Background = _screenBg,
             Child = inner,
             Effect = new DropShadowEffect
             {
                 Color = Colors.Black,
                 BlurRadius = 7,
                 ShadowDepth = 1.5,
-                Opacity = 0.45,
+                Opacity = _lightHud ? 0.28 : 0.45,
                 Direction = 270,
             },
         };
@@ -354,6 +441,7 @@ public sealed class CursorChipOverlay
     /// target (when a monitor exists there) fills solid.</summary>
     public void ShowMonitorMap(bool up, bool down, bool left, bool right, MonitorDirection? target)
     {
+        SyncSystemTheme();
         EnsureWindow();
         if (_win == null) return;
         CancelHideTimer();
@@ -407,6 +495,7 @@ public sealed class CursorChipOverlay
     // -------------------------------------------------------------------------
     public void ShowSnap(SnapZone zone, double progress)
     {
+        SyncSystemTheme();
         EnsureWindow();
         if (_win == null) return;
         CancelHideTimer();
@@ -510,6 +599,7 @@ public sealed class CursorChipOverlay
     public void ShowDesktopStrip(int count, int currentIndex, DesktopDirection? lean, bool animateReveal = false, bool previewDestination = false, int destIndexOverride = -1)
     {
         if (count < 1) count = 1;
+        SyncSystemTheme();
         EnsureWindow();
         if (_win == null) return;
         CancelHideTimer();

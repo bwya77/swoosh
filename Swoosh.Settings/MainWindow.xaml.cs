@@ -214,15 +214,22 @@ public sealed partial class MainWindow : Window
             _ => 0,
         };
         ModifierCombo.IsEnabled = s.GridModifierEnabled;
-        SensitivitySlider.Value = s.Sensitivity;        MonitorMoveToggle.IsOn = s.MonitorMoveEnabled;
-        MonitorModifierCombo.SelectedIndex = s.MonitorMoveModifier switch
+        SensitivitySlider.Value = s.Sensitivity;
+        // Move to display is one control: Off, or the modifier key that engages it.
+        MonitorMoveCombo.SelectedIndex = !s.MonitorMoveEnabled ? 0 : s.MonitorMoveModifier switch
         {
-            GridModifier.Ctrl => 1,
-            GridModifier.Alt => 2,
+            GridModifier.Shift => 1,
+            GridModifier.Ctrl => 2,
+            GridModifier.Alt => 3,
+            _ => 1,
+        };
+        OverlayAccentToggle.IsOn = s.OverlayUseAccent;
+        HudBackgroundCombo.SelectedIndex = s.HudBackground switch
+        {
+            HudTheme.Light => 1,
+            HudTheme.System => 2,
             _ => 0,
         };
-        MonitorModifierCombo.IsEnabled = s.MonitorMoveEnabled;
-        OverlayAccentToggle.IsOn = s.OverlayUseAccent;
         _overlayColor = s.OverlayColor;
         HighlightSwatch(_overlayColor);
         SetSwatchesEnabled(!s.OverlayUseAccent);
@@ -255,14 +262,20 @@ public sealed partial class MainWindow : Window
             _ => GridModifier.Shift,
         },
         Sensitivity = SensitivitySlider.Value,
-        MonitorMoveEnabled = MonitorMoveToggle.IsOn,
-        MonitorMoveModifier = MonitorModifierCombo.SelectedIndex switch
+        MonitorMoveEnabled = MonitorMoveCombo.SelectedIndex > 0,
+        MonitorMoveModifier = MonitorMoveCombo.SelectedIndex switch
         {
-            1 => GridModifier.Ctrl,
-            2 => GridModifier.Alt,
+            2 => GridModifier.Ctrl,
+            3 => GridModifier.Alt,
             _ => GridModifier.Shift,
         },
         OverlayUseAccent = OverlayAccentToggle.IsOn,
+        HudBackground = HudBackgroundCombo.SelectedIndex switch
+        {
+            1 => HudTheme.Light,
+            2 => HudTheme.System,
+            _ => HudTheme.Dark,
+        },
         OverlayColor = _overlayColor,
         GridSpacing = (int)Math.Round(GridSpacingSlider.Value),
         CancelTimeoutSeconds = CancelTimeoutSlider.Value,
@@ -283,14 +296,9 @@ public sealed partial class MainWindow : Window
 
     private void OnModifierChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
-    private void OnMonitorMoveToggled(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        MonitorModifierCombo.IsEnabled = MonitorMoveToggle.IsOn;
-        SaveIfReady();
-    }
+    private void OnMonitorMoveChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
-    private void OnMonitorModifierChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
+    private void OnHudBackgroundChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnSensitivityChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 

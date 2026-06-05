@@ -130,7 +130,7 @@ public sealed class SwooshController : IDisposable
             GridModifier.Shift => Win32.VK_SHIFT,
             _ => Win32.VK_MENU,
         };
-        _chip.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
+        _chip.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor, s.HudBackground);
         _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
         _debug.SetVisible(s.DebugOverlay);
         _livePreview = s.LivePreview;

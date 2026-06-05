@@ -275,29 +275,15 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Spacing="2">
                                     <TextBlock Text="Move to display" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="Hold a key and swipe to send the window to the next physical monitor."
+                                    <TextBlock Text="Hold the chosen key and swipe to send the window to the next physical monitor. Choose Off to disable it."
+                                               TextWrapping="Wrap"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="MonitorMoveToggle" Grid.Column="1" Toggled="OnMonitorMoveToggled" />
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource Card}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Spacing="2">
-                                    <TextBlock Text="Move to display modifier" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="Which key engages moving the window across monitors."
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </StackPanel>
-                                <ComboBox x:Name="MonitorModifierCombo" Grid.Column="1" MinWidth="120"
+                                <ComboBox x:Name="MonitorMoveCombo" Grid.Column="1" MinWidth="120"
                                           VerticalAlignment="Center"
-                                          SelectionChanged="OnMonitorModifierChanged">
+                                          SelectionChanged="OnMonitorMoveChanged">
+                                    <ComboBoxItem Content="Off" />
                                     <ComboBoxItem Content="Shift" />
                                     <ComboBoxItem Content="Ctrl" />
                                     <ComboBoxItem Content="Alt" />
@@ -373,6 +359,29 @@
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <StackPanel x:Name="SwatchPanel" Orientation="Horizontal" Spacing="8" />
                             </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="HUD background" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Backdrop for the gesture HUD. Choose Follow system to match the Windows light/dark setting. The highlight color is unchanged."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ComboBox x:Name="HudBackgroundCombo" Grid.Column="1" MinWidth="140"
+                                          VerticalAlignment="Center"
+                                          SelectionChanged="OnHudBackgroundChanged">
+                                    <ComboBoxItem Content="Dark" />
+                                    <ComboBoxItem Content="Light" />
+                                    <ComboBoxItem Content="Follow system" />
+                                </ComboBox>
+                            </Grid>
                         </Border>
                     </StackPanel>
 

@@ -4,6 +4,8 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- The gesture HUD can now use a light background. In Settings under Appearance, the new "HUD background" option offers Dark, Light, or Follow system (which matches the Windows light/dark setting and updates on your next gesture when you change it). The highlight color is unchanged.
+- Consolidated the two "Move to display" settings into one. A single dropdown now offers Off, Shift, Ctrl, or Alt, so you pick whether it is on and which key engages it in one place.
 - Fixed the first gesture after a cold start sometimes being misread as a move to another virtual desktop. On the first launch the input thread could briefly stall while warming up, which made a quick swipe look like a press-and-hold. Swoosh now ignores that startup stall, so your first swipe snaps the window as expected.
 - New "Preview destination desktop" option (on by default): when you move a window to another virtual desktop (hold then swipe), the HUD now highlights the desktop the window will land on as you aim, and the move commits when you drop instead of switching live as your fingers sweep. Swipe farther to target a further desktop, so you can send a window straight from desktop 1 to desktop 3 in a single motion. Turn it off to keep the live step-by-step ratchet that switches as you go.
 - Snapping with live preview is cleaner: the window no longer does a small refresh or re-glide at the moment you set it. The live preview already places the window during the swipe, so committing the gesture just leaves it there.
