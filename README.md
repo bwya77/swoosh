@@ -9,231 +9,114 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6)
 
-Swish-style window management for Windows. Hover the cursor over a window's
-**titlebar**, then **two-finger swipe** on the Precision Touchpad and the window
-snaps to a left/right half, a quarter, fullscreen, or minimize. Inspired by the
-macOS app [Swish](https://highlyopinionated.co/swish/).
+Swoosh brings macOS Swish style window management to Windows. Hover your cursor
+over a window's titlebar, then use simple Precision Touchpad gestures to snap,
+move, and resize it. Inspired by the macOS app
+[Swish](https://highlyopinionated.co/swish/).
 
-> Status: working MVP. The snapping engine is verified pixel-perfect. Touchpad
-> gesture decoding is built to the HID Precision Touchpad spec and ships with a
-> live debug overlay so you can validate finger tracking on your hardware.
+## Install
 
-## Download
+Download the latest build from the
+[Releases page](https://github.com/bwya77/swoosh/releases/latest).
 
-Grab the latest build from the [Releases page](https://github.com/bwya77/swoosh/releases/latest).
+**Installer (recommended).** Run the signed installer. It installs to Program
+Files, adds a Start Menu shortcut, can start with Windows, and updates itself.
 
-**Recommended — installer** (signed, installs to Program Files, Start Menu shortcut, clean uninstaller, in-app updates):
-
-- `SwooshSetup-<version>-win-arm64.exe` for ARM64 devices (Surface Pro X, Surface Pro 9 5G, and similar)
+- `SwooshSetup-<version>-win-arm64.exe` for ARM64 devices (Surface Pro X,
+  Surface Pro 9 5G, and similar)
 - `SwooshSetup-<version>-win-x64.exe` for everything else
 
-**Portable — zip** (self-contained, no install; unzip and run `Swoosh.exe`):
+**Portable (no install).** Unzip and run `Swoosh.exe`.
 
-- `Swoosh-<version>-win-arm64.zip` / `Swoosh-<version>-win-x64.zip`
+- `Swoosh-<version>-win-arm64.zip` or `Swoosh-<version>-win-x64.zip`
 
-No .NET install is required either way — the runtime is bundled. Both the installer and
-the binaries inside the zip are code-signed, and every release also ships `SHA256SUMS.txt`
-plus a signed SLSA provenance bundle (see [Security &amp; privacy](#security--privacy)).
+You do not need to install .NET. The runtime is bundled. Everything is code
+signed, and each release ships `SHA256SUMS.txt` plus a signed build provenance
+bundle. See [Security and privacy](#security-and-privacy).
 
-Every push to `main` publishes a fresh release automatically with an
-auto-incrementing version, so the download link above always points at the
-newest build.
+## Gestures
 
-## Gestures (two fingers, cursor over the titlebar)
+Every gesture starts with your cursor over a window's titlebar. A preview shows
+where the window will go. Lift your fingers to drop it there, or press Esc to
+cancel.
 
-| Swipe        | Action            |
-|--------------|-------------------|
-| Left         | Left half         |
-| Right        | Right half        |
-| Up           | Maximize          |
-| Down         | Minimize          |
-| Diagonal     | Quarter           |
+Two-finger swipe:
 
-A translucent preview shows the target zone as you swipe; lift to commit. The
-preview glides smoothly between zones and the window animates into place rather
-than snapping instantly.
+| Swipe          | Action              |
+| -------------- | ------------------- |
+| Left or Right  | Snap to that half   |
+| Up             | Maximize            |
+| Down           | Minimize            |
+| Diagonal       | Snap to that quarter|
 
-## Pinch to fullscreen and back
+A few more:
 
-With **two fingers over the titlebar**, spread them apart (**pinch-out**) and the
-window goes fullscreen; draw them together (**pinch-in**) to restore it. A live
-preview tracks the pinch so you can see it engage before you commit. The centroid
-has to stay put, so a sideways two-finger swipe is never mistaken for a pinch.
+- Pinch out to go fullscreen, pinch in to restore.
+- Hold Shift (configurable) while swiping to snap to a 3x3 grid of thirds.
+- Hold two fingers, then swipe to move the window to another monitor or virtual
+  desktop.
+- Hold Alt (configurable) and swipe to send the window to the next display.
+- Five-finger drag to free move the window with fine control.
+- Five-finger tap to center the window on its monitor.
 
-## Thirds and the 3x3 grid
+Swooshing a window always brings it to the front. For exactly how each gesture
+works, see the [deep dive](docs/deep-dive.md).
 
-Hold a **modifier key** (default **Shift**, configurable to Ctrl or Alt in
-settings) while you swipe and the screen snaps to a **3x3 grid** instead of the
-normal halves and quarters. As you move left to right the preview steps through
-left third, left two-thirds, centered third, right two-thirds, then right third,
-and the same vertically. Diagonal swipes land the window in any of the four 1/3
-by 1/3 corner cells. Release the modifier to go back to halves and quarters.
+### Keyboard fallback
 
-## Move across monitors and virtual desktops
+PowerToys FancyZones already uses `Win+Arrow`, so Swoosh uses `Ctrl+Alt+Shift`:
 
-Press and hold two fingers on the titlebar, then swipe to send the window to
-another monitor or virtual desktop. A small **mini-map HUD** appears at the
-cursor: a rounded square stands in for the monitor, the target zone lights up as
-you move, and a second square appears when a virtual desktop sits to the
-side so you can see where the window will land. The HUD stays up after a move so
-you can keep going to the next screen or step back to the previous one. The
-target zone lights up in your Windows accent color by default, or any color you
-pick in settings.
-
-## Move to another display
-
-Hold the **move-to-display modifier** (Alt by default) and swipe two fingers
-over the titlebar to send the window to the adjacent physical monitor. A
-**monitor-map HUD** appears at the cursor showing your current display in the
-center with up, down, left, and right neighbors around it. Only directions that
-have a real monitor are drawn, and the one you are swiping toward lights up so
-you can see where the window will land. Lift your fingers to commit the move.
-The window keeps its relative position and size on the new display, so a
-left-half window stays a left-half window and a maximized window stays
-maximized. Pick the modifier key in settings (Shift, Ctrl, or Alt).
-
-## Five-finger free move
-
-Put **five fingers** on the titlebar and the touchpad becomes a 1:1 proxy for the
-monitor. Move your fingers and the window tracks them live, so you can place it
-anywhere with fine-grained control. Lift to drop it in place.
-
-## Five-finger tap to center
-
-Tap **five fingers** briefly on the titlebar (a quick touch with no movement) and
-the window snaps to the center of its monitor, keeping its current size. This is
-the equivalent of Swish's two-finger double-tap, mapped to five fingers because no
-native Windows gesture claims a five-finger tap, so there's nothing to conflict
-with. A longer or moving five-finger touch is treated as a free move instead.
-
-## Keyboard fallback
-
-Because PowerToys **FancyZones** already owns `Win+Arrow` and `Win+Alt+Arrow`, the
-fallback uses **Ctrl+Alt+Shift**:
-
-- `Ctrl+Alt+Shift+Left/Right` for left or right half
+- `Ctrl+Alt+Shift+Left/Right` for the left or right half
 - `Ctrl+Alt+Shift+Up/Down` for maximize or minimize
-- `Ctrl+Alt+Shift+U/I/J/K` for the top-left, top-right, bottom-left, or bottom-right quarter
+- `Ctrl+Alt+Shift+U/I/J/K` for the four quarters
 
-The hotkey acts on the window **under the cursor**.
+The hotkey acts on the window under your cursor.
 
 ## Settings
 
-Open **Settings...** from the tray icon for a polished WinUI-style window with a
-left navigation pane:
+Open Settings from the tray icon. You can:
 
-- the current **version** and a short **changelog**, plus a **Check for updates**
-  button
-- toggle **gestures** and the **touchpad debug overlay**
-- toggle the smooth **snap animation**
-- enable the **grid modifier** and choose the key (Shift, Ctrl, or Alt) for 3x3
-  snapping
-- a **touch sensitivity** slider that controls how easily a swipe is read as
-  diagonal versus straight
-- pick the **overlay color** from a set of swatches, or have it follow your
-  **Windows accent color**
+- Turn gestures on or off, including each snap gesture individually.
+- Turn on Start with Windows.
+- Adjust touch sensitivity, grid spacing, and the cancel timeout.
+- Turn on live preview, where the real window moves as you swipe instead of a
+  translucent overlay.
+- Pick the overlay color or follow your Windows accent color.
+- Check for updates and read the changelog.
 
-Swoosh also checks GitHub for a newer release on startup and lets you know in the
-tray if one is available.
+## Security and privacy
 
-## How it works
+Swoosh is a local tool, built to be easy to trust.
 
-```
-RawTouchpadListener --> TouchpadParser --> GestureEngine --> SwooshController --> WindowSnapper
-   (WM_INPUT, HID)     (hid.dll HidP_*)    (gesture logic)     (orchestration)    (SetWindowPos)
-```
+- No telemetry and no data collection. The only network call is an optional
+  update check against GitHub.
+- Signed releases using Azure Trusted Signing (verified publisher).
+- Every release includes `SHA256SUMS.txt` and a signed SLSA provenance bundle.
+- CI runs CodeQL, OpenSSF Scorecard, and Dependabot, plus unit tests on every
+  change.
 
-- **RawTouchpadListener** registers for raw HID input (Usage Page `0x0D`,
-  Usage `0x05`) on a message-only window with `RIDEV_INPUTSINK`, so it sees the
-  touchpad even when another app is focused.
-- **TouchpadParser** uses `hid.dll` (`HidP_GetCaps`, `HidP_GetValueCaps`,
-  `HidP_GetUsageValue`, `HidP_GetUsages`) to decode each report into per-finger
-  contacts (id, normalized X/Y, tip-down). It also filters out a firmware quirk
-  where a contact can stay wedged down after a multi-finger lift.
-- **GestureEngine** tracks the finger centroid and classifies the gesture: a
-  2-finger swipe into one of 8 snap directions, a press-and-hold swipe into a
-  monitor or desktop move, a 5-finger free move, or a 5-finger tap to center.
-- **WindowSnapper** computes the target rect from the monitor work area and
-  applies it with `SetWindowPos`, compensating for the invisible DWM resize
-  border (`DWMWA_EXTENDED_FRAME_BOUNDS`) so the **visible** frame lands exactly
-  on the zone edges.
+To verify a download or report a vulnerability, see [SECURITY.md](SECURITY.md).
+For how signing is set up, see [SIGNING.md](SIGNING.md).
 
-The app is per-monitor-DPI-v2 aware, so geometry is correct across mixed-DPI
-multi-monitor setups.
-
-## Build and run from source
+## Build from source
 
 ```powershell
-dotnet build -c Debug
-dotnet run -c Debug
-# or produce a self-contained single file like the released build:
-dotnet publish -c Release -r win-arm64 --self-contained true -p:PublishSingleFile=true
-.\bin\Release\net8.0-windows\win-arm64\publish\Swoosh.exe
+dotnet build Swoosh.csproj -c Debug
+dotnet run -c Debug --project Swoosh.csproj
 ```
 
-Swap `win-arm64` for `win-x64` on Intel or AMD hardware.
+Full developer setup, project layout, and tests are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-Runs in the system tray. Right-click the tray icon for:
+## Learn more
 
-- **Settings...** to open the settings window
-- **Gestures enabled** as the master toggle
-- **Touchpad debug overlay** that shows live finger contacts (use this to confirm
-  the touchpad is being decoded on your machine)
-- **About / Quit**
-
-A diagnostic log is written to `%TEMP%\swoosh.log`.
-
-## Releases
-
-Releases are produced by a GitHub Actions workflow (`.github/workflows/release.yml`).
-On every push to `main` it builds win-x64 and win-arm64, packages each as a zip,
-and publishes a GitHub Release tagged `v0.1.<run number>`. To start a new version
-series, edit the `0.1.` prefix in that workflow and the run number keeps counting
-from there. You can also start a build by hand from the **Actions** tab using
-**Run workflow**.
-
-## Security & privacy
-
-Swoosh is a local utility built to be easy to trust and easy to verify.
-
-- **No telemetry, no data collection.** The only network request is an optional
-  update check against the public GitHub Releases API.
-- **Least privilege.** It registers for raw touchpad input, moves the window under
-  the cursor via standard Win32 APIs, and (only if you enable "Start with Windows")
-  writes a single per-user `HKCU\…\Run` value. No elevation, no machine-wide changes.
-- **Signed releases.** Binaries are code-signed with **Azure Trusted Signing**
-  (verified publisher). See [SIGNING.md](SIGNING.md).
-- **Verifiable builds.** Every release zip carries a signed
-  [SLSA build provenance attestation](https://github.com/bwya77/swoosh/attestations)
-  and a `SHA256SUMS.txt`.
-- **Automated scanning in CI.** CodeQL (SAST), OpenSSF Scorecard, and Dependabot
-  (dependency alerts + automated fixes) run on every change and on a schedule.
-- **Tested.** Core snapping geometry and settings serialization are covered by unit
-  tests run on every push and PR.
-
-Verify a download:
-
-```powershell
-# Authenticode signature (verified publisher)
-Get-AuthenticodeSignature .\Swoosh.exe | Format-List Status, SignerCertificate
-
-# SLSA build provenance — proves it was built by this repo's CI from this source
-gh attestation verify .\Swoosh-<version>-win-<arch>.zip --repo bwya77/swoosh
-
-# SHA-256 against the published SHA256SUMS.txt
-Get-FileHash .\Swoosh-<version>-win-<arch>.zip -Algorithm SHA256
-```
-
-To report a vulnerability, see [SECURITY.md](SECURITY.md). Prefer not to trust a
-prebuilt binary at all? Build it yourself from source (see above) — the result is
-the same app.
-
-## Roadmap
-
-- Magic Mouse gesture support
-- Saveable custom snap layouts
+- [Deep dive](docs/deep-dive.md): how the gestures and touchpad decoding work.
+- [Contributing](CONTRIBUTING.md): build, test, and submit changes.
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md) and [code signing](SIGNING.md)
 
 ## Notes
 
-"Swish" is a trademark of its owner. This project ("Swoosh") is an independent,
-clean-room reimplementation of the interaction concept for Windows.
+Swish is a trademark of its owner. Swoosh is an independent, clean-room
+reimplementation of the interaction concept for Windows, released under the
+[MIT License](LICENSE).
