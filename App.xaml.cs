@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
@@ -19,6 +20,7 @@ public partial class App : System.Windows.Application
     private readonly SettingsStore _settings = new();
     private readonly UpdateChecker _updates = new();
     private string? _updateUrl;
+    private string? _installerUrl;
 
     // Per-user single-instance guard. Held for the lifetime of the process so a
     // second launch (e.g. login Run key firing while the app is already up, or a
@@ -104,7 +106,7 @@ public partial class App : System.Windows.Application
             },
             onQuit: () => Shutdown());
         _tray.DoubleClick += (_, _) => OpenSettings();
-        _tray.BalloonTipClicked += (_, _) => OpenUpdateUrl();
+        _tray.BalloonTipClicked += (_, _) => OnUpdateClicked();
     }
 
     private void OpenSettings()
@@ -200,11 +202,12 @@ public partial class App : System.Windows.Application
         if (info != null)
         {
             _updateUrl = info.HtmlUrl;
+            _installerUrl = info.InstallerUrl;
             _tray?.ShowBalloonTip(
                 10000,
                 "Swoosh update available",
                 $"Version {info.Latest} is available (you have {_updates.CurrentVersion}). " +
-                "Click here to download.",
+                "Click here to update.",
                 Forms.ToolTipIcon.Info);
         }
         else if (manual)
@@ -214,6 +217,58 @@ public partial class App : System.Windows.Application
                 "Swoosh",
                 $"You're on the latest version ({_updates.CurrentVersion}).",
                 Forms.ToolTipIcon.Info);
+        }
+    }
+
+    /// <summary>Act on the "update available" balloon. An installed build downloads and
+    /// runs the signed installer (which closes and relaunches Swoosh); a portable build
+    /// just opens the releases page.</summary>
+    private async void OnUpdateClicked()
+    {
+        if (IsInstalled() && !string.IsNullOrEmpty(_installerUrl) &&
+            await TryRunInstallerAsync(_installerUrl!))
+            return;
+        OpenUpdateUrl();
+    }
+
+    /// <summary>True when running from a Program Files install (vs an extracted portable zip).</summary>
+    private static bool IsInstalled()
+    {
+        try
+        {
+            string? p = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(p)) return false;
+            foreach (var f in new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86 })
+            {
+                string root = Environment.GetFolderPath(f);
+                if (!string.IsNullOrEmpty(root) && p.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch { /* fall through */ }
+        return false;
+    }
+
+    /// <summary>Download the signed installer to a temp file and launch it. The installer's
+    /// Restart Manager support closes the running app, updates in place, and relaunches it.</summary>
+    private static async Task<bool> TryRunInstallerAsync(string url)
+    {
+        try
+        {
+            string dest = Path.Combine(Path.GetTempPath(), $"SwooshSetup-{Guid.NewGuid():N}.exe");
+            using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
+            using (var resp = await http.GetAsync(url))
+            {
+                resp.EnsureSuccessStatusCode();
+                await using var fs = File.Create(dest);
+                await resp.Content.CopyToAsync(fs);
+            }
+            Process.Start(new ProcessStartInfo(dest) { UseShellExecute = true });
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

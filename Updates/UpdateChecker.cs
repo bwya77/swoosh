@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace Swoosh.Updates;
@@ -16,7 +17,7 @@ public sealed class UpdateChecker
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
 
-    public sealed record UpdateInfo(Version Latest, string Tag, string HtmlUrl);
+    public sealed record UpdateInfo(Version Latest, string Tag, string HtmlUrl, string? InstallerUrl = null);
 
     /// <summary>One published release, used to render the in-app changelog.</summary>
     public sealed record ReleaseNote(string Name, string Tag, string Body, DateTimeOffset? Published, string HtmlUrl);
@@ -58,14 +59,42 @@ public sealed class UpdateChecker
 
             var latest = ParseVersion(tag);
             if (latest == null) return null;
+            if (latest <= CurrentVersion) return null;
 
-            return latest > CurrentVersion ? new UpdateInfo(latest, tag, htmlUrl) : null;
+            // Find the installer asset matching this machine's architecture, if present,
+            // so an installed build can update itself in place rather than just opening
+            // the releases page.
+            string? installerUrl = null;
+            if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+            {
+                string arch = ArchToken();
+                foreach (var a in assets.EnumerateArray())
+                {
+                    string name = a.TryGetProperty("name", out var nm) ? nm.GetString() ?? "" : "";
+                    if (name.StartsWith("SwooshSetup", StringComparison.OrdinalIgnoreCase) &&
+                        name.EndsWith($"win-{arch}.exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        installerUrl = a.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+                        break;
+                    }
+                }
+            }
+
+            return new UpdateInfo(latest, tag, htmlUrl, installerUrl);
         }
         catch
         {
             return null; // network / parse / cancellation: treat as "no update info"
         }
     }
+
+    /// <summary>The release-asset architecture token for the running process.</summary>
+    private static string ArchToken() => RuntimeInformation.ProcessArchitecture switch
+    {
+        Architecture.Arm64 => "arm64",
+        Architecture.X86 => "x86",
+        _ => "x64",
+    };
 
     /// <summary>
     /// Fetch recent published releases (newest first) for the in-app changelog.

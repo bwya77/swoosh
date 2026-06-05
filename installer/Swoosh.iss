@@ -1,0 +1,73 @@
+; Swoosh installer (Inno Setup). Built in CI, once per architecture:
+;
+;   ISCC /DAppVersion=<version> /DArch=x64|arm64 /DSourceDir=<publish dir> /O<out> installer\Swoosh.iss
+;
+; Installs the self-contained tray app + WinUI settings app into Program Files,
+; adds a Start Menu shortcut, and registers a clean uninstaller. Launch-at-login
+; stays app-owned (the tray app reconciles the HKCU Run key from its setting); the
+; uninstaller removes that Run value so it never dangles after removal.
+
+#ifndef AppVersion
+  #define AppVersion "0.0.0"
+#endif
+#ifndef Arch
+  #define Arch "x64"
+#endif
+#ifndef SourceDir
+  #define SourceDir "..\publish\win-" + Arch
+#endif
+
+[Setup]
+AppId={{BD8314B2-7533-4C33-8CDB-605EA803A3D9}
+AppName=Swoosh
+AppVersion={#AppVersion}
+AppPublisher=Bradley Wyatt
+AppPublisherURL=https://github.com/bwya77/swoosh
+AppSupportURL=https://github.com/bwya77/swoosh/issues
+AppUpdatesURL=https://github.com/bwya77/swoosh/releases
+DefaultDirName={autopf}\Swoosh
+DefaultGroupName=Swoosh
+DisableProgramGroupPage=yes
+DisableDirPage=auto
+UninstallDisplayIcon={app}\Swoosh.exe
+UninstallDisplayName=Swoosh
+SetupIconFile=..\Assets\swoosh.ico
+OutputBaseFilename=SwooshSetup-{#AppVersion}-win-{#Arch}
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+PrivilegesRequired=admin
+; Close a running Swoosh before replacing files and bring it back afterwards, so
+; in-app updates apply cleanly even while the tray app is running.
+CloseApplications=yes
+RestartApplications=yes
+#if Arch == "arm64"
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
+ArchitecturesAllowed=x64os
+ArchitecturesInstallIn64BitMode=x64os
+#endif
+
+[Files]
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: recursesubdirs ignoreversion
+
+[Icons]
+Name: "{group}\Swoosh"; Filename: "{app}\Swoosh.exe"
+Name: "{autodesktop}\Swoosh"; Filename: "{app}\Swoosh.exe"; Tasks: desktopicon
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
+
+[Run]
+Filename: "{app}\Swoosh.exe"; Description: "Launch Swoosh"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  // Remove the app-owned "Start with Windows" entry so it doesn't point at a
+  // deleted executable after uninstall. User settings under %APPDATA%\Swoosh are
+  // intentionally left in place.
+  if CurUninstallStep = usUninstall then
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Swoosh');
+end;

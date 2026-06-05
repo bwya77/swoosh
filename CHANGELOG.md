@@ -4,6 +4,8 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- Swoosh now has a proper signed Windows installer: `SwooshSetup-<arch>.exe` installs to Program Files with a Start Menu shortcut and a clean uninstaller (which also tidies up the sign-in entry). The portable zip is still available for no-install use.
+- Installed builds can now update themselves: choosing "update" downloads and runs the new signed installer, which closes Swoosh, updates in place, and relaunches it. Portable builds still open the releases page.
 - New "Live window preview" option (off by default): as you swipe, the real window glides to the target zone instead of showing the translucent overlay, so you preview on the actual app. Esc puts it back.
 - New "Grid spacing" slider (0–10px): leave a consistent gap around snapped windows, or keep it at 0 for flush, edge-to-edge snapping.
 - New "Cancel timeout" slider (default 0.8s): rest your fingers still to drop the window into the current zone, or press Esc to cancel and put it back where it started.

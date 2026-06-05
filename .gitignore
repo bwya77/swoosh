@@ -96,3 +96,7 @@ Swoosh.Settings/pub-arm64/
 Swoosh.Settings/pub-x64/
 
 tools/variants/
+
+# Local installer build artifacts
+SwooshSetup-*.exe
+_isstest/

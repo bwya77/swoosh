@@ -111,6 +111,42 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
+      # Build a Windows installer (Inno Setup) per architecture from the signed publish
+      # output. ISCC ships on the runner; install it on the fly if a future image drops it.
+      - name: Build installers
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $iscc = (Get-ChildItem "C:\Program Files (x86)\Inno Setup 6\ISCC.exe","C:\Program Files\Inno Setup 6\ISCC.exe" -EA SilentlyContinue | Select-Object -First 1).FullName
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            $iscc = (Get-ChildItem "C:\Program Files (x86)\Inno Setup 6\ISCC.exe","C:\Program Files\Inno Setup 6\ISCC.exe" -EA SilentlyContinue | Select-Object -First 1).FullName
+          }
+          if (-not $iscc) { throw "ISCC (Inno Setup) not found" }
+          foreach ($arch in 'x64','arm64') {
+            & "$iscc" "/DAppVersion=$v" "/DArch=$arch" "/DSourceDir=$env:GITHUB_WORKSPACE\publish\win-$arch" "/O$env:GITHUB_WORKSPACE" "installer\Swoosh.iss"
+            if ($LASTEXITCODE -ne 0) { throw "ISCC failed for $arch" }
+          }
+          Get-ChildItem SwooshSetup-*.exe | ForEach-Object { Write-Host "$($_.Name)  $([math]::Round($_.Length/1MB,1)) MB" }
+
+      # Sign the installer executables so the file users actually double-click is signed.
+      - name: Sign installers (Azure Trusted Signing)
+        if: env.HAS_SIGNING == 'true'
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ vars.TRUSTED_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.TRUSTED_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}
+          files-folder-filter: exe
+          files-folder-recurse: false
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       - name: Package artifacts
         shell: pwsh
         run: |
@@ -123,18 +159,20 @@ jobs:
       - name: Checksums
         shell: pwsh
         run: |
-          Get-FileHash Swoosh-*.zip -Algorithm SHA256 |
+          Get-FileHash Swoosh-*.zip, SwooshSetup-*.exe -Algorithm SHA256 |
             ForEach-Object { '{0}  {1}' -f $_.Hash.ToLower(), (Split-Path $_.Path -Leaf) } |
             Out-File -Encoding ascii SHA256SUMS.txt
           Get-Content SHA256SUMS.txt
 
-      # Signed SLSA build provenance: lets anyone verify a release zip was built by this
-      # repository's CI from this commit, with `gh attestation verify <zip> --repo bwya77/swoosh`.
+      # Signed SLSA build provenance: lets anyone verify a release artifact was built by this
+      # repository's CI from this commit, with `gh attestation verify <file> --repo bwya77/swoosh`.
       - name: Attest build provenance
         id: attest
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
-          subject-path: 'Swoosh-*.zip'
+          subject-path: |
+            Swoosh-*.zip
+            SwooshSetup-*.exe
 
       # Also attach the provenance bundle as a release asset so the provenance is
       # discoverable on the release itself, not only in the attestations store.
@@ -149,6 +187,7 @@ jobs:
           name: Swoosh v${{ steps.ver.outputs.version }}
           generate_release_notes: true
           files: |
+            SwooshSetup-*.exe
             Swoosh-*.zip
             SHA256SUMS.txt
             Swoosh-*.intoto.jsonl

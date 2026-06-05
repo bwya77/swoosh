@@ -20,13 +20,20 @@ macOS app [Swish](https://highlyopinionated.co/swish/).
 
 ## Download
 
-Grab the latest build from the [Releases page](https://github.com/bwya77/swoosh/releases/latest):
+Grab the latest build from the [Releases page](https://github.com/bwya77/swoosh/releases/latest).
 
-- `Swoosh-<version>-win-arm64.zip` for ARM64 devices (Surface Pro X, Surface Pro 9 5G, and similar)
-- `Swoosh-<version>-win-x64.zip` for everything else
+**Recommended — installer** (signed, installs to Program Files, Start Menu shortcut, clean uninstaller, in-app updates):
 
-Each archive is a self-contained single executable. Unzip it and run `Swoosh.exe`.
-No .NET install is required because the runtime is bundled inside the binary.
+- `SwooshSetup-<version>-win-arm64.exe` for ARM64 devices (Surface Pro X, Surface Pro 9 5G, and similar)
+- `SwooshSetup-<version>-win-x64.exe` for everything else
+
+**Portable — zip** (self-contained, no install; unzip and run `Swoosh.exe`):
+
+- `Swoosh-<version>-win-arm64.zip` / `Swoosh-<version>-win-x64.zip`
+
+No .NET install is required either way — the runtime is bundled. Both the installer and
+the binaries inside the zip are code-signed, and every release also ships `SHA256SUMS.txt`
+plus a signed SLSA provenance bundle (see [Security &amp; privacy](#security--privacy)).
 
 Every push to `main` publishes a fresh release automatically with an
 auto-incrementing version, so the download link above always points at the
