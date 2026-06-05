@@ -67,6 +67,11 @@ public sealed class SwooshController : IDisposable
     private double _curFracX, _curFracY;
     private bool _haveCurFrac;
 
+    // Preview destination desktop: when on, the virtual-desktop strip HUD highlights the
+    // neighbour you are leaning toward (where the window will land) instead of the current
+    // desktop, then settles on the destination once the move completes.
+    private bool _previewDeskDest;
+
     // Per-gesture enable flags (Swish-style: each snap gesture can be turned off
     // individually from the Snapping settings). Default on.
     private bool _maximizeEnabled = true;
@@ -130,6 +135,8 @@ public sealed class SwooshController : IDisposable
         _debug.SetVisible(s.DebugOverlay);
         _livePreview = s.LivePreview;
         _moveCursor = s.MoveCursor;
+        _previewDeskDest = s.PreviewDesktopDestination;
+        _gestures.DesktopMoveOnRelease = s.PreviewDesktopDestination;
     }
 
     /// <summary>Resolve a swipe to a zone, honoring the thirds modifier if held.</summary>
@@ -216,6 +223,7 @@ public sealed class SwooshController : IDisposable
         _gestures.HoldEngaged += OnHoldEngaged;
         _gestures.HoldUpdated += OnHoldUpdated;
         _gestures.DesktopMove += OnDesktopMove;
+        _gestures.DesktopHoldCommit += OnDesktopHoldCommit;
         _gestures.MonitorMoveUpdated += OnMonitorMoveUpdated;
         _gestures.MonitorMove += OnMonitorMove;
         _gestures.FreeMoveBegan += OnFreeMoveBegan;
@@ -478,23 +486,32 @@ public sealed class SwooshController : IDisposable
             _deskCount = Math.Max(1, cnt);
             _deskIndex = Math.Clamp(idx, 0, _deskCount - 1);
         }
-        _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, animateReveal: true);
+        _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, animateReveal: true, previewDestination: _previewDeskDest);
         Log.Write($"HoldEngaged layout({ld})");
     }
 
-    private void OnHoldUpdated(DesktopDirection? lean, double progress)
+    private void OnHoldUpdated(DesktopDirection? lean, double progress, int aim)
     {
         if (!_armed) return;
-        _chip.ShowDesktopStrip(_deskCount, _deskIndex, lean);
+        if (_previewDeskDest)
+        {
+            // Preview the desktop the window will jump to: aim is the signed number of
+            // desktops from the start, clamped to what exists.
+            int target = Math.Clamp(_deskIndex + aim, 0, _deskCount - 1);
+            _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, previewDestination: true, destIndexOverride: target);
+        }
+        else
+        {
+            _chip.ShowDesktopStrip(_deskCount, _deskIndex, lean);
+        }
     }
 
     private void OnDesktopMove(DesktopDirection dir)
     {
         _preview.Hide();
         if (!_armed) { return; }
-        // Carry the HUD overlay to the new desktop so it stays visible, and keep
-        // the gesture armed so the user can step to further desktops (or back)
-        // without lifting their fingers. The hold ends only on release.
+        // Live ratchet: carry the HUD overlay to the new desktop so it stays visible, and
+        // keep the gesture armed so the user can step to further desktops without lifting.
         bool ok = VirtualDesktop.MoveAdjacent(_target, dir, _chip.Handle, out string diag);
         Log.Write($"DesktopMove dir={dir} ok={ok} {diag}");
         if (ok)
@@ -505,6 +522,32 @@ public sealed class SwooshController : IDisposable
             _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
             _stats.Add();
         }
+    }
+
+    /// <summary>Commit-on-release jump: send the window to the previewed target desktop
+    /// (possibly several desktops away), follow it there, confirm on the HUD, then fade.</summary>
+    private void OnDesktopHoldCommit(int aim)
+    {
+        _preview.Hide();
+        if (!_armed) { return; }
+        int target = Math.Clamp(_deskIndex + aim, 0, _deskCount - 1);
+        int delta = target - _deskIndex;
+        if (delta != 0)
+        {
+            var dir = delta > 0 ? DesktopDirection.Right : DesktopDirection.Left;
+            bool ok = VirtualDesktop.MoveBySteps(_target, dir, Math.Abs(delta), _chip.Handle, out string diag);
+            Log.Write($"DesktopJump aim={aim} delta={delta} ok={ok} {diag}");
+            if (ok)
+            {
+                _deskIndex = target;
+                Win32.ForceForeground(_target);
+                _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, previewDestination: _previewDeskDest);
+                _stats.Add();
+            }
+        }
+        // The gesture is over (committed on lift); no cancellation event follows.
+        _armed = false;
+        _chip.Hide();
     }
 
     private void OnFreeMoveBegan()

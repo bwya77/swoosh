@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- New "Preview destination desktop" option (on by default): when you move a window to another virtual desktop (hold then swipe), the HUD now highlights the desktop the window will land on as you aim, and the move commits when you drop instead of switching live as your fingers sweep. Swipe farther to target a further desktop, so you can send a window straight from desktop 1 to desktop 3 in a single motion. Turn it off to keep the live step-by-step ratchet that switches as you go.
 - Snapping with live preview is cleaner: the window no longer does a small refresh or re-glide at the moment you set it. The live preview already places the window during the swipe, so committing the gesture just leaves it there.
 - Performance: the touchpad decoder no longer formats and writes a diagnostic line to disk on every frame during a gesture, and no longer allocates and copies the raw report buffer per frame. Gesture input is lighter on CPU and produces no garbage on the hot path. Detailed per-frame input logging is still available for bug reports by setting the SWOOSH_LOG environment variable to 1 before launching.
 - New "Move cursor with window" setting (off by default): after a snap, the cursor follows the window to the same relative spot it was grabbed at, so the middle of the titlebar stays under the cursor in the window's new position.

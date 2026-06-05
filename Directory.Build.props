@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    Single source of truth for the product version. Every project in the repo
+    (the tray app, the WinUI settings app, the tests) inherits this, so the
+    version shown in Settings > About always matches the app. Release builds
+    override it from CI with -p:Version=<tag>, which takes precedence over this
+    file, so this value only needs bumping for local/dev builds and as the
+    baseline. Bump it together with the CHANGELOG when cutting a release.
+  -->
+  <PropertyGroup>
+    <Version>0.1.17</Version>
+  </PropertyGroup>
+</Project>

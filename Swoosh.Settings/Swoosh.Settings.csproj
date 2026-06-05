@@ -15,7 +15,6 @@
     <WindowsPackageType>None</WindowsPackageType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.1.0</Version>
     <DefaultLanguage>en-US</DefaultLanguage>
     <!-- Self-contained Windows App Runtime bundles an AI/ML runtime we never call;
          the release workflow deletes those native DLLs after publish to trim size. -->

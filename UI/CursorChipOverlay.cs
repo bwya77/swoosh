@@ -507,7 +507,7 @@ public sealed class CursorChipOverlay
     /// <summary>Show the desktop mini-map: <paramref name="count"/> squares with the
     /// current desktop (where the held window lives) filled solid blue, and the neighbor
     /// you are leaning toward faintly tinted. Stays up until the gesture ends.</summary>
-    public void ShowDesktopStrip(int count, int currentIndex, DesktopDirection? lean, bool animateReveal = false)
+    public void ShowDesktopStrip(int count, int currentIndex, DesktopDirection? lean, bool animateReveal = false, bool previewDestination = false, int destIndexOverride = -1)
     {
         if (count < 1) count = 1;
         EnsureWindow();
@@ -516,25 +516,45 @@ public sealed class CursorChipOverlay
         EnsureStrip(count);
         SetStripMode();
 
-        int leanIdx = lean switch
-        {
-            DesktopDirection.Right => currentIndex + 1,
-            DesktopDirection.Left => currentIndex - 1,
-            _ => -1,
-        };
+        // The highlighted neighbour/target: an explicit index (multi-desktop preview) when
+        // provided, otherwise the single leaned-toward neighbour.
+        int leanIdx = destIndexOverride >= 0
+            ? destIndexOverride
+            : lean switch
+            {
+                DesktopDirection.Right => currentIndex + 1,
+                DesktopDirection.Left => currentIndex - 1,
+                _ => -1,
+            };
 
-        string key = $"strip|{count}|{currentIndex}|{leanIdx}";
+        // When previewing the destination, the desktop being aimed at (where the window
+        // will land) gets the solid highlight and the current desktop is dimmed, so the HUD
+        // reads "going here". Otherwise the current desktop stays solid and the leaned-toward
+        // neighbour is faintly tinted. A target equal to the current desktop is not a move.
+        bool emphasizeDest = previewDestination && leanIdx >= 0 && leanIdx < count && leanIdx != currentIndex;
+
+        string key = $"strip|{count}|{currentIndex}|{leanIdx}|{(emphasizeDest ? 1 : 0)}";
         if (key != _lastKey)
         {
             for (int i = 0; i < _stripFills.Count; i++)
             {
                 var fill = _stripFills[i];
-                if (i == currentIndex)
+                if (emphasizeDest && i == leanIdx)
                 {
                     fill.Background = _solid;
                     fill.Visibility = Visibility.Visible;
                 }
-                else if (i == leanIdx && leanIdx >= 0 && leanIdx < count)
+                else if (emphasizeDest && i == currentIndex)
+                {
+                    fill.Background = _faint;
+                    fill.Visibility = Visibility.Visible;
+                }
+                else if (!emphasizeDest && i == currentIndex)
+                {
+                    fill.Background = _solid;
+                    fill.Visibility = Visibility.Visible;
+                }
+                else if (!emphasizeDest && i == leanIdx && leanIdx >= 0 && leanIdx < count)
                 {
                     fill.Background = _faint;
                     fill.Visibility = Visibility.Visible;

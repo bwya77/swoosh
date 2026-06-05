@@ -215,6 +215,95 @@ public static class VirtualDesktop
     }
 
     /// <summary>
+    /// Moves <paramref name="hwnd"/> up to <paramref name="steps"/> desktops in the given
+    /// direction (stopping at the edge) and follows it there with a single switch. Carries
+    /// <paramref name="followHwnd"/> (e.g. the HUD overlay) along. Returns false (with a
+    /// reason in <paramref name="diag"/>) when there is no neighbor, no view, or COM fails.
+    /// </summary>
+    public static bool MoveBySteps(IntPtr hwnd, DesktopDirection dir, int steps, IntPtr followHwnd, out string diag)
+    {
+        diag = "";
+        if (hwnd == IntPtr.Zero) { diag = "no-window"; return false; }
+        if (steps <= 0) { diag = "no-steps"; return false; }
+
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                EnsureCom();
+
+                int count = _vdmInternal!.GetCount();
+                if (count < 2) { diag = $"only {count} desktop(s)"; return false; }
+
+                int rc = _avc!.GetViewForHwnd(hwnd, out var view);
+                if (rc != 0 || view == null) { diag = $"no-view hr=0x{rc:X8}"; return false; }
+
+                int direction = dir == DesktopDirection.Left ? LeftDirection : RightDirection;
+
+                // Walk up to 'steps' desktops from the current one; the last reachable
+                // desktop is the jump target (so an over-aimed swipe lands on the edge).
+                var current = _vdmInternal.GetCurrentDesktop();
+                var chain = new List<IVirtualDesktop>();
+                IVirtualDesktop walker = current;
+                for (int i = 0; i < steps; i++)
+                {
+                    int hr = _vdmInternal.GetAdjacentDesktop(walker, direction, out var next);
+                    if (hr != 0 || next == null) break;
+                    chain.Add(next);
+                    walker = next;
+                }
+
+                if (chain.Count == 0)
+                {
+                    diag = $"no-neighbor dir={dir} count={count}";
+                    SafeRelease(view);
+                    SafeRelease(current);
+                    return false;
+                }
+
+                var target = chain[chain.Count - 1];
+                _vdmInternal.MoveViewToDesktop(view, target);
+
+                string followDiag = "";
+                if (followHwnd != IntPtr.Zero)
+                {
+                    try
+                    {
+                        int frc = _avc.GetViewForHwnd(followHwnd, out var fview);
+                        if (frc == 0 && fview != null)
+                        {
+                            _vdmInternal.MoveViewToDesktop(fview, target);
+                            SafeRelease(fview);
+                            followDiag = " follow=ok";
+                        }
+                        else followDiag = $" follow=no-view(0x{frc:X8})";
+                    }
+                    catch (Exception fex) { followDiag = $" follow=err(0x{fex.HResult:X8})"; }
+                }
+
+                _vdmInternal.SwitchDesktopWithAnimation(target);
+                diag = $"moved {chain.Count}/{steps} dir={dir} count={count}{followDiag}";
+
+                SafeRelease(view);
+                SafeRelease(current);
+                foreach (var d in chain) SafeRelease(d);
+                return true;
+            }
+            catch (COMException ex) when (attempt == 0)
+            {
+                diag = $"com-retry 0x{ex.HResult:X8}";
+                ResetCom();
+            }
+            catch (Exception ex)
+            {
+                diag = $"internal-failed {ex.GetType().Name} 0x{ex.HResult:X8} {ex.Message}";
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Reports the current virtual-desktop topology: the total number of desktops
     /// and the zero-based index (from the leftmost) of the one currently shown.
     /// Used to render the HUD mini-map. Returns false on COM failure.

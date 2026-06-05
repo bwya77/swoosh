@@ -306,6 +306,23 @@
                         </Border>
 
                         <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="Preview destination desktop" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="When moving a window to another virtual desktop (hold then swipe), the HUD highlights the desktop it will land on as you aim. Swipe farther to target a further desktop, then drop to send the window there."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="PreviewDesktopDestinationToggle" Grid.Column="1" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Cancel timeout" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                 <TextBlock Text="Cancel a gesture by pressing Esc, or by resting your fingers still for this long (0 = never)."

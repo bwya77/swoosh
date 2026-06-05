@@ -79,5 +79,11 @@ public sealed class AppSettings
     /// cursor in the window's new position). Off by default.</summary>
     public bool MoveCursor { get; set; } = false;
 
+    /// <summary>When true, a virtual-desktop move (hold then swipe) previews the destination
+    /// desktop: the strip HUD highlights the desktop the window will jump to as you aim across
+    /// it (a longer swipe targets a further desktop), and the move commits on release rather
+    /// than switching live as the fingers sweep. On by default.</summary>
+    public bool PreviewDesktopDestination { get; set; } = true;
+
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 }

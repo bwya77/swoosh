@@ -31,6 +31,11 @@ public sealed class GestureEngine
     /// <summary>Horizontal travel (after holding) needed to pick a desktop direction.</summary>
     public double DesktopMoveThreshold { get; set; } = 0.09;
 
+    /// <summary>When true, a virtual-desktop hold gesture does NOT switch desktops live as
+    /// the fingers sweep. Instead it previews the neighbour being aimed at and commits a
+    /// single move to that desktop on release (mirrors how move-to-display commits on lift).</summary>
+    public bool DesktopMoveOnRelease { get; set; }
+
     /// <summary>Simultaneous contacts that engage fine-grained free positioning.</summary>
     public int FreeMoveEngageContacts { get; set; } = 5;
 
@@ -79,11 +84,17 @@ public sealed class GestureEngine
     /// <summary>Fired once when two fingers have rested long enough (hold engaged).</summary>
     public event Action? HoldEngaged;
 
-    /// <summary>Live hold-mode update: current desktop direction (null = none) + progress.</summary>
-    public event Action<DesktopDirection?, double>? HoldUpdated;
+    /// <summary>Live hold-mode update: leaned desktop direction (null = none), progress, and
+    /// the signed number of desktops currently aimed from the hold start (commit-on-release
+    /// mode only; 0 = centered, +N to the right, -N to the left).</summary>
+    public event Action<DesktopDirection?, double, int>? HoldUpdated;
 
-    /// <summary>Fired on release while held, when a desktop direction was chosen.</summary>
+    /// <summary>Fired on release while held (live ratchet mode), when a desktop direction was chosen.</summary>
     public event Action<DesktopDirection>? DesktopMove;
+
+    /// <summary>Fired on release in commit-on-release mode with the signed number of desktops
+    /// aimed (the previewed target). The handler clamps to the available desktops and jumps there.</summary>
+    public event Action<int>? DesktopHoldCommit;
 
     /// <summary>Live move-to-display feedback: the cardinal direction currently aimed at
     /// (null = none yet) plus progress 0..1. Fired while the modifier is held and two
@@ -146,6 +157,9 @@ public sealed class GestureEngine
     private bool _holdEligible = true;
     private double _maxDist;
     private double _holdAnchorX;
+    // In commit-on-release mode, the signed number of desktops currently aimed from the
+    // hold-start anchor (previewed target). Committed on lift; 0 means no move.
+    private int _holdAimSteps;
 
     // Move-to-display: latched at gesture start from MonitorMoveMode. While active a
     // two-finger swipe aims a 4-way cardinal direction (shown live in the HUD) and
@@ -270,6 +284,7 @@ public sealed class GestureEngine
                 _maxDist = 0;
                 _histCount = 0;
                 _holdAnchorX = cx;
+                _holdAimSteps = 0;
                 _startX = _lastX = cx;
                 _startY = _lastY = cy;
                 _startTime = frame.TimestampMs;
@@ -396,17 +411,32 @@ public sealed class GestureEngine
                 DesktopDirection? lean = null;
                 if (ddx > DesktopMoveThreshold * 0.3) lean = DesktopDirection.Right;
                 else if (ddx < -DesktopMoveThreshold * 0.3) lean = DesktopDirection.Left;
-                HoldUpdated?.Invoke(lean, prog);
 
-                // Commit a step once travel crosses the full threshold, then
-                // re-anchor so further travel (either way) fires the next step.
-                DesktopDirection? step = null;
-                if (ddx >= DesktopMoveThreshold) step = DesktopDirection.Right;
-                else if (ddx <= -DesktopMoveThreshold) step = DesktopDirection.Left;
-                if (step is { } dir)
+                // Signed desktops aimed from the hold start: each full threshold of
+                // travel targets one more desktop, so a longer swipe can jump several
+                // desktops at once (commit-on-release mode).
+                int aim = (int)Math.Round(ddx / DesktopMoveThreshold, MidpointRounding.AwayFromZero);
+                HoldUpdated?.Invoke(lean, prog, aim);
+
+                if (DesktopMoveOnRelease)
                 {
-                    _holdAnchorX = cx;
-                    DesktopMove?.Invoke(dir);
+                    // Commit-on-release: don't switch desktops live. Remember how many
+                    // desktops are aimed (the previewed target); committed once on lift,
+                    // or dropped if the swipe returns to center (aim 0).
+                    _holdAimSteps = aim;
+                }
+                else
+                {
+                    // Live ratchet: commit a step once travel crosses the full
+                    // threshold, then re-anchor so further travel fires the next step.
+                    DesktopDirection? step = null;
+                    if (ddx >= DesktopMoveThreshold) step = DesktopDirection.Right;
+                    else if (ddx <= -DesktopMoveThreshold) step = DesktopDirection.Left;
+                    if (step is { } dir)
+                    {
+                        _holdAnchorX = cx;
+                        DesktopMove?.Invoke(dir);
+                    }
                 }
             }
             else if (dist >= (ThirdsMode ? ThirdsDeadZone : DeadZone))
@@ -461,11 +491,15 @@ public sealed class GestureEngine
             return;
         }
 
-        // Hold mode: any desktop moves already fired live as the fingers swept,
-        // so release just tears down the HUD — no snap, no further animation.
+        // Hold mode. In the live ratchet, desktop moves already fired as the fingers
+        // swept, so release just tears down the HUD. In commit-on-release mode, the move
+        // was deferred: commit the previewed destination now (if one is aimed).
         if (_hold)
         {
-            GestureCancelled?.Invoke();
+            if (DesktopMoveOnRelease && _holdAimSteps != 0)
+                DesktopHoldCommit?.Invoke(_holdAimSteps);
+            else
+                GestureCancelled?.Invoke();
             return;
         }
 

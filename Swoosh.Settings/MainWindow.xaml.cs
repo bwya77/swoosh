@@ -232,6 +232,7 @@ public sealed partial class MainWindow : Window
         UpdateCancelTimeoutLabel(CancelTimeoutSlider.Value);
         LivePreviewToggle.IsOn = s.LivePreview;
         MoveCursorToggle.IsOn = s.MoveCursor;
+        PreviewDesktopDestinationToggle.IsOn = s.PreviewDesktopDestination;
         _loading = false;
     }
 
@@ -267,6 +268,7 @@ public sealed partial class MainWindow : Window
         CancelTimeoutSeconds = CancelTimeoutSlider.Value,
         LivePreview = LivePreviewToggle.IsOn,
         MoveCursor = MoveCursorToggle.IsOn,
+        PreviewDesktopDestination = PreviewDesktopDestinationToggle.IsOn,
     };
 
     private void SaveIfReady()
