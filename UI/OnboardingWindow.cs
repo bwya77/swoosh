@@ -872,25 +872,31 @@ public sealed class OnboardingWindow : Window
         double fy = cy + dy * amp * rawT;
         double gapX = 15;
 
-        // Swipe-down chooser: after swiping down to summon the picker, the fingers lean LEFT to
-        // minimize first, then sweep RIGHT to close, so the demo shows both options being chosen.
+        // Swipe-down chooser: the fingers descend diagonally down-LEFT so they arrive directly on
+        // the minimize circle (highlighting it), then sweep RIGHT to the close circle. No center
+        // detour: it comes down onto minimize and moves across to close.
         bool chooserStep = step.Demo == Demo.DownChooser;
         int chooserPick = 0; // -1 minimize, +1 close, 0 none
         bool chooserLeaning = false;
         if (chooserStep && !gap)
         {
+            const double leanAmp = 27, thr = 7;
+            chooserLeaning = true; // the chooser drives its own finger path; suppress the trail
             double settleLocal = swipeLocal - SwipeMs; // >=0 once the down swipe has fully emerged
-            if (settleLocal >= 0)
+            if (settleLocal < 0)
             {
-                chooserLeaning = true;
+                // Descend down-left onto the minimize circle as the picker emerges.
+                fx = cx - leanAmp * rawT;
+                fy = cy + amp * rawT;
+                chooserPick = fx < cx - thr ? -1 : 0;
+            }
+            else
+            {
+                // Sweep right from minimize to close.
                 double sp = Math.Clamp(settleLocal / SettleMs, 0, 1);
-                const double leanAmp = 27;
-                double leanX = sp < 0.5
-                    ? -leanAmp * EaseOut(sp / 0.5)                               // 0 -> left (minimize)
-                    : -leanAmp + 2 * leanAmp * EaseOut((sp - 0.5) / 0.5);        // left -> right (close)
+                double leanX = -leanAmp + 2 * leanAmp * EaseOut(sp);
                 fx = cx + leanX;
-                fy = cy + amp; // stay at the bottom of the swipe while leaning
-                const double thr = 7;
+                fy = cy + amp;
                 chooserPick = leanX < -thr ? -1 : (leanX > thr ? 1 : 0);
             }
         }
