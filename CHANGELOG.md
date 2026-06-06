@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- New touchpad demo overlay for screen recordings and demos. Turn it on in Settings under Appearance to show a polished on-screen touchpad with your live finger movements, comet trails that gently fade out, a finger-count pill, and a caption naming the active gesture (for example "Snap left" or "Move to display"). It is draggable and always on top, so you can frame it in a corner while you record. This replaces the old plain touchpad debug overlay.
 - Switching pages in the Settings app now has a smooth slide-up-and-fade transition, matching the Windows 11 Settings app.
 - Fixed the toggle switches in Settings sitting too far from the right edge of each row. They now line up flush at the right.
 - You can now choose a custom overlay highlight color.In Settings under Appearance, the Overlay color row has a new palette swatch after the presets that opens a color picker with a click-and-drag color field, a hue bar, a live preview, and a hex box for entering an exact value. The selected color fills the swatch so it is easy to see at a glance.

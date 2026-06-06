@@ -317,7 +317,7 @@ public sealed partial class MainWindow : Window
         _gestureEnabled["thirds"] = s.GridModifierEnabled;
         RefreshGestureCards();
         AnimateToggle.IsOn = s.AnimateSnaps;
-        DebugToggle.IsOn = s.DebugOverlay;
+        DemoToggle.IsOn = s.DemoOverlay;
         ModifierCombo.SelectedIndex = s.GridModifier switch
         {
             GridModifier.Ctrl => 1,
@@ -374,7 +374,7 @@ public sealed partial class MainWindow : Window
         MinimizeEnabled = GestureOn("minimize"),
         CenterEnabled = GestureOn("center"),
         AnimateSnaps = AnimateToggle.IsOn,
-        DebugOverlay = DebugToggle.IsOn,
+        DemoOverlay = DemoToggle.IsOn,
         GridModifierEnabled = GestureOn("thirds"),
         GridModifier = ModifierCombo.SelectedIndex switch
         {

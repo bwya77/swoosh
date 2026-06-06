@@ -44,8 +44,8 @@ public sealed class AppSettings
     /// <summary>Five-finger tap to center the window without resizing it.</summary>
     public bool CenterEnabled { get; set; } = true;
 
-    /// <summary>Show the live touchpad debug overlay on launch.</summary>
-    public bool DebugOverlay { get; set; } = false;
+    /// <summary>Show the polished touchpad demo overlay (presentation mode for recordings).</summary>
+    public bool DemoOverlay { get; set; } = false;
 
     /// <summary>Animate window moves with an ease-out glide instead of snapping instantly.</summary>
     public bool AnimateSnaps { get; set; } = true;

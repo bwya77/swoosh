@@ -18,7 +18,7 @@ public sealed class SwooshController : IDisposable
     private readonly HotkeyListener _hotkeys;
     private readonly PreviewOverlay _preview = new();
     private readonly CursorChipOverlay _chip = new();
-    private readonly DebugOverlay _debug = new();
+    private readonly DemoOverlay _demo = new();
     private readonly SwooshStats _stats = new();
 
     private IntPtr _target;
@@ -132,7 +132,8 @@ public sealed class SwooshController : IDisposable
         };
         _chip.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor, s.HudBackground, s.HudSize, s.HudFadeOutSeconds);
         _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
-        _debug.SetVisible(s.DebugOverlay);
+        _demo.SetAccent(AccentColors.Resolve(s.OverlayUseAccent, s.OverlayColor));
+        _demo.SetVisible(s.DemoOverlay);
         _livePreview = s.LivePreview;
         _moveCursor = s.MoveCursor;
         _previewDeskDest = s.PreviewDesktopDestination;
@@ -238,7 +239,7 @@ public sealed class SwooshController : IDisposable
 
     private void OnFrame(TouchFrame frame)
     {
-        _debug.Render(frame);
+        _demo.Render(frame);
         if (!GesturesEnabled) return;
 
         // Esc aborts an in-progress gesture immediately (the HUD fades out).
@@ -343,6 +344,7 @@ public sealed class SwooshController : IDisposable
                 _snapper.MoveToMonitor(_target, cur.Work, d.Work);
                 Win32.ForceForeground(_target);
                 _stats.Add();
+                _demo.SetCaption("Move to display");
                 Log.Write($"MonitorMove dir={dir} moved");
             }
             else
@@ -383,6 +385,8 @@ public sealed class SwooshController : IDisposable
             // old full-screen "maximize" flash can't happen either.
             return;
         }
+
+        _demo.SetCaption(ZoneCaption(zone));
 
         if (_livePreview)
         {
@@ -447,6 +451,7 @@ public sealed class SwooshController : IDisposable
         if (!(_livePreview && _liveMoved && _liveZone == zone))
             _snapper.Apply(_target, zone);
         _stats.Add();
+        _demo.SetCaption(ZoneCaption(zone));
         if (zone != SnapZone.Minimize)
         {
             Win32.ForceForeground(_target);
@@ -475,9 +480,41 @@ public sealed class SwooshController : IDisposable
         if (_livePreview) RestoreLiveOriginal();
         _preview.Hide();
         _chip.Hide();
+        _demo.SetCaption(null);
         _armed = false;
         _liveMoved = false;
     }
+
+    /// <summary>Friendly demo-overlay caption for a snap zone (e.g. "Snap left", "Maximize").</summary>
+    private static string? ZoneCaption(SnapZone zone) => zone switch
+    {
+        SnapZone.LeftHalf => "Snap left",
+        SnapZone.RightHalf => "Snap right",
+        SnapZone.TopHalf => "Snap top",
+        SnapZone.BottomHalf => "Snap bottom",
+        SnapZone.TopLeft => "Top left",
+        SnapZone.TopRight => "Top right",
+        SnapZone.BottomLeft => "Bottom left",
+        SnapZone.BottomRight => "Bottom right",
+        SnapZone.Maximize => "Maximize",
+        SnapZone.Center => "Center",
+        SnapZone.Minimize => "Minimize",
+        SnapZone.LeftThird => "Left third",
+        SnapZone.CenterThird => "Center third",
+        SnapZone.RightThird => "Right third",
+        SnapZone.LeftTwoThird => "Left two-thirds",
+        SnapZone.RightTwoThird => "Right two-thirds",
+        SnapZone.TopThird => "Top third",
+        SnapZone.CenterRowThird => "Center third",
+        SnapZone.BottomThird => "Bottom third",
+        SnapZone.TopTwoThird => "Top two-thirds",
+        SnapZone.BottomTwoThird => "Bottom two-thirds",
+        SnapZone.ThirdTopLeft => "Top-left third",
+        SnapZone.ThirdTopRight => "Top-right third",
+        SnapZone.ThirdBottomLeft => "Bottom-left third",
+        SnapZone.ThirdBottomRight => "Bottom-right third",
+        _ => null,
+    };
 
     private void OnHoldEngaged()
     {
@@ -522,6 +559,7 @@ public sealed class SwooshController : IDisposable
             Win32.ForceForeground(_target);
             _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
             _stats.Add();
+            _demo.SetCaption(dir == DesktopDirection.Right ? "Desktop \u2192" : "\u2190 Desktop");
         }
     }
 
@@ -745,7 +783,7 @@ public sealed class SwooshController : IDisposable
         return new Win32.RECT { Left = x, Top = y, Right = x + w, Bottom = y + h };
     }
 
-    public void ToggleDebugOverlay() => _debug.Toggle();
+    public void ToggleDemoOverlay() => _demo.Toggle();
 
     public void Dispose()
     {
@@ -753,7 +791,7 @@ public sealed class SwooshController : IDisposable
         _hotkeys.Dispose();
         _preview.Close();
         _chip.Close();
-        _debug.Close();
+        _demo.Close();
         _stats.Dispose();
         _window.Dispose();
     }

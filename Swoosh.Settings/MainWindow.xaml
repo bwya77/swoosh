@@ -220,17 +220,17 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <FontIcon Grid.Column="0" Glyph="&#xEBE8;" FontSize="18" Margin="0,0,16,0"
+                                    <FontIcon Grid.Column="0" Glyph="&#xE7F4;" FontSize="18" Margin="0,0,16,0"
                                               VerticalAlignment="Center"
                                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                        <TextBlock Text="Touchpad debug overlay" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                        <TextBlock Text="Show live touchpad contacts for troubleshooting."
+                                        <TextBlock Text="Touchpad demo overlay" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Text="Show a polished on-screen touchpad with your live finger movements and the active gesture. Great for screen recordings and demos."
                                                    TextWrapping="Wrap"
                                                    Style="{StaticResource CaptionTextBlockStyle}"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
-                                    <ToggleSwitch x:Name="DebugToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                                    <ToggleSwitch x:Name="DemoToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
                                 </Grid>
                             </StackPanel>
                         </Border>
