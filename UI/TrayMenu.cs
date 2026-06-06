@@ -13,11 +13,49 @@ namespace Swoosh.UI;
 // themed separators/checkmark, plus DWM rounded corners and dark mode on the popup.
 internal static class TrayMenu
 {
-    private static readonly Color Surface = Color.FromArgb(0x2B, 0x2B, 0x2B);
-    private static readonly Color Text = Color.FromArgb(0xE8, 0xE8, 0xE8);
-    private static readonly Color TextDim = Color.FromArgb(0x9A, 0x9A, 0x9A);
-    private static readonly Color Hover = Color.FromArgb(0x3A, 0x3A, 0x3A);
-    private static readonly Color SeparatorClr = Color.FromArgb(0x41, 0x41, 0x41);
+    // Active palette (swapped to match the OS light/dark setting each time the menu opens).
+    // Defaults to the dark set; ApplyPalette overwrites these before the menu paints.
+    private static Color Surface = Color.FromArgb(0x2B, 0x2B, 0x2B);
+    private static Color Text = Color.FromArgb(0xE8, 0xE8, 0xE8);
+    private static Color TextDim = Color.FromArgb(0x9A, 0x9A, 0x9A);
+    private static Color Hover = Color.FromArgb(0x3A, 0x3A, 0x3A);
+    private static Color SeparatorClr = Color.FromArgb(0x41, 0x41, 0x41);
+
+    // Dark palette.
+    private static readonly Color DarkSurface = Color.FromArgb(0x2B, 0x2B, 0x2B);
+    private static readonly Color DarkText = Color.FromArgb(0xE8, 0xE8, 0xE8);
+    private static readonly Color DarkTextDim = Color.FromArgb(0x9A, 0x9A, 0x9A);
+    private static readonly Color DarkHover = Color.FromArgb(0x3A, 0x3A, 0x3A);
+    private static readonly Color DarkSeparator = Color.FromArgb(0x41, 0x41, 0x41);
+
+    // Light palette.
+    private static readonly Color LightSurface = Color.FromArgb(0xF9, 0xF9, 0xF9);
+    private static readonly Color LightText = Color.FromArgb(0x1A, 0x1A, 0x1A);
+    private static readonly Color LightTextDim = Color.FromArgb(0x6A, 0x6A, 0x6A);
+    private static readonly Color LightHover = Color.FromArgb(0xE6, 0xE6, 0xE6);
+    private static readonly Color LightSeparator = Color.FromArgb(0xD9, 0xD9, 0xD9);
+
+    /// <summary>Point the active palette at the light or dark set.</summary>
+    private static void ApplyPalette(bool light)
+    {
+        Surface = light ? LightSurface : DarkSurface;
+        Text = light ? LightText : DarkText;
+        TextDim = light ? LightTextDim : DarkTextDim;
+        Hover = light ? LightHover : DarkHover;
+        SeparatorClr = light ? LightSeparator : DarkSeparator;
+    }
+
+    private static bool SystemUsesLightTheme()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            if (key?.GetValue("AppsUseLightTheme") is int v) return v != 0;
+        }
+        catch { /* default to dark on any failure */ }
+        return false;
+    }
 
     public static ContextMenuStrip Create(
         Func<bool> getGestures,
@@ -25,6 +63,9 @@ internal static class TrayMenu
         Action onToggleGestures,
         Action onQuit)
     {
+        // Match the OS light/dark setting from the start so the first open is themed.
+        ApplyPalette(SystemUsesLightTheme());
+
         var menu = new ContextMenuStrip
         {
             RenderMode = ToolStripRenderMode.Professional,
@@ -50,8 +91,16 @@ internal static class TrayMenu
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(quit);
 
-        // Refresh the toggle state every time the menu opens so it always reflects reality.
-        menu.Opening += (_, _) => gestures.Checked = getGestures();
+        // Each time the menu opens: re-read the OS theme so it tracks light/dark live,
+        // re-point the menu's own colors, and refresh the toggle state.
+        menu.Opening += (_, _) =>
+        {
+            bool light = SystemUsesLightTheme();
+            ApplyPalette(light);
+            menu.BackColor = Surface;
+            menu.ForeColor = Text;
+            gestures.Checked = getGestures();
+        };
 
         menu.HandleCreated += (_, _) => ApplyWindowTheme(menu.Handle);
         menu.Opened += (_, _) => ApplyWindowTheme(menu.Handle);
@@ -83,8 +132,8 @@ internal static class TrayMenu
     private static void ApplyWindowTheme(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero) return;
-        int on = 1;
-        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, sizeof(int));
+        int dark = SystemUsesLightTheme() ? 0 : 1;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
         int round = DWMWCP_ROUND;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
     }

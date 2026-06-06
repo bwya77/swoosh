@@ -343,7 +343,14 @@ public sealed class GestureEngine
                 _idleAnchorX = cx; _idleAnchorY = cy; _idleSpread = idleSpread;
                 _lastMoveMs = frame.TimestampMs;
             }
-            else if (IdleCancelMs > 0 && frame.TimestampMs - _lastMoveMs >= IdleCancelMs)
+            // While the gesture is still an undecided hold candidate (fingers resting to
+            // engage the press-and-hold switcher, before it fires), resting is the intended
+            // input, not idleness: do not rest-cancel. Otherwise a cancel-timeout shorter
+            // than the hold delay would kill the gesture before the hold could engage. Once
+            // the hold engages (which resets this clock) or the fingers move into a swipe,
+            // rest-to-cancel applies normally.
+            else if (IdleCancelMs > 0 && !(_holdEligible && !_hold)
+                     && frame.TimestampMs - _lastMoveMs >= IdleCancelMs)
             {
                 // Resting "drops" the window: commit the current intent exactly as if the
                 // fingers lifted (snap to the previewed zone, or move to the aimed monitor).

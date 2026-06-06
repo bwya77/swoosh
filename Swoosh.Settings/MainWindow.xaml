@@ -152,6 +152,10 @@
                     <StackPanel x:Name="SnappingPane" Spacing="12" Visibility="Collapsed">
                         <TextBlock Text="Snapping" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
+                        <TextBlock Text="Gestures" Margin="2,2,0,0"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                   Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="10">
                                 <StackPanel Spacing="2">
@@ -185,6 +189,10 @@
                                 </ComboBox>
                             </Grid>
                         </Border>
+
+                        <TextBlock Text="Snap behavior" Margin="2,8,0,0"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                   Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
@@ -234,6 +242,28 @@
                         </Border>
 
                         <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Cancel timeout" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="Cancel a gesture by pressing Esc, or by resting your fingers still for this long (0 = never)."
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Slider x:Name="CancelTimeoutSlider" Grid.Column="0" Margin="0,0,12,0"
+                                            Minimum="0" Maximum="3" StepFrequency="0.1"
+                                            ValueChanged="OnCancelTimeoutChanged" />
+                                    <TextBlock x:Name="CancelTimeoutValue" Grid.Column="1" Text="0.8 s"
+                                               VerticalAlignment="Center" MinWidth="44"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -266,6 +296,10 @@
                                 <ToggleSwitch x:Name="MoveCursorToggle" Grid.Column="1" Toggled="OnSettingToggled" />
                             </Grid>
                         </Border>
+
+                        <TextBlock Text="Virtual desktops and displays" Margin="2,8,0,0"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                   Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
 
                         <Border Style="{StaticResource Card}">
                             <Grid>
@@ -310,8 +344,9 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Cancel timeout" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock Text="Cancel a gesture by pressing Esc, or by resting your fingers still for this long (0 = never)."
+                                <TextBlock Text="Desktop switch hold delay" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="How long you must hold two fingers still before the virtual-desktop switcher engages and its HUD appears."
+                                           TextWrapping="Wrap"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <Grid>
@@ -319,11 +354,11 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Slider x:Name="CancelTimeoutSlider" Grid.Column="0" Margin="0,0,12,0"
-                                            Minimum="0" Maximum="3" StepFrequency="0.1"
-                                            ValueChanged="OnCancelTimeoutChanged" />
-                                    <TextBlock x:Name="CancelTimeoutValue" Grid.Column="1" Text="0.8 s"
-                                               VerticalAlignment="Center" MinWidth="44"
+                                    <Slider x:Name="HoldDelaySlider" Grid.Column="0" Margin="0,0,12,0"
+                                            Minimum="0" Maximum="0.9" StepFrequency="0.05"
+                                            ValueChanged="OnHoldDelayChanged" />
+                                    <TextBlock x:Name="HoldDelayValue" Grid.Column="1" Text="0.30 s"
+                                               VerticalAlignment="Center" MinWidth="48"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Grid>

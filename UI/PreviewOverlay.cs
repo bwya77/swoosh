@@ -28,6 +28,11 @@ public sealed class PreviewOverlay
     // Appearance, applied live from settings.
     private bool _animate = true;
     private Color _fill = Color.FromRgb(0, 120, 215);
+    // Highlight color source, kept so the accent can be re-resolved live (throttled) when the
+    // user changes their Windows accent color, without restarting.
+    private bool _useAccent = true;
+    private string _customHex = "#0A84FF";
+    private long _lastAccentCheckMs;
 
     // Position glide (mirrors WindowSnapper.AnimateTo: ease-out cubic over GlideMs).
     // Driven off CompositionTarget.Rendering so frames are vsync-paced and evenly
@@ -45,7 +50,20 @@ public sealed class PreviewOverlay
     public void ApplyAppearance(bool animate, bool useAccent, string customHex)
     {
         _animate = animate;
+        _useAccent = useAccent;
+        _customHex = customHex;
         _fill = AccentColors.Resolve(useAccent, customHex);
+    }
+
+    /// <summary>When following the Windows accent, re-read it (throttled) so a changed accent
+    /// shows on the next preview without restarting.</summary>
+    private void SyncAccentColor()
+    {
+        if (!_useAccent) return;
+        long now = Environment.TickCount64;
+        if (now - _lastAccentCheckMs < 750) return;
+        _lastAccentCheckMs = now;
+        _fill = AccentColors.Resolve(true, _customHex);
     }
 
     private void EnsureWindow()
@@ -102,6 +120,7 @@ public sealed class PreviewOverlay
 
     public void ShowZone(Win32.RECT rect, double progress)
     {
+        SyncAccentColor();
         EnsureWindow();
         if (_win == null || _border == null || _label == null) return;
 

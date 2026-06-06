@@ -4,6 +4,12 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- The system tray menu now follows your Windows light/dark setting instead of always being dark.
+- The gesture HUD's highlight color now updates live when you change your Windows accent color, without needing to restart Swoosh.
+- The move-to-display HUD now shows the current monitor in solid color at rest, matching the desktop strip and snap HUD.
+- The lifetime swoosh count in Settings now updates instantly while the Settings window is open.
+- New "Desktop switch hold delay" slider in Settings under Snapping: control how long you hold before the virtual-desktop switcher appears (0.10 to 1.00 s, default 0.30 s). It works independently of the cancel timeout now, so a longer hold delay no longer gets cancelled early.
+- The Snapping settings are now grouped into sections (Gestures, Snap behavior, Virtual desktops and displays) so the longer list is easier to scan.
 - The virtual-desktop reveal is smoother and snappier. The desktop strip now holds still while your fingers rest (instead of drifting with the cursor), no longer flashes the full strip for a frame before animating, and starts appearing a bit sooner after you begin holding.
 - New "HUD size" option in Settings under Appearance: choose Normal (the default) or Large for the gesture HUD.
 - The gesture HUD can now use a light background. In Settings under Appearance, the new "HUD background" option offers Dark, Light, or Follow system (which matches the Windows light/dark setting and updates on your next gesture when you change it). The highlight color is unchanged.

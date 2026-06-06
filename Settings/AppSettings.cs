@@ -109,5 +109,9 @@ public sealed class AppSettings
     /// than switching live as the fingers sweep. On by default.</summary>
     public bool PreviewDesktopDestination { get; set; } = true;
 
+    /// <summary>Seconds two fingers must rest (near-still) before the press-and-hold
+    /// virtual-desktop switcher engages and its HUD appears. Range about 0.1 to 1.0s.</summary>
+    public double DesktopHoldDelaySeconds { get; set; } = 0.3;
+
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 }

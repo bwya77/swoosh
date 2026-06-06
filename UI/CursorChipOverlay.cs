@@ -69,6 +69,14 @@ public sealed class CursorChipOverlay
     // call does not hit the registry every frame.
     private long _lastThemeCheckMs;
 
+    // Highlight color source, remembered so the accent can be re-resolved live when the
+    // user changes their Windows accent color (read from the registry, throttled), without
+    // restarting. _baseColor is the last resolved highlight color.
+    private bool _useAccent = true;
+    private string _customHex = "#0A84FF";
+    private Color _baseColor = Color.FromRgb(10, 132, 255);
+    private long _lastAccentCheckMs;
+
     // Multiplier on the HUD's physical size (0.65 normal, 1.0 large). The Viewbox scales
     // the whole design to the physical window, so this shrinks everything proportionally.
     private double _hudScale = 0.65;
@@ -160,12 +168,9 @@ public sealed class CursorChipOverlay
     {
         _animate = animate;
 
-        Color c = AccentColors.Resolve(useAccent, customHex);
-        _solid = Freeze(new SolidColorBrush(Color.FromArgb(235, c.R, c.G, c.B)));
-        _faint = Freeze(new SolidColorBrush(Color.FromArgb(70, c.R, c.G, c.B)));
-
-        // Recolor anything currently on screen so the change is visible immediately.
-        if (_singleFill is { Visibility: Visibility.Visible }) _singleFill.Background = _solid;
+        _useAccent = useAccent;
+        _customHex = customHex;
+        ApplyHighlightColor(AccentColors.Resolve(useAccent, customHex));
 
         double scale = size == HudSize.Large ? 1.0 : 0.65;
         if (scale != _hudScale)
@@ -178,6 +183,30 @@ public sealed class CursorChipOverlay
 
         _hudMode = mode;
         ApplyEffectiveTheme();
+    }
+
+    /// <summary>Rebuild the solid/faint highlight brushes from a resolved color and recolor
+    /// anything currently on screen so the change is visible immediately.</summary>
+    private void ApplyHighlightColor(Color c)
+    {
+        _baseColor = c;
+        _solid = Freeze(new SolidColorBrush(Color.FromArgb(235, c.R, c.G, c.B)));
+        _faint = Freeze(new SolidColorBrush(Color.FromArgb(70, c.R, c.G, c.B)));
+        if (_singleFill is { Visibility: Visibility.Visible }) _singleFill.Background = _solid;
+    }
+
+    /// <summary>When the highlight follows the Windows accent color, re-read it (throttled)
+    /// before showing so a changed accent appears without restarting. Skipped while a HUD is
+    /// visible mid-gesture so the color never shifts under the user.</summary>
+    private void SyncAccentColor()
+    {
+        if (!_useAccent || _shown) return;
+        long now = Environment.TickCount64;
+        if (now - _lastAccentCheckMs < 750) return;
+        _lastAccentCheckMs = now;
+
+        Color c = AccentColors.Resolve(true, _customHex);
+        if (c != _baseColor) ApplyHighlightColor(c);
     }
 
     /// <summary>Resolve the backdrop theme to light or dark (reading the system setting when
@@ -463,6 +492,7 @@ public sealed class CursorChipOverlay
     public void ShowMonitorMap(bool up, bool down, bool left, bool right, MonitorDirection? target)
     {
         SyncSystemTheme();
+        SyncAccentColor();
         EnsureWindow();
         if (_win == null) return;
         CancelHideTimer();
@@ -479,8 +509,18 @@ public sealed class CursorChipOverlay
         string key = $"map|{up}{down}{left}{right}|{target}";
         if (key != _lastKey)
         {
-            // Current monitor: always faintly tinted so the layout reads as "you are here".
-            _mapCenterFill!.Background = _faint;
+            // Current monitor: solid "you are here" at rest, matching the desktop strip and
+            // snap HUD. It dims to a faint tint only while you aim at a real neighbour (which
+            // then takes the solid highlight), so the two never compete.
+            bool aimingExisting = target switch
+            {
+                MonitorDirection.Up => up,
+                MonitorDirection.Down => down,
+                MonitorDirection.Left => left,
+                MonitorDirection.Right => right,
+                _ => false,
+            };
+            _mapCenterFill!.Background = aimingExisting ? _faint : _solid;
             _mapCenterFill.Visibility = Visibility.Visible;
 
             SetMapTarget(_mapUpFill!, up, target == MonitorDirection.Up);
@@ -517,6 +557,7 @@ public sealed class CursorChipOverlay
     public void ShowSnap(SnapZone zone, double progress)
     {
         SyncSystemTheme();
+        SyncAccentColor();
         EnsureWindow();
         if (_win == null) return;
         CancelHideTimer();
@@ -621,6 +662,7 @@ public sealed class CursorChipOverlay
     {
         if (count < 1) count = 1;
         SyncSystemTheme();
+        SyncAccentColor();
         EnsureWindow();
         if (_win == null) return;
         CancelHideTimer();

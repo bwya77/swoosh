@@ -137,6 +137,7 @@ public sealed class SwooshController : IDisposable
         _moveCursor = s.MoveCursor;
         _previewDeskDest = s.PreviewDesktopDestination;
         _gestures.DesktopMoveOnRelease = s.PreviewDesktopDestination;
+        _gestures.HoldDelayMs = (long)Math.Round(Math.Clamp(s.DesktopHoldDelaySeconds, 0.1, 1.0) * 1000);
     }
 
     /// <summary>Resolve a swipe to a zone, honoring the thirds modifier if held.</summary>

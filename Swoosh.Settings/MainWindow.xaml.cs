@@ -241,6 +241,11 @@ public sealed partial class MainWindow : Window
         LivePreviewToggle.IsOn = s.LivePreview;
         MoveCursorToggle.IsOn = s.MoveCursor;
         PreviewDesktopDestinationToggle.IsOn = s.PreviewDesktopDestination;
+        // The slider's Minimum is 0 (so its default value needs no coercion, which crashes
+        // WinUI when a ValueChanged handler is attached); the delay is the slider value plus
+        // a 0.1s floor, so the usable range is 0.1 to 1.0s.
+        HoldDelaySlider.Value = Math.Clamp(s.DesktopHoldDelaySeconds - 0.1, 0.0, 0.9);
+        UpdateHoldDelayLabel(Math.Clamp(s.DesktopHoldDelaySeconds, 0.1, 1.0));
         _loading = false;
     }
 
@@ -284,6 +289,7 @@ public sealed partial class MainWindow : Window
         LivePreview = LivePreviewToggle.IsOn,
         MoveCursor = MoveCursorToggle.IsOn,
         PreviewDesktopDestination = PreviewDesktopDestinationToggle.IsOn,
+        DesktopHoldDelaySeconds = HoldDelaySlider.Value + 0.1,
     };
 
     private void SaveIfReady()
@@ -318,6 +324,12 @@ public sealed partial class MainWindow : Window
         SaveIfReady();
     }
 
+    private void OnHoldDelayChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        UpdateHoldDelayLabel(e.NewValue + 0.1);
+        SaveIfReady();
+    }
+
     private void UpdateGridSpacingLabel(double v)
     {
         if (GridSpacingValue != null) GridSpacingValue.Text = $"{(int)Math.Round(v)} px";
@@ -327,6 +339,11 @@ public sealed partial class MainWindow : Window
     {
         if (CancelTimeoutValue != null)
             CancelTimeoutValue.Text = v <= 0 ? "Off" : $"{v:0.0} s";
+    }
+
+    private void UpdateHoldDelayLabel(double delaySeconds)
+    {
+        if (HoldDelayValue != null) HoldDelayValue.Text = $"{delaySeconds:0.00} s";
     }
 
     private void OnAccentToggled(object sender, RoutedEventArgs e)
