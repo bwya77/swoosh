@@ -253,6 +253,8 @@ public partial class App : System.Windows.Application
             if (!win.StepHasDemo(i)) continue;
 
             var el = win.PrepareExport(i);
+            el.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+            el.Arrange(new System.Windows.Rect(new System.Windows.Point(0, 0), el.DesiredSize));
             el.UpdateLayout();
             var size = el.RenderSize;
             if (size.Width < 1 || size.Height < 1) continue;
@@ -268,6 +270,7 @@ public partial class App : System.Windows.Application
             {
                 double t = cycle * f / frames;
                 win.RenderFrameAt(t);
+                el.Arrange(new System.Windows.Rect(new System.Windows.Point(0, 0), size));
                 el.UpdateLayout();
 
                 var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(

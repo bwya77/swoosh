@@ -256,7 +256,10 @@ public sealed class OnboardingWindow : Window
 
         // The demo row is a fixed-height container so every step (including the final summary,
         // which shows a checkmark instead of the pad/screen) keeps the window the same size.
-        _demoRow = new Grid { Height = PadH + 26, HorizontalAlignment = HorizontalAlignment.Center };
+        // Fixed height so every step (including the checkmark summary) keeps the window the same
+        // size. PadH + 46 leaves room for the "Your touchpad" / "Your screen" captions below the
+        // surfaces without clipping them.
+        _demoRow = new Grid { Height = PadH + 46, HorizontalAlignment = HorizontalAlignment.Center };
         _demoRow.Children.Add(_demoSurfaces);
         _demoRow.Children.Add(BuildCheckmark());
         stack.Children.Add(_demoRow);
@@ -371,12 +374,13 @@ public sealed class OnboardingWindow : Window
         var cap = new TextBlock
         {
             Text = label,
-            FontSize = 11,
+            FontSize = 14,
+            FontWeight = FontWeights.Bold,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 6, 0, 0),
+            Margin = new Thickness(0, 9, 0, 2),
         };
         caption = cap;
-        _themeAppliers.Add(() => cap.Foreground = new SolidColorBrush(Fade(_pal.SubText, 0.7)));
+        _themeAppliers.Add(() => cap.Foreground = new SolidColorBrush(_pal.Text));
         var sp = new StackPanel { Orientation = Orientation.Vertical };
         sp.Children.Add(surface);
         sp.Children.Add(cap);
@@ -880,7 +884,8 @@ public sealed class OnboardingWindow : Window
     }
 
     /// <summary>Switch to a step and build its backdrop, ready for frame rendering. Stops the
-    /// live timer so only explicit RenderFrameAt calls drive the animation.</summary>
+    /// live timer so only explicit RenderFrameAt calls drive the animation. Returns the surfaces
+    /// panel (touchpad + screen with their captions) so exported frames include the labels.</summary>
     internal FrameworkElement PrepareExport(int i)
     {
         _timer.Stop();
