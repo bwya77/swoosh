@@ -596,16 +596,46 @@
                         <TextBlock Text="About" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Swoosh" Style="{StaticResource SubtitleTextBlockStyle}" />
-                                <TextBlock x:Name="VersionText" Text="v0.0.0"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <Image x:Name="AppLogo" Width="48" Height="48"
+                                           VerticalAlignment="Center" />
+                                    <StackPanel VerticalAlignment="Center" Spacing="0">
+                                        <TextBlock Text="Swoosh" Style="{StaticResource SubtitleTextBlockStyle}" />
+                                        <TextBlock x:Name="VersionText" Text="v0.0.0"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                </StackPanel>
                                 <TextBlock Text="Swish-style window snapping gestures for the Windows Precision Touchpad."
                                            TextWrapping="Wrap" Margin="0,4,0,0"
                                            Style="{StaticResource BodyTextBlockStyle}" />
                                 <HyperlinkButton Content="github.com/bwya77/swoosh"
                                                  NavigateUri="https://github.com/bwya77/swoosh"
                                                  Padding="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Support Swoosh" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="Swoosh is free and open source. If you find it useful, you can support its development."
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                                    <HyperlinkButton NavigateUri="https://github.com/sponsors/bwya77">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xEB52;" FontSize="14"
+                                                      Foreground="#DB61A2" />
+                                            <TextBlock Text="GitHub Sponsors" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </HyperlinkButton>
+                                    <HyperlinkButton NavigateUri="https://buymeacoffee.com/bwya77">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="&#x2615;" FontSize="15" VerticalAlignment="Center" />
+                                            <TextBlock Text="Buy Me a Coffee" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </HyperlinkButton>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>

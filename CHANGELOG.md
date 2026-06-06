@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- You can now support Swoosh's development. Settings under About has a Support card with GitHub Sponsors and Buy Me a Coffee links, and the repository has a Sponsor button.
 - New "HUD fade-out" slider in Settings under Appearance: control how long the gesture HUD takes to fade away when a gesture ends (0.10 to 1.50 s, default 0.36 s). Raise it to make the HUD linger and fade more slowly.
 - The slider settings now show their range as fixed labels on each end and a reset button to return to the default, and the value no longer shifts the slider as you drag.
 - The system tray menu now follows your Windows light/dark setting instead of always being dark.

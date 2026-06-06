@@ -72,6 +72,7 @@ public sealed partial class MainWindow : Window
         };
 
         VersionText.Text = $"v{_updates.CurrentVersion}";
+        TrySetAboutLogo();
         BuildSwatches();
         BuildGestureCards();
         LoadFrom(_store.Current);
@@ -189,6 +190,19 @@ public sealed partial class MainWindow : Window
                 AppWindow.SetIcon(path);
         }
         catch { /* non-fatal */ }
+    }
+
+    /// <summary>Show the Swoosh logo on the About page from the PNG copied next to the
+    /// executable. Loaded by file path (not ms-appx) because this is an unpackaged app.</summary>
+    private void TrySetAboutLogo()
+    {
+        try
+        {
+            string path = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "swoosh-256.png");
+            if (System.IO.File.Exists(path))
+                AppLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(path));
+        }
+        catch { /* non-fatal: the About card just shows no logo */ }
     }
 
     // ---- Load / collect ----------------------------------------------------

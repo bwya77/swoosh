@@ -8,6 +8,7 @@
 [![Downloads](https://img.shields.io/github/downloads/bwya77/swoosh/total)](https://github.com/bwya77/swoosh/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6)
+[![Sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-db61a2?logo=githubsponsors)](https://github.com/sponsors/bwya77)
 
 Swoosh brings macOS Swish style window management to Windows. Hover your cursor
 over a window's titlebar, then use simple Precision Touchpad gestures to snap,
@@ -114,6 +115,14 @@ Full developer setup, project layout, and tests are in
 - [Contributing](CONTRIBUTING.md): build, test, and submit changes.
 - [Changelog](CHANGELOG.md)
 - [Security policy](SECURITY.md) and [code signing](SIGNING.md)
+
+## Support
+
+Swoosh is free and open source. If it makes your day a little smoother,
+you can support its development:
+
+- [GitHub Sponsors](https://github.com/sponsors/bwya77)
+- [Buy Me a Coffee](https://buymeacoffee.com/bwya77)
 
 ## Notes
 

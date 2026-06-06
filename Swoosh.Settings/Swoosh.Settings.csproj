@@ -28,6 +28,7 @@
        icon at runtime via AppWindow.SetIcon. -->
   <ItemGroup>
     <Content Include="..\Assets\swoosh.ico" Link="swoosh.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Assets\swoosh-256.png" Link="Assets\swoosh-256.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Share the settings model, persistence, and update checker with the main app
