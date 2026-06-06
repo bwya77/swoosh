@@ -28,6 +28,13 @@ public partial class App : System.Windows.Application
     private static Mutex? _instanceMutex;
     private const string InstanceMutexName = "Local\\Swoosh.SingleInstance";
 
+    // Cross-process "show the tutorial" signal. The Settings app (a separate process) sets this
+    // named event when the user clicks Replay tutorial; this app listens and shows onboarding.
+    private const string TutorialSignalName = @"Local\Swoosh_Show_Tutorial_v1";
+    private EventWaitHandle? _tutorialSignal;
+    private Thread? _tutorialThread;
+    private volatile bool _shuttingDown;
+
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")]
@@ -66,6 +73,12 @@ public partial class App : System.Windows.Application
 
         BuildTray();
         _ = CheckForUpdatesAsync(manual: false);
+
+        // First-run tutorial: show the visual gesture walkthrough once.
+        if (!_settings.Current.OnboardingCompleted)
+            Dispatcher.BeginInvoke(ShowOnboarding, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+
+        StartTutorialListener();
 
         // Probe the touchpad and write a diagnostics report for the Settings "Copy
         // diagnostics" button. If no usable Precision Touchpad is found, warn the user
@@ -130,9 +143,64 @@ public partial class App : System.Windows.Application
                 s.GesturesEnabled = !s.GesturesEnabled;
                 _settings.Save(s);
             },
+            onTutorial: ShowOnboarding,
             onQuit: () => Shutdown());
         _tray.DoubleClick += (_, _) => OpenSettings();
         _tray.BalloonTipClicked += (_, _) => OnUpdateClicked();
+    }
+
+    private UI.OnboardingWindow? _onboarding;
+
+    /// <summary>Background listener for the cross-process "show tutorial" event set by the
+    /// Settings app, so users can replay the walkthrough from Settings.</summary>
+    private void StartTutorialListener()
+    {
+        try
+        {
+            _tutorialSignal = new EventWaitHandle(false, EventResetMode.AutoReset, TutorialSignalName);
+            _tutorialThread = new Thread(() =>
+            {
+                while (!_shuttingDown && _tutorialSignal != null)
+                {
+                    try
+                    {
+                        if (_tutorialSignal.WaitOne(1000) && !_shuttingDown)
+                            Dispatcher.BeginInvoke(ShowOnboarding);
+                    }
+                    catch { return; }
+                }
+            })
+            { IsBackground = true, Name = "SwooshTutorialSignal" };
+            _tutorialThread.Start();
+        }
+        catch { /* signal unavailable: the tray "Show tutorial" item still works */ }
+    }
+
+    /// <summary>Show the first-run gesture tutorial. Reused by the tray "Show tutorial" item.
+    /// Marks onboarding complete when finished so it doesn't reappear on next launch.</summary>
+    private void ShowOnboarding()
+    {
+        try
+        {
+            if (_onboarding != null) { _onboarding.Activate(); return; }
+
+            var accent = UI.AccentColors.Resolve(
+                _settings.Current.OverlayUseAccent, _settings.Current.OverlayColor);
+            _onboarding = new UI.OnboardingWindow(accent);
+            _onboarding.Completed += () =>
+            {
+                if (!_settings.Current.OnboardingCompleted)
+                {
+                    var s = _settings.Current.Clone();
+                    s.OnboardingCompleted = true;
+                    _settings.Save(s);
+                }
+            };
+            _onboarding.Closed += (_, _) => _onboarding = null;
+            _onboarding.Show();
+            _onboarding.Activate();
+        }
+        catch (Exception ex) { Log.Write($"Onboarding failed: {ex}"); }
     }
 
     private void OpenSettings()
@@ -334,6 +402,10 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _shuttingDown = true;
+        try { _tutorialSignal?.Set(); } catch { /* wake the loop so it can exit */ }
+        _tutorialThread?.Join(500);
+        _tutorialSignal?.Dispose();
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
         _trayIcon?.Dispose();
         _controller?.Dispose();

@@ -52,6 +52,10 @@ public sealed class AppSettings
     /// rejection heuristics are the cause.</summary>
     public bool PhantomRejection { get; set; } = true;
 
+    /// <summary>Whether the first-run welcome/tutorial has been completed. Shown once on the
+    /// first launch; can be replayed from the tray menu.</summary>
+    public bool OnboardingCompleted { get; set; } = false;
+
     /// <summary>Animate window moves with an ease-out glide instead of snapping instantly.</summary>
     public bool AnimateSnaps { get; set; } = true;
 

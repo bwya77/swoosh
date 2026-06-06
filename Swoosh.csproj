@@ -43,6 +43,7 @@
        / the run dialog their icon. -->
   <ItemGroup>
     <EmbeddedResource Include="Assets\swoosh.ico" LogicalName="swoosh.ico" />
+    <EmbeddedResource Include="Assets\swoosh-256.png" LogicalName="swoosh-256.png" />
   </ItemGroup>
 
 </Project>

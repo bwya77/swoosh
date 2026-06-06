@@ -283,6 +283,34 @@
                                     <ToggleSwitch x:Name="PhantomToggle" Grid.Column="2" Margin="12,0,0,0"
                                                   VerticalAlignment="Top" Toggled="OnSettingToggled" />
                                 </Grid>
+
+                                <Border Height="1" Margin="34,0,0,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                                <Grid Padding="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xE897;" FontSize="18" Margin="0,0,16,0"
+                                              VerticalAlignment="Top"
+                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Gesture tutorial" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Text="Replay the quick walkthrough that shows each touchpad gesture and what it does."
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <Button x:Name="TutorialBtn" Grid.Column="2" Margin="12,0,0,0"
+                                            VerticalAlignment="Top" Click="OnReplayTutorial">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE768;" FontSize="14" />
+                                            <TextBlock Text="Replay" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </StackPanel>

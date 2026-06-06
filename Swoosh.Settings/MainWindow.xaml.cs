@@ -1214,6 +1214,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>Ask the running tray app to show the gesture tutorial, via a shared named event.
+    /// The tutorial window lives in the tray app (a separate process), so we signal it here.</summary>
+    private void OnReplayTutorial(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Create-or-open the event; AutoReset so the listener consumes it once.
+            using var signal = new System.Threading.EventWaitHandle(
+                false, System.Threading.EventResetMode.AutoReset, @"Local\Swoosh_Show_Tutorial_v1");
+            signal.Set();
+        }
+        catch { /* tray app not running or signal unavailable */ }
+    }
+
     private static void OpenUrl(string? url)
     {
         if (string.IsNullOrEmpty(url)) return;

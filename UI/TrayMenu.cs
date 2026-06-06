@@ -61,6 +61,7 @@ internal static class TrayMenu
         Func<bool> getGestures,
         Action onSettings,
         Action onToggleGestures,
+        Action onTutorial,
         Action onQuit)
     {
         // Match the OS light/dark setting from the start so the first open is themed.
@@ -84,10 +85,14 @@ internal static class TrayMenu
         var gestures = NewItem("Gestures enabled", onToggleGestures);
         gestures.CheckOnClick = false;
 
+        var tutorial = NewItem("Show tutorial", onTutorial);
+
         var quit = NewItem("Quit Swoosh", onQuit);
 
         menu.Items.Add(settings);
         menu.Items.Add(gestures);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(tutorial);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(quit);
 
