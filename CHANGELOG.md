@@ -4,7 +4,9 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
-- New "Share Swoosh" card in Settings under About. Copy the link with one click, open the native Windows share sheet, or post straight to X, LinkedIn, or Reddit with a ready-made message.
+- New "Copy diagnostics" button in Settings under Home (Startup and troubleshooting). It copies a touchpad and system report (app version, OS, architecture, and the detected Precision Touchpad layout) to your clipboard. Paste it into a GitHub issue if gestures aren't working so the problem can be diagnosed.
+- Swoosh now warns you at startup if it can't find a Windows Precision Touchpad, instead of silently doing nothing. External mice and older (non-precision) touchpads aren't supported.
+- New "Share Swoosh" card in Settings under About.Copy the link with one click, open the native Windows share sheet, or post straight to X, LinkedIn, or Reddit with a ready-made message.
 - Fixed the custom overlay color picker being laggy when dragging quickly through colors. The picker now updates instantly while you drag and only saves once you release, so a fast drag is smooth.
 - New touchpad demo overlay for screen recordings and demos.Turn it on in Settings under Appearance to show a polished on-screen touchpad with your live finger movements, comet trails that gently fade out, a finger-count pill, and a caption naming the active gesture (for example "Snap left" or "Move to display"). It is draggable and always on top, so you can frame it in a corner while you record. This replaces the old plain touchpad debug overlay.
 - Switching pages in the Settings app now has a smooth slide-up-and-fade transition, matching the Windows 11 Settings app.

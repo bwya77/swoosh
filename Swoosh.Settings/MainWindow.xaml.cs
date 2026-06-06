@@ -1176,6 +1176,42 @@ public sealed partial class MainWindow : Window
         CheckBtn.IsEnabled = true;
     }
 
+    // ---- Diagnostics ------------------------------------------------------
+
+    private static string DiagnosticsPath =>
+        System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Swoosh", "diagnostics.txt");
+
+    /// <summary>Copy the touchpad/system diagnostics report (written by the running app at
+    /// startup) to the clipboard, with brief confirmation on the button.</summary>
+    private async void OnCopyDiagnostics(object sender, RoutedEventArgs e)
+    {
+        string report;
+        try { report = System.IO.File.ReadAllText(DiagnosticsPath); }
+        catch
+        {
+            report = "Swoosh diagnostics were not available. Make sure Swoosh is running, then try again.";
+        }
+
+        try
+        {
+            var pkg = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            pkg.SetText(report);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(pkg);
+        }
+        catch { /* clipboard unavailable */ }
+
+        if (CopyDiagText != null && CopyDiagIcon != null)
+        {
+            CopyDiagText.Text = "Copied!";
+            CopyDiagIcon.Glyph = "\uE73E"; // checkmark
+            await Task.Delay(1500);
+            CopyDiagText.Text = "Copy";
+            CopyDiagIcon.Glyph = "\uE8C8"; // copy
+        }
+    }
+
     private static void OpenUrl(string? url)
     {
         if (string.IsNullOrEmpty(url)) return;

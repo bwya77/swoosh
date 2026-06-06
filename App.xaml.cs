@@ -66,6 +66,21 @@ public partial class App : System.Windows.Application
 
         BuildTray();
         _ = CheckForUpdatesAsync(manual: false);
+
+        // Probe the touchpad and write a diagnostics report for the Settings "Copy
+        // diagnostics" button. If no usable Precision Touchpad is found, warn the user
+        // (instead of silently doing nothing). Off the UI-critical path.
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            Diagnostics.WriteStartupReport();
+            if (!Diagnostics.TouchpadDetected)
+            {
+                Dispatcher.BeginInvoke(() => _tray?.ShowBalloonTip(
+                    9000, "Swoosh: no Precision Touchpad found",
+                    "Swoosh needs a Windows Precision Touchpad. External mice and older (non-precision) touchpads aren't supported, so gestures won't work on this PC.",
+                    Forms.ToolTipIcon.Warning));
+            }
+        });
     }
 
     /// <summary>Load the app icon for the tray: prefer the embedded multi-resolution

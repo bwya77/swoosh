@@ -232,6 +232,34 @@
                                     </StackPanel>
                                     <ToggleSwitch x:Name="DemoToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
                                 </Grid>
+
+                                <Border Height="1" Margin="34,0,0,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                                <Grid Padding="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xE9D9;" FontSize="18" Margin="0,0,16,0"
+                                              VerticalAlignment="Center"
+                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Diagnostics" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Text="Copy a touchpad and system report to your clipboard. Paste it into a GitHub issue if gestures aren't working, so the problem can be diagnosed."
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <Button x:Name="CopyDiagBtn" Grid.Column="2" Margin="12,0,0,0"
+                                            VerticalAlignment="Top" Click="OnCopyDiagnostics">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon x:Name="CopyDiagIcon" Glyph="&#xE8C8;" FontSize="14" />
+                                            <TextBlock x:Name="CopyDiagText" Text="Copy" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </StackPanel>
