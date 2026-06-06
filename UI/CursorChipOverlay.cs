@@ -134,6 +134,28 @@ public sealed class CursorChipOverlay
     private Border? _mapUpFill, _mapDownFill, _mapLeftFill, _mapRightFill, _mapCenterFill;
     private double _mapDesignW = SingleCanvasW, _mapDesignH = CanvasH;
 
+    // Down-action chooser: the snap HUD square stays visible but greyed out, and two circular
+    // option buttons emerge downward beneath it — left = minimize (minus), right = close (red, X).
+    // Leaning the swipe highlights one; swiping back up retracts and resumes normal gestures.
+    private Grid? _chooser;
+    private int _chooserCount = -1;
+    private readonly List<System.Windows.Shapes.Ellipse> _chooserFills = new();       // accent fill (minimize only)
+    private readonly List<System.Windows.Controls.TextBlock> _chooserIcons = new();
+    private readonly List<Grid> _chooserCircles = new();                              // per-option container (for dim)
+    private TranslateTransform? _chooserSlide;                                        // emerge-downward transform
+    private Canvas? _chooserCircleHost;                                               // animated container for the circles
+    private double _chooserDesignW = SingleCanvasW;
+    private double _chooserDesignH = CanvasH;
+    private bool _chooserActive;  // chooser currently engaged (drives the one-time slide reveal)
+    private long _retractToken;    // guards the deferred hide after a retract animation
+
+    // Circle option geometry (design space).
+    private const double CircleD = 56;     // option-circle diameter
+    private const double CircleGap = 22;   // gap between the two option circles
+    private const double ChooserVGap = 18; // vertical gap between the greyed HUD square and the circles
+    private static readonly Brush CloseFill = Freeze(new SolidColorBrush(Color.FromArgb(245, 0xE5, 0x48, 0x4A)));
+    private static readonly Brush CircleBg = Freeze(new SolidColorBrush(Color.FromArgb(232, 30, 33, 40)));
+
     // The monitor map is anchored to the cursor position captured when the gesture
     // begins, so tiny pointer jitter while the fingers rest does not make the (large)
     // HUD twitch frame to frame. Reset when the HUD hides.
@@ -276,6 +298,12 @@ public sealed class CursorChipOverlay
         _map = null;
         _mapAnchored = false;
         _stripAnchored = false;
+        _chooser = null;
+        _chooserCount = -1;
+        _chooserActive = false;
+        _chooserFills.Clear();
+        _chooserIcons.Clear();
+        _chooserCircles.Clear();
         _shown = false;
         _lastKey = "";
         _lastPlace = (-99999, 0, 0, 0);
@@ -375,6 +403,225 @@ public sealed class CursorChipOverlay
         _strip = BuildStrip(count);
         _stripCount = count;
         _canvas!.Children.Add(_strip);
+    }
+
+    // ---- Down-action chooser (minimize / close) ----------------------------
+
+    /// <summary>Build the chooser: <paramref name="count"/> chips (1 = close only, 2 = minimize
+    /// then close), each a snap-style chip with a centered icon over a hidden fill.</summary>
+    private Grid BuildChooser(int count)
+    {
+        // Content width is the wider of the greyed HUD square and the circle row.
+        double circlesW = count * CircleD + (count - 1) * CircleGap;
+        double contentW = Math.Max(SingleChipW, circlesW);
+        double canvasW = contentW + 2 * Margin;
+        double canvasH = Margin + ChipH + ChooserVGap + CircleD + Margin;
+
+        var root = new Grid { Width = canvasW, Height = canvasH };
+        var host = new Canvas { Width = canvasW, Height = canvasH };
+
+        _chooserFills.Clear();
+        _chooserIcons.Clear();
+        _chooserCircles.Clear();
+
+        // (1) The greyed-out snap HUD square on top, centred. It stays dimmed so the user knows
+        // they can still swipe back up to resume normal snapping.
+        var (screen, _, _) = BuildScreenWH(SingleChipW, ChipH);
+        Canvas.SetLeft(screen, (canvasW - SingleChipW) / 2.0);
+        Canvas.SetTop(screen, Margin);
+        screen.Opacity = 0.32;
+        host.Children.Add(screen);
+
+        // (2) The option circles, emerging downward beneath the square.
+        // For 2 options: minimize (left) then close (right). For 1: close only.
+        var circleHost = new Canvas { Width = canvasW, Height = canvasH };
+        _chooserCircleHost = circleHost;
+        _chooserSlide = new TranslateTransform(0, 0);
+        circleHost.RenderTransform = _chooserSlide;
+
+        bool[] isClose = count == 1 ? new[] { true } : new[] { false, true };
+        string[] glyphs = count == 1 ? new[] { "\uE8BB" } : new[] { "\uE921", "\uE8BB" };
+        double rowLeft = (canvasW - circlesW) / 2.0;
+        double rowTop = Margin + ChipH + ChooserVGap;
+
+        for (int i = 0; i < count; i++)
+        {
+            double left = rowLeft + i * (CircleD + CircleGap);
+            var (circle, accent, icon) = BuildOptionCircle(isClose[i], glyphs[i]);
+            Canvas.SetLeft(circle, left);
+            Canvas.SetTop(circle, rowTop);
+            circleHost.Children.Add(circle);
+            _chooserCircles.Add(circle);
+            _chooserFills.Add(accent);
+            _chooserIcons.Add(icon);
+        }
+
+        host.Children.Add(circleHost);
+        root.Children.Add(host);
+        _chooserDesignW = canvasW;
+        _chooserDesignH = canvasH;
+        return root;
+    }
+
+    /// <summary>One circular option button. Close circles are filled red with a white glyph;
+    /// minimize circles use the dark HUD backdrop with a (hidden) accent fill revealed on select.
+    /// Returns the container, the accent fill ellipse, and the glyph for later state changes.</summary>
+    private (Grid circle, System.Windows.Shapes.Ellipse accent, System.Windows.Controls.TextBlock icon)
+        BuildOptionCircle(bool isClose, string glyph)
+    {
+        var g = new Grid { Width = CircleD, Height = CircleD };
+
+        var baseFill = new System.Windows.Shapes.Ellipse
+        {
+            Width = CircleD,
+            Height = CircleD,
+            Fill = isClose ? CloseFill : CircleBg,
+            Stroke = isClose ? Freeze(new SolidColorBrush(Color.FromArgb(255, 0xFF, 0x6B, 0x6B))) : _screenEdge,
+            StrokeThickness = Stroke,
+        };
+        g.Children.Add(baseFill);
+
+        // Accent fill (minimize selection) sits above the dark backdrop, hidden until selected.
+        var accent = new System.Windows.Shapes.Ellipse
+        {
+            Width = CircleD,
+            Height = CircleD,
+            Fill = _solid,
+            Visibility = Visibility.Collapsed,
+        };
+        g.Children.Add(accent);
+
+        var icon = new System.Windows.Controls.TextBlock
+        {
+            Text = glyph,
+            FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"),
+            FontSize = 24,
+            Foreground = isClose ? Freeze(new SolidColorBrush(Colors.White)) : MutedIcon(),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
+        };
+        g.Children.Add(icon);
+
+        return (g, accent, icon);
+    }
+
+    private Brush MutedIcon() => Freeze(new SolidColorBrush(_lightHud
+        ? Color.FromArgb(190, 40, 44, 52)
+        : Color.FromArgb(220, 255, 255, 255)));
+
+    private void EnsureChooser(int count)
+    {
+        if (_chooser != null && _chooserCount == count) return;
+        if (_chooser != null) _canvas!.Children.Remove(_chooser);
+        _chooser = BuildChooser(count);
+        _chooserCount = count;
+        _canvas!.Children.Add(_chooser);
+    }
+
+    private void SetChooserMode()
+    {
+        if (_single == null || _chooser == null || _canvas == null) return;
+        _single.Visibility = Visibility.Collapsed;
+        if (_strip != null) _strip.Visibility = Visibility.Collapsed;
+        if (_map != null) _map.Visibility = Visibility.Collapsed;
+        _chooser.Visibility = Visibility.Visible;
+        _canvas.Width = _chooserDesignW;
+        _canvas.Height = _chooserDesignH;
+    }
+
+    /// <summary>Show the down-action chooser: a greyed snap-HUD square with circular minimize/close
+    /// options emerging beneath it. Choose mode shows both circles and highlights the leaned-toward
+    /// one; Close mode shows a single red close circle. Selection brightens the chosen circle (accent
+    /// fill + white glyph for minimize, full-opacity red for close) and dims the other.</summary>
+    public void ShowDownChooser(bool chooseMode, bool closePicked)
+    {
+        SyncSystemTheme();
+        SyncAccentColor();
+        EnsureWindow();
+        if (_win == null) return;
+        CancelHideTimer();
+
+        int count = chooseMode ? 2 : 1;
+        EnsureChooser(count);
+        bool firstShow = !_chooserActive;
+        SetChooserMode();
+        _chooserActive = true;
+
+        // Index of the selected circle and whether it is the (destructive) close action.
+        int closeIndex = count == 2 ? 1 : 0;
+        int selected = chooseMode ? (closePicked ? closeIndex : 0) : closeIndex;
+
+        string key = $"dc|{count}|{selected}|{_baseColor}";
+        if (key != _lastKey)
+        {
+            for (int i = 0; i < _chooserCircles.Count; i++)
+            {
+                bool active = i == selected;
+                bool isClose = i == closeIndex;
+                // Minimize: accent fill + white glyph when active; muted otherwise.
+                if (!isClose)
+                {
+                    _chooserFills[i].Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+                    _chooserIcons[i].Foreground = active
+                        ? Freeze(new SolidColorBrush(Colors.White))
+                        : MutedIcon();
+                }
+                // Unselected circle dims back so the leaned-toward option clearly stands out.
+                _chooserCircles[i].Opacity = active ? 1.0 : 0.5;
+            }
+            _lastKey = key;
+        }
+        Place(_chooserDesignW, _chooserDesignH, _chooserBasePx());
+
+        // The circles "emerge" downward out of the greyed HUD square the first time the chooser
+        // appears in a gesture; subsequent updates (lean changes) keep them steady.
+        if (firstShow) RevealChooserDown();
+    }
+
+    // Scale the chooser window so the greyed square reads at the same physical size as a normal
+    // single chip (the canvas is taller to fit the option circles).
+    private double _chooserBasePx() => BaseHeightPx * _chooserDesignH / CanvasH;
+
+    private void RevealChooserDown()
+    {
+        if (_chooserSlide == null) return;
+        _retractToken++;  // invalidate any in-flight retract's deferred hide
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var slide = new DoubleAnimation(-(CircleD + ChooserVGap) * 0.6, 0, new Duration(TimeSpan.FromMilliseconds(220)))
+        {
+            EasingFunction = ease,
+        };
+        _chooserSlide.BeginAnimation(TranslateTransform.YProperty, slide);
+        // Fade in as they slide so they don't read as overlapping the greyed square mid-emerge.
+        _chooserCircleHost?.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(170))));
+    }
+
+    /// <summary>Cancel the chooser by retracting the circles back up into the greyed square, then
+    /// hiding the HUD. Called when the user reverses the down swipe to escape the chooser.</summary>
+    public void RetractChooserUp()
+    {
+        if (!_chooserActive || _chooserSlide == null || _win == null) { Hide(); return; }
+        _chooserActive = false;
+        _lastKey = "";
+        long token = ++_retractToken;
+
+        var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
+        var slide = new DoubleAnimation(0, -(CircleD + ChooserVGap) * 0.6, new Duration(TimeSpan.FromMilliseconds(170)))
+        {
+            EasingFunction = ease,
+        };
+        _chooserSlide.BeginAnimation(TranslateTransform.YProperty, slide);
+
+        var fade = new DoubleAnimation(1, 0, new Duration(TimeSpan.FromMilliseconds(150)));
+        fade.Completed += (_, _) =>
+        {
+            // Only hide if this retract is still the current intent: a new chooser engage or a
+            // normal snap gesture taking over (chooser collapsed) must not be hidden by us.
+            if (token == _retractToken && _chooser != null && _chooser.Visibility == Visibility.Visible)
+                Hide();
+        };
+        _chooserCircleHost?.BeginAnimation(UIElement.OpacityProperty, fade);
     }
 
     /// <summary>Builds one monitor: rounded screen with a clipped inner canvas and a
@@ -485,6 +732,8 @@ public sealed class CursorChipOverlay
         if (_single == null || _map == null || _canvas == null) return;
         _single.Visibility = Visibility.Collapsed;
         if (_strip != null) _strip.Visibility = Visibility.Collapsed;
+        if (_chooser != null) _chooser.Visibility = Visibility.Collapsed;
+        _chooserActive = false;
         _map.Visibility = Visibility.Visible;
         _canvas.Width = _mapDesignW;
         _canvas.Height = _mapDesignH;
@@ -830,6 +1079,8 @@ public sealed class CursorChipOverlay
         _single.Visibility = Visibility.Visible;
         if (_strip != null) _strip.Visibility = Visibility.Collapsed;
         if (_map != null) _map.Visibility = Visibility.Collapsed;
+        if (_chooser != null) _chooser.Visibility = Visibility.Collapsed;
+        _chooserActive = false;
         _canvas.Width = SingleCanvasW;
         _canvas.Height = CanvasH;
     }
@@ -840,6 +1091,8 @@ public sealed class CursorChipOverlay
         _single.Visibility = Visibility.Collapsed;
         _strip.Visibility = Visibility.Visible;
         if (_map != null) _map.Visibility = Visibility.Collapsed;
+        if (_chooser != null) _chooser.Visibility = Visibility.Collapsed;
+        _chooserActive = false;
         _canvas.Width = _stripDesignW;
         _canvas.Height = CanvasH;
     }
@@ -971,6 +1224,7 @@ public sealed class CursorChipOverlay
         _lastPlace = (-99999, 0, 0, 0);
         _mapAnchored = false;
         _stripAnchored = false;
+        _chooserActive = false;
         _shown = false;
         if (_win == null) return;
 

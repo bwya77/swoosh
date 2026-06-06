@@ -560,6 +560,51 @@ public sealed class GestureEngine
     /// <summary>Abort the in-progress gesture now (Esc) and latch the cancel so the same
     /// touch can't re-arm until the fingers lift. Tears down whichever mode is active and
     /// raises the matching teardown event so the HUD fades out.</summary>
+    /// <summary>Re-anchor the in-flight two-finger swipe so the current finger position already
+    /// classifies as <paramref name="seed"/> (offset by the commit distance along that direction).
+    /// Used when the controller cancels the swipe-down chooser and wants to restore the zone the
+    /// user was aiming before they dipped down, while still letting them keep adjusting from there.</summary>
+    public void RebaselineSeed(SwipeDirection seed)
+    {
+        if (!_tracking) return;
+        if (seed == SwipeDirection.None) { Rebaseline(); return; }
+
+        var (ux, uy) = DirComponents(seed); // screen space, up positive
+        double inv = (ux != 0 && uy != 0) ? 1.0 / Math.Sqrt(2) : 1.0; // normalize diagonals
+        double mag = CommitDistance;
+        double padDx = ux * inv * mag;
+        double padDy = -uy * inv * mag; // back to pad space (Y grows downward)
+
+        _startX = _lastX - padDx;
+        _startY = _lastY - padDy;
+        _startTime = _lastFrameMs;
+        _maxDist = Math.Max(HoldRadius, mag); // never reads as a still-pending hold
+        _histCount = 0;
+        _currentDir = seed;
+        _holdEligible = false;
+        _idleAnchorX = _lastX; _idleAnchorY = _lastY;
+        _lastMoveMs = _lastFrameMs;
+    }
+
+    /// <summary>Re-anchor the in-flight two-finger swipe at the current finger position, so
+    /// subsequent direction/distance is measured from here instead of the original landing point.
+    /// Used when the controller cancels a sub-mode (e.g. the swipe-down chooser) mid-gesture and
+    /// wants the user to keep gesturing seamlessly without the residual travel being reclassified.
+    /// The idle clock is reset so the re-baselined gesture gets a fresh rest-to-cancel window.</summary>
+    public void Rebaseline()
+    {
+        if (!_tracking) return;
+        _startX = _lastX;
+        _startY = _lastY;
+        _startTime = _lastFrameMs;
+        _maxDist = 0;
+        _histCount = 0;
+        _currentDir = SwipeDirection.None;
+        _holdEligible = false;   // past the dwell window already; a re-baseline must not start a hold
+        _idleAnchorX = _lastX; _idleAnchorY = _lastY;
+        _lastMoveMs = _lastFrameMs;
+    }
+
     public void Cancel()
     {
         bool active = _tracking || _free;

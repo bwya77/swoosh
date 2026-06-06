@@ -23,6 +23,17 @@ public enum HudSize
     Large,
 }
 
+/// <summary>What a downward swipe does (when the down gesture is enabled).</summary>
+public enum SwipeDownMode
+{
+    /// <summary>Minimize the window (the default, classic behavior).</summary>
+    Minimize,
+    /// <summary>Close the window.</summary>
+    Close,
+    /// <summary>Show a chooser HUD; lean left to minimize or right to close.</summary>
+    Choose,
+}
+
 /// <summary>User-facing, persisted application settings (serialized to JSON).</summary>
 public sealed class AppSettings
 {
@@ -40,6 +51,16 @@ public sealed class AppSettings
 
     /// <summary>Swipe down to minimize the window.</summary>
     public bool MinimizeEnabled { get; set; } = true;
+
+    /// <summary>What a downward swipe does when the down gesture is enabled: minimize (default),
+    /// close, or show a chooser to pick between minimize and close.</summary>
+    public SwipeDownMode SwipeDownAction { get; set; } = SwipeDownMode.Minimize;
+
+    /// <summary>How deliberate a downward swipe must be before the down-action (close/choose)
+    /// engages, as a fraction of touchpad travel. Higher means the user must pull further down,
+    /// so incidental downward motion during other gestures won't trigger minimize/close.
+    /// Clamped to a sane range at apply time.</summary>
+    public double SwipeDownThreshold { get; set; } = 0.15;
 
     /// <summary>Five-finger tap to center the window without resizing it.</summary>
     public bool CenterEnabled { get; set; } = true;

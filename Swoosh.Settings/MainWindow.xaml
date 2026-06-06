@@ -375,6 +375,70 @@
                         </StackPanel>
 
                         <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE921;" FontSize="18" Margin="0,0,16,0"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Swipe down" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="What a downward swipe does. Choose Let me choose to show a small picker and lean left to minimize or right to close."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ComboBox x:Name="SwipeDownCombo" Grid.Column="2" MinWidth="140"
+                                          VerticalAlignment="Center"
+                                          SelectionChanged="OnSwipeDownChanged">
+                                    <ComboBoxItem Content="Minimize" />
+                                    <ComboBoxItem Content="Close window" />
+                                    <ComboBoxItem Content="Let me choose" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="SwipeDownThresholdCard" Style="{StaticResource Card}">
+                            <StackPanel Spacing="6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Swipe-down deliberateness" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <HyperlinkButton Grid.Column="1" Padding="4,0"
+                                                     VerticalAlignment="Center" Click="OnResetSwipeDownThreshold"
+                                                     ToolTipService.ToolTip="Reset to default">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                    </HyperlinkButton>
+                                </Grid>
+                                <TextBlock Text="How far down you must pull before close/minimize engages. Higher means only a long, deliberate swipe triggers it, so other gestures won't."
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Light" VerticalAlignment="Center"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <Slider x:Name="SwipeDownThresholdSlider" Grid.Column="1" Margin="12,0"
+                                            Minimum="0" Maximum="28" StepFrequency="1"
+                                            ValueChanged="OnSwipeDownThresholdChanged" />
+                                    <TextBlock Grid.Column="2" Text="Deliberate" VerticalAlignment="Center"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>

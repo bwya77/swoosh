@@ -25,8 +25,8 @@ Two fingers on your touchpad, and the window goes where you swipe.
 | **Swipe to snap to a half** | **Swipe up to maximize** |
 | ![Snap to a corner](docs/media/snap-corner.gif) | ![Resize with five fingers](docs/media/resize.gif) |
 | **Swipe diagonally for a corner** | **Spread five fingers to resize** |
-| ![Switch desktops](docs/media/desktops.gif) | |
-| **Hold, then swipe to change desktops** | |
+| ![Switch desktops](docs/media/desktops.gif) | ![Minimize or close](docs/media/swipe-down.gif) |
+| **Hold, then swipe to change desktops** | **Swipe down to minimize or close** |
 
 These are the same animations from the in-app tutorial, which runs on first launch
 and can be replayed any time from the Swoosh tray menu.

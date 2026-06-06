@@ -62,6 +62,7 @@ public sealed partial class MainWindow : Window
 
     private readonly Dictionary<string, bool> _gestureEnabled = new();
     private readonly List<(string Key, Button Card)> _gestureCards = new();
+    private TextBlock? _minimizeCardTitle; // the "Swipe down" card's title, retitled per SwipeDownAction
 
     // Code-created TextBlocks that should use the theme-aware "secondary" text
     // colour. We track them so they recolour on theme change — pulling the brush
@@ -326,6 +327,17 @@ public sealed partial class MainWindow : Window
             _ => 0,
         };
         ModifierCombo.IsEnabled = s.GridModifierEnabled;
+        SwipeDownCombo.SelectedIndex = s.SwipeDownAction switch
+        {
+            SwipeDownMode.Close => 1,
+            SwipeDownMode.Choose => 2,
+            _ => 0,
+        };
+        // Slider runs 0..28 (Minimum must be 0 or WinUI throws at parse time); the real percent is
+        // value + 2, i.e. a 2%..30% pull. Threshold is stored as a 0..1 fraction.
+        SwipeDownThresholdSlider.Value = Math.Clamp(s.SwipeDownThreshold * 100.0 - 2, 0, 28);
+        UpdateSwipeDownThresholdEnabled();
+        UpdateMinimizeCardTitle();
         SensitivitySlider.Value = s.Sensitivity;
         // Move to display is one control: Off, or the modifier key that engages it.
         MonitorMoveCombo.SelectedIndex = !s.MonitorMoveEnabled ? 0 : s.MonitorMoveModifier switch
@@ -385,6 +397,13 @@ public sealed partial class MainWindow : Window
             _ => GridModifier.Shift,
         },
         Sensitivity = SensitivitySlider.Value,
+        SwipeDownAction = SwipeDownCombo.SelectedIndex switch
+        {
+            1 => SwipeDownMode.Close,
+            2 => SwipeDownMode.Choose,
+            _ => SwipeDownMode.Minimize,
+        },
+        SwipeDownThreshold = (SwipeDownThresholdSlider.Value + 2) / 100.0,
         MonitorMoveEnabled = MonitorMoveCombo.SelectedIndex > 0,
         MonitorMoveModifier = MonitorMoveCombo.SelectedIndex switch
         {
@@ -421,6 +440,36 @@ public sealed partial class MainWindow : Window
     private void OnSettingToggled(object sender, RoutedEventArgs e) => SaveIfReady();
 
     private void OnModifierChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
+    private void OnSwipeDownChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateSwipeDownThresholdEnabled();
+        UpdateMinimizeCardTitle();
+        SaveIfReady();
+    }
+
+    // The deliberateness slider only matters when the down-action is Close or Choose; grey it out
+    // for the default Minimize mode (where every down swipe simply minimizes).
+    private void UpdateSwipeDownThresholdEnabled()
+    {
+        bool on = SwipeDownCombo.SelectedIndex > 0;
+        if (SwipeDownThresholdSlider != null) SwipeDownThresholdSlider.IsEnabled = on;
+        if (SwipeDownThresholdCard != null) SwipeDownThresholdCard.Opacity = on ? 1.0 : 0.5;
+    }
+
+    // Retitle the swipe-down gesture tile to match the configured action so the card doesn't
+    // misleadingly say "Minimize" when it is set to close (or to let the user choose).
+    private void UpdateMinimizeCardTitle()
+    {
+        if (_minimizeCardTitle == null) return;
+        _minimizeCardTitle.Text = SwipeDownCombo.SelectedIndex switch
+        {
+            1 => "Close",
+            2 => "Minimize / Close",
+            _ => "Minimize",
+        };
+    }
+
+    private void OnSwipeDownThresholdChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 
     private void OnMonitorMoveChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
@@ -460,6 +509,8 @@ public sealed partial class MainWindow : Window
     private static readonly AppSettings Defaults = new();
 
     private void OnResetSensitivity(object sender, RoutedEventArgs e) => SensitivitySlider.Value = Defaults.Sensitivity;
+
+    private void OnResetSwipeDownThreshold(object sender, RoutedEventArgs e) => SwipeDownThresholdSlider.Value = Defaults.SwipeDownThreshold * 100.0 - 2;
 
     private void OnResetGridSpacing(object sender, RoutedEventArgs e) => GridSpacingSlider.Value = Defaults.GridSpacing;
 
@@ -968,14 +1019,16 @@ public sealed partial class MainWindow : Window
 
             var content = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
             content.Children.Add(BuildHud(g));
-            content.Children.Add(new TextBlock
+            var title = new TextBlock
             {
                 Text = g.Name,
                 FontSize = 13,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 TextAlignment = TextAlignment.Center,
-            });
+            };
+            content.Children.Add(title);
+            if (g.Key == "minimize") _minimizeCardTitle = title;
             content.Children.Add(TrackSecondary(new TextBlock
             {
                 Text = g.Gesture,

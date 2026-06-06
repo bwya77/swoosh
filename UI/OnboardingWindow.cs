@@ -30,8 +30,8 @@ namespace Swoosh.UI;
 /// </summary>
 public sealed class OnboardingWindow : Window
 {
-    private enum Swipe { None, Left, Right, Up, UpLeft }
-    private enum Demo { Snap, Desktop, Resize, None }
+    private enum Swipe { None, Left, Right, Up, Down, UpLeft }
+    private enum Demo { Snap, Desktop, Resize, DownChooser, None }
 
     private sealed record Step(string Title, string Desc, Swipe Swipe, bool Hold, Demo Demo, Rect? Zone);
 
@@ -48,6 +48,9 @@ public sealed class OnboardingWindow : Window
         new("Snap to a corner",
             "Swipe diagonally to snap the window into that quarter of the screen.",
             Swipe.UpLeft, false, Demo.Snap, new Rect(0, 0, 0.5, 0.5)),
+        new("Minimize or close",
+            "Set Swipe down to Let me choose in Settings: swipe down and a picker drops out below the window. Lean left to minimize, or right for the red close button.",
+            Swipe.Down, false, Demo.DownChooser, null),
         new("Resize with five fingers",
             "Put five fingers on the touchpad and spread them apart to grow the window, or pinch them together to shrink it.",
             Swipe.None, false, Demo.Resize, null),
@@ -236,6 +239,7 @@ public sealed class OnboardingWindow : Window
         _scrCanvas = new Canvas { Width = ScrW, Height = ScrH, ClipToBounds = true };
         BuildPad();
         BuildScreenWindow();
+        BuildChooserDemo();
 
         var pad = WrapSurface(_padCanvas, "Your touchpad", out _padCap);
         var scr = WrapSurface(_scrCanvas, "Your screen", out _scrCap);
@@ -287,29 +291,38 @@ public sealed class OnboardingWindow : Window
         stack.Children.Add(_titleText);
         stack.Children.Add(_descText);
 
-        // ---- Footer: progress dots + nav ----
-        var footer = new Grid { Margin = new Thickness(0, 16, 0, 0) };
-        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        // ---- Footer: centered progress dots, then Back (left) / Next (right) below ----
+        var footer = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 16, 0, 0) };
 
-        _dots = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        _dots = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 14),
+        };
         for (int i = 0; i < _steps.Length; i++)
             _dots.Children.Add(new Ellipse { Width = 8, Height = 8, Margin = new Thickness(3, 0, 3, 0) });
-        Grid.SetColumn(_dots, 0);
 
-        var nav = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var navRow = new Grid();
+        navRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        navRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        navRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
         _backBtn = MakeButton("Back", accent: false);
         _backBtn.Click += (_, _) => Back();
-        _backBtn.Margin = new Thickness(0, 0, 8, 0);
+        _backBtn.HorizontalAlignment = HorizontalAlignment.Left;
+        Grid.SetColumn(_backBtn, 0);
+
         _nextBtn = MakeButton("Next", accent: true);
         _nextBtn.Click += (_, _) => Next();
-        nav.Children.Add(_backBtn);
-        nav.Children.Add(_nextBtn);
-        Grid.SetColumn(nav, 2);
+        _nextBtn.HorizontalAlignment = HorizontalAlignment.Right;
+        Grid.SetColumn(_nextBtn, 2);
+
+        navRow.Children.Add(_backBtn);
+        navRow.Children.Add(_nextBtn);
 
         footer.Children.Add(_dots);
-        footer.Children.Add(nav);
+        footer.Children.Add(navRow);
         stack.Children.Add(footer);
 
         // ---- Skip ----
@@ -552,6 +565,105 @@ public sealed class OnboardingWindow : Window
         _scrCanvas.Children.Add(_window);
     }
 
+    // ---- Swipe-down chooser demo (greyed window + minimize/close option circles) -----------
+    private Border _chooserSquare = null!;
+    private Canvas _chooserCircleHost = null!;
+    private TranslateTransform _chooserCircleT = null!;
+    private Ellipse _chooserMin = null!, _chooserClose = null!;
+    private TextBlock _chooserMinIcon = null!, _chooserCloseIcon = null!;
+
+    private const double DcSqW = 74, DcSqH = 50, DcCircle = 42, DcCircleGap = 26;
+
+    /// <summary>Builds the swipe-down chooser visualization shown on the "screen" surface for the
+    /// minimize/close step: a greyed window square with two option circles (minimize left, red
+    /// close right) that emerge downward as the fingers swipe down. Hidden on every other step.</summary>
+    private void BuildChooserDemo()
+    {
+        double sqX = (ScrW - DcSqW) / 2.0, sqY = 26;
+        _chooserSquare = new Border
+        {
+            Width = DcSqW,
+            Height = DcSqH,
+            CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(1.5),
+            Visibility = Visibility.Collapsed,
+            Child = new Border
+            {
+                Height = 7,
+                VerticalAlignment = VerticalAlignment.Top,
+                CornerRadius = new CornerRadius(6, 6, 0, 0),
+            },
+        };
+        Canvas.SetLeft(_chooserSquare, sqX);
+        Canvas.SetTop(_chooserSquare, sqY);
+        _scrCanvas.Children.Add(_chooserSquare);
+
+        _chooserCircleHost = new Canvas { Width = ScrW, Height = ScrH, Visibility = Visibility.Collapsed };
+        _chooserCircleT = new TranslateTransform(0, 0);
+        _chooserCircleHost.RenderTransform = _chooserCircleT;
+
+        double rowW = 2 * DcCircle + DcCircleGap;
+        double rowX = (ScrW - rowW) / 2.0;
+        double rowY = sqY + DcSqH + 22;
+
+        (_chooserMin, _chooserMinIcon) = BuildOptionCircle("\uE921", isClose: false);
+        Canvas.SetLeft(_chooserMin, rowX);
+        Canvas.SetTop(_chooserMin, rowY);
+        Canvas.SetLeft(_chooserMinIcon, rowX);
+        Canvas.SetTop(_chooserMinIcon, rowY);
+
+        (_chooserClose, _chooserCloseIcon) = BuildOptionCircle("\uE8BB", isClose: true);
+        double closeX = rowX + DcCircle + DcCircleGap;
+        Canvas.SetLeft(_chooserClose, closeX);
+        Canvas.SetTop(_chooserClose, rowY);
+        Canvas.SetLeft(_chooserCloseIcon, closeX);
+        Canvas.SetTop(_chooserCloseIcon, rowY);
+
+        _chooserCircleHost.Children.Add(_chooserMin);
+        _chooserCircleHost.Children.Add(_chooserMinIcon);
+        _chooserCircleHost.Children.Add(_chooserClose);
+        _chooserCircleHost.Children.Add(_chooserCloseIcon);
+        _scrCanvas.Children.Add(_chooserCircleHost);
+
+        _themeAppliers.Add(() =>
+        {
+            _chooserSquare.Background = new SolidColorBrush(Fade(_pal.SubText, 0.16));
+            _chooserSquare.BorderBrush = new SolidColorBrush(Fade(_pal.SubText, 0.40));
+            ((Border)_chooserSquare.Child).Background = new SolidColorBrush(Fade(_pal.SubText, 0.22));
+            _chooserMin.Fill = new SolidColorBrush(Fade(_pal.SubText, 0.18));
+            _chooserMin.Stroke = new SolidColorBrush(Fade(_pal.SubText, 0.45));
+            _chooserMinIcon.Foreground = new SolidColorBrush(_pal.Text);
+        });
+    }
+
+    private (Ellipse circle, TextBlock icon) BuildOptionCircle(string glyph, bool isClose)
+    {
+        var circle = new Ellipse
+        {
+            Width = DcCircle,
+            Height = DcCircle,
+            StrokeThickness = 2,
+        };
+        if (isClose)
+        {
+            circle.Fill = new SolidColorBrush(Color.FromRgb(0xE5, 0x48, 0x4A));
+            circle.Stroke = new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B));
+        }
+        var icon = new TextBlock
+        {
+            Text = glyph,
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 18,
+            Width = DcCircle,
+            Height = DcCircle,
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Foreground = new SolidColorBrush(isClose ? Color.FromRgb(0xFF, 0xFF, 0xFF) : Color.FromRgb(0xFF, 0xFF, 0xFF)),
+            Padding = new Thickness(0, (DcCircle - 24) / 2.0, 0, 0),
+        };
+        return (circle, icon);
+    }
+
     /// <summary>Rebuild the screen backdrop for the current step's demo. Snap shows one screen
     /// outline; Desktop builds a two-page filmstrip plus a desktop-switcher HUD strip. Called on
     /// step change and theme change.</summary>
@@ -570,6 +682,7 @@ public sealed class OnboardingWindow : Window
         {
             case Demo.Snap:
             case Demo.Resize:
+            case Demo.DownChooser:
                 AddPanel(InnerRect(), panelFill, panelStroke, null);
                 break;
 
@@ -717,6 +830,7 @@ public sealed class OnboardingWindow : Window
         Swipe.Left => (-1, 0),
         Swipe.Right => (1, 0),
         Swipe.Up => (0, -1),
+        Swipe.Down => (0, 1),
         Swipe.UpLeft => (-0.72, -0.72),
         _ => (0, 0),
     };
@@ -773,6 +887,10 @@ public sealed class OnboardingWindow : Window
         else { _trail1.Points.Clear(); _trail2.Points.Clear(); }
 
         // ---- Screen ----
+        bool chooserStep = step.Demo == Demo.DownChooser;
+        _chooserSquare.Visibility = chooserStep ? Visibility.Visible : Visibility.Collapsed;
+        _chooserCircleHost.Visibility = chooserStep ? Visibility.Visible : Visibility.Collapsed;
+
         switch (step.Demo)
         {
             case Demo.Snap when step.Zone is { } zone:
@@ -805,6 +923,28 @@ public sealed class OnboardingWindow : Window
                 // HUD highlight slides from tile 1 to tile 2.
                 if (_hudHighlight != null)
                     Canvas.SetLeft(_hudHighlight, _hudStartX + (gap ? 0 : t) * _hudStep);
+                break;
+            }
+            case Demo.DownChooser:
+            {
+                // The window stays put (greyed square already shown). As the fingers swipe down,
+                // the two option circles emerge downward and fade in, and the close option (right)
+                // highlights to show a lean toward it. In the gap they retract.
+                _window.Visibility = Visibility.Collapsed;
+
+                double emerge = gap ? 0 : rawT;       // 0..1 reveal
+                _chooserCircleT.Y = -(DcCircle * 0.7) * (1 - emerge);
+                _chooserCircleHost.Opacity = gap ? 0 : EaseOut(Math.Clamp(rawT * 1.4, 0, 1));
+
+                // Lean toward close once the swipe is past the midpoint: brighten close, dim minimize.
+                bool closeLean = !gap && rawT > 0.5;
+                _chooserClose.Opacity = closeLean ? 1.0 : 0.55;
+                _chooserCloseIcon.Opacity = closeLean ? 1.0 : 0.55;
+                _chooserMin.Opacity = closeLean ? 0.5 : 1.0;
+                _chooserMinIcon.Opacity = closeLean ? 0.5 : 1.0;
+
+                // The window dims further as the (highlighted) close action is about to commit.
+                _chooserSquare.Opacity = closeLean ? 0.5 : 1.0;
                 break;
             }
             default:
@@ -863,6 +1003,7 @@ public sealed class OnboardingWindow : Window
         {
             Demo.Resize => "resize",
             Demo.Desktop => "desktops",
+            Demo.DownChooser => "swipe-down",
             Demo.Snap => s.Swipe switch
             {
                 Swipe.Right => "snap-right",
@@ -943,6 +1084,20 @@ public sealed class OnboardingWindow : Window
         _demoSurfaces.Visibility = summary ? Visibility.Collapsed : Visibility.Visible;
         _checkHost.Visibility = summary ? Visibility.Visible : Visibility.Collapsed;
         if (summary) PlayCheckmark();
+
+        // The swipe-down chooser visuals belong only to their step; hide them on every other step
+        // (the resize step returns early from Animate, so it can't clear them itself).
+        bool chooserStep = step.Demo == Demo.DownChooser;
+        _chooserSquare.Visibility = chooserStep ? Visibility.Visible : Visibility.Collapsed;
+        _chooserCircleHost.Visibility = chooserStep ? Visibility.Visible : Visibility.Collapsed;
+        if (chooserStep)
+        {
+            // Start from the fully-tucked, invisible state so the first painted frame shows the
+            // circles emerging from scratch rather than already present.
+            _chooserCircleHost.Opacity = 0;
+            _chooserCircleT.Y = -(DcCircle * 0.7);
+            _chooserSquare.Opacity = 1;
+        }
 
         for (int i = 0; i < _dots.Children.Count; i++)
             ((Ellipse)_dots.Children[i]).Fill = i == _index

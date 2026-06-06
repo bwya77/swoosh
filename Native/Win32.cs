@@ -7,6 +7,9 @@ public static class Win32
     public const int WM_INPUT = 0x00FF;
     public const int WM_HOTKEY = 0x0312;
     public const int WM_DESTROY = 0x0002;
+    public const int WM_CLOSE = 0x0010;
+    public const int WM_SYSCOMMAND = 0x0112;
+    public const int SC_CLOSE = 0xF060;
 
     public const int RIM_TYPEHID = 2;
     public const uint RIDEV_INPUTSINK = 0x00000100;
@@ -166,6 +169,17 @@ public static class Win32
     [DllImport("user32.dll")]
     public static extern uint GetRawInputDeviceInfo(IntPtr hDevice, uint uiCommand,
         IntPtr pData, ref uint pcbSize);
+
+    [DllImport("user32.dll")]
+    public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>Politely ask a window to close (same as clicking its X). The app can prompt to
+    /// save and may ignore it; we never force-kill.</summary>
+    public static void CloseWindow(IntPtr hwnd)
+    {
+        if (hwnd != IntPtr.Zero)
+            PostMessage(hwnd, WM_SYSCOMMAND, (IntPtr)SC_CLOSE, IntPtr.Zero);
+    }
 
     [DllImport("user32.dll")]
     public static extern bool GetCursorPos(out POINT lpPoint);

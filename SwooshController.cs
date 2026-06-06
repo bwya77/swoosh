@@ -80,6 +80,22 @@ public sealed class SwooshController : IDisposable
     private bool _minimizeEnabled = true;
     private bool _centerEnabled = true;
 
+    // Swipe-down action: minimize (classic), close, or a chooser HUD that lets the user lean
+    // left (minimize) or right (close). When the mode is Close/Choose, a down swipe latches into
+    // a dedicated down-action handler instead of the normal minimize/snap path.
+    private SwipeDownMode _swipeDownMode = SwipeDownMode.Minimize;
+    private bool _downLatched;   // a down gesture has engaged the down-action handler
+    private bool _downEngaged;   // the chooser/close HUD is currently shown (swipe past dead-zone)
+    private bool _downPickClose; // current pick in the chooser: true = close, false = minimize
+    private double _downPeakY;   // deepest (most positive) downward vector reached while latched
+    private SwipeDirection _lastPreviewDir = SwipeDirection.None; // last real direction aimed before a down dip
+    private SwipeDirection _downRestoreDir = SwipeDirection.None; // direction to restore when the chooser is cancelled
+    private const double ChooseBand = 0.045; // horizontal lean needed to pick Close
+    private const double DownReverseBand = 0.05; // upward retrace from the peak that cancels the down-action
+    // How far down (fraction of pad travel) a swipe must reach before the down-action engages.
+    // User-tunable so close/minimize only fire on a deliberate pull. Clamped in ApplySettings.
+    private double _downThreshold = 0.15;
+
     // Thirds: when enabled and the chosen modifier is held during a snap swipe,
     // the target becomes a full-height column / full-width row third instead of
     // the default halves and quarters.
@@ -110,6 +126,8 @@ public sealed class SwooshController : IDisposable
         _quartersEnabled = s.QuartersEnabled;
         _minimizeEnabled = s.MinimizeEnabled;
         _centerEnabled = s.CenterEnabled;
+        _swipeDownMode = s.SwipeDownAction;
+        _downThreshold = Math.Clamp(s.SwipeDownThreshold, 0.02, 0.30);
         _snapper.AnimateSnaps = s.AnimateSnaps;
         _snapper.GridSpacing = Math.Clamp(s.GridSpacing, 0, 10);
         _gestures.IdleCancelMs = s.CancelTimeoutSeconds > 0
@@ -275,6 +293,12 @@ public sealed class SwooshController : IDisposable
         _armed = _target != IntPtr.Zero;
         _liveMoved = false;
         _liveZone = SnapZone.None;
+        _downLatched = false;
+        _downEngaged = false;
+        _downPickClose = false;
+        _downPeakY = 0;
+        _lastPreviewDir = SwipeDirection.None;
+        _downRestoreDir = SwipeDirection.None;
 
         // Capture where the cursor sits inside the window (as a fraction), so a snap can
         // move the cursor to the same relative spot in the window's new position.
@@ -361,8 +385,49 @@ public sealed class SwooshController : IDisposable
     private void OnGestureUpdated(SwipeDirection dir, double progress)
     {
         if (!_armed) { _preview.Hide(); _chip.Hide(); return; }
+
+        // Escape the down-action by reversing upward. We detect a reversal from the deepest point
+        // reached (not an absolute position relative to the gesture start): after a deep down-pull
+        // the finger sits near the bottom of the pad, so requiring it to travel back above the
+        // start is often physically impossible. On a modest upward retrace from the peak we cancel
+        // the down-action and re-seed the gesture at the zone the user was aiming BEFORE the dip
+        // (e.g. bottom-right) — so the HUD restores that zone and they can keep adjusting from it,
+        // rather than the cancel motion reading as a fresh maximize or the HUD fading out.
+        if (_downLatched)
+        {
+            _downPeakY = Math.Max(_downPeakY, _lastVecY);
+            if (_lastVecY < _downPeakY - DownReverseBand)
+            {
+                _downLatched = false;
+                _downEngaged = false;
+                _downPeakY = 0;
+                if (_downRestoreDir != SwipeDirection.None)
+                {
+                    _gestures.RebaselineSeed(_downRestoreDir);
+                }
+                else
+                {
+                    _gestures.Rebaseline();
+                    _preview.Hide();
+                    _chip.ShowSnap(SnapZone.None, 0);
+                }
+                return;
+            }
+        }
+
+        bool downMode = _minimizeEnabled && _swipeDownMode != SwipeDownMode.Minimize;
+
         if (dir == SwipeDirection.None || progress <= 0)
         {
+            // Retreated below the dead-zone. If we were showing the down-action chooser,
+            // disengage it (but stay latched so a renewed pull re-engages) and commit nothing.
+            if (_downLatched)
+            {
+                _downEngaged = false;
+                _preview.Hide();
+                _chip.Hide();
+                return;
+            }
             if (_livePreview)
             {
                 RestoreLiveOriginal();
@@ -375,6 +440,29 @@ public sealed class SwooshController : IDisposable
             return;
         }
         var zone = MapZone(dir);
+
+        // Deliberateness gate: under Close/Choose mode, require a real downward pull before the
+        // down-action engages, so a shallow or incidental down motion does nothing at all (no
+        // minimize preview, no commit). The threshold is user-tunable; an already-latched gesture
+        // bypasses it since it has committed to the chooser. (Down is positive; up is negative.)
+        if (downMode && !_downLatched && zone == SnapZone.Minimize && _lastVecY < _downThreshold)
+        {
+            _preview.Hide();
+            _chip.ShowSnap(SnapZone.None, 0);
+            return;
+        }
+
+        // Down-action: a downward swipe under Close/Choose mode. Once latched we own the rest of
+        // the gesture, because leaning to pick Close would otherwise reclassify as a quarter snap.
+        if (downMode && (_downLatched || zone == SnapZone.Minimize))
+        {
+            // Remember the direction aimed just before the down-action engaged, so cancelling the
+            // chooser can restore it instead of jumping to a fresh up-swipe (maximize).
+            if (!_downLatched) _downRestoreDir = _lastPreviewDir;
+            HandleDownAction();
+            return;
+        }
+
         if (zone == SnapZone.None)
         {
             // A disabled (gated-off) gesture has no target of its own. Leave the preview
@@ -388,6 +476,10 @@ public sealed class SwooshController : IDisposable
         }
 
         _demo.SetCaption(ZoneCaption(zone));
+
+        // Remember the last real (non-minimize) direction aimed, so a subsequent dip into the down
+        // chooser can restore it on cancel.
+        if (zone != SnapZone.Minimize) _lastPreviewDir = dir;
 
         if (_livePreview)
         {
@@ -420,6 +512,52 @@ public sealed class SwooshController : IDisposable
         _chip.ShowSnap(zone, progress);
     }
 
+    /// <summary>Drive the down-swipe chooser/close HUD (rendered by the snap HUD so it matches
+    /// its look). Latches the gesture so a sideways lean (to pick Close) is not reclassified as a
+    /// quarter snap, and tracks the current pick (Choose mode leans left=minimize, right=close).</summary>
+    private void HandleDownAction()
+    {
+        _downLatched = true;
+        _downEngaged = true;
+
+        // Make sure no snap glide or live-moved window is in play.
+        if (_livePreview && _liveMoved) RestoreLiveOriginal();
+        _liveZone = SnapZone.Minimize;
+        _preview.Hide();
+
+        if (_swipeDownMode == SwipeDownMode.Close)
+        {
+            _downPickClose = true;
+            _chip.ShowDownChooser(chooseMode: false, closePicked: true);
+            _demo.SetCaption("Close");
+        }
+        else // Choose
+        {
+            _downPickClose = _lastVecX > ChooseBand;
+            _chip.ShowDownChooser(chooseMode: true, closePicked: _downPickClose);
+            _demo.SetCaption(_downPickClose ? "Close" : "Minimize");
+        }
+    }
+
+    /// <summary>Execute the latched down-swipe action on release (minimize or close the
+    /// target). No-op if the chooser was retreated out of before lifting.</summary>
+    private void CommitDownAction()
+    {
+        _chip.Hide();
+        if (!_downEngaged) return;
+        if (_downPickClose)
+        {
+            Win32.CloseWindow(_target);
+            Log.Write($"DownAction: close hwnd=0x{_target.ToInt64():X}");
+        }
+        else
+        {
+            _snapper.Apply(_target, SnapZone.Minimize);
+            Log.Write($"DownAction: minimize hwnd=0x{_target.ToInt64():X}");
+        }
+        _stats.Add();
+    }
+
     /// <summary>Put the window back where it was when a live-preview gesture started
     /// (used when the swipe retreats below the dead-zone or the gesture is cancelled).</summary>
     private void RestoreLiveOriginal()
@@ -434,8 +572,20 @@ public sealed class SwooshController : IDisposable
     {
         _preview.Hide();
         _chip.Hide();
-        var zone = MapZone(dir);
         if (!_armed) return;
+
+        // A latched down-swipe action (Close/Choose mode) commits its own way.
+        if (_downLatched)
+        {
+            CommitDownAction();
+            _armed = false;
+            _liveMoved = false;
+            _downLatched = false;
+            _downEngaged = false;
+            return;
+        }
+
+        var zone = MapZone(dir);
         if (zone == SnapZone.None)
         {
             // Nothing aimed: in live preview, put the window back where it started.
@@ -484,6 +634,8 @@ public sealed class SwooshController : IDisposable
         _demo.SetCaption(null);
         _armed = false;
         _liveMoved = false;
+        _downLatched = false;
+        _downEngaged = false;
     }
 
     /// <summary>Friendly demo-overlay caption for a snap zone (e.g. "Snap left", "Maximize").</summary>
