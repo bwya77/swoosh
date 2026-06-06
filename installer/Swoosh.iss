@@ -37,10 +37,11 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
-; Close a running Swoosh before replacing files and bring it back afterwards, so
-; in-app updates apply cleanly even while the tray app is running.
+; Close a running Swoosh before replacing files so the in-app update can replace the
+; locked executables. Relaunch is handled explicitly in [Run] (including silent installs),
+; not via Restart Manager, which does not reliably restart the app after a silent update.
 CloseApplications=yes
-RestartApplications=yes
+RestartApplications=no
 #if Arch == "arm64"
 ArchitecturesAllowed=arm64
 ArchitecturesInstallIn64BitMode=arm64
@@ -67,6 +68,11 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 ; its per-user settings run as the actual user, not the elevated installer account.
 Filename: "{app}\Swoosh.exe"; Parameters: "--enable-startup"; Description: "Launch Swoosh"; Tasks: startupwithwindows; Flags: nowait postinstall skipifsilent runasoriginaluser
 Filename: "{app}\Swoosh.exe"; Description: "Launch Swoosh"; Tasks: not startupwithwindows; Flags: nowait postinstall skipifsilent runasoriginaluser
+; Silent in-app update path: the postinstall checkbox above is skipped under /SILENT and
+; /VERYSILENT, so relaunch Swoosh explicitly here. The app reconciles its own launch-at-login
+; from settings on startup, so no --enable-startup is needed. runasoriginaluser returns to the
+; invoking user since the installer runs elevated.
+Filename: "{app}\Swoosh.exe"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
