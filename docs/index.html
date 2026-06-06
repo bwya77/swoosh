@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Swoosh - Touchpad window snapping for Windows</title>
+<meta name="description" content="Swoosh brings macOS Swish-style window snapping to Windows. Hover a titlebar and use Precision Touchpad gestures to snap, move, and resize windows." />
+<meta property="og:title" content="Swoosh - Touchpad window snapping for Windows" />
+<meta property="og:description" content="Snap, move, and resize windows with Precision Touchpad gestures. Free and open source." />
+<meta property="og:image" content="https://bwya77.github.io/swoosh/media/swoosh-256.png" />
+<meta property="og:type" content="website" />
+<link rel="icon" type="image/png" href="media/swoosh-256.png" />
+<style>
+  :root {
+    --bg: #0e0f13;
+    --bg-2: #15161c;
+    --surface: #1a1b20;
+    --surface-2: #1f2128;
+    --border: rgba(255,255,255,0.10);
+    --border-strong: rgba(255,255,255,0.16);
+    --text: #f4f5f7;
+    --muted: rgba(255,255,255,0.62);
+    --accent: #0a84ff;
+    --accent-2: #5ac8fa;
+    --radius: 16px;
+    --maxw: 1080px;
+    --font: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* Header */
+  header {
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(12px);
+    background: rgba(14,15,19,0.72);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav { display: flex; align-items: center; gap: 14px; height: 62px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); }
+  .brand img { width: 28px; height: 28px; }
+  .nav .spacer { flex: 1; }
+  .nav a.navlink { color: var(--muted); font-size: 14px; font-weight: 600; }
+  .nav a.navlink:hover { color: var(--text); text-decoration: none; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 14px;
+    border: 1px solid var(--border-strong); color: var(--text); background: rgba(255,255,255,0.04);
+    cursor: pointer; transition: transform .08s ease, background .15s ease, border-color .15s ease;
+  }
+  .btn:hover { background: rgba(255,255,255,0.09); text-decoration: none; transform: translateY(-1px); }
+  .btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .btn.primary:hover { background: #0a78e6; }
+
+  /* Hero */
+  .hero {
+    position: relative; overflow: hidden;
+    padding: 84px 0 60px;
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(10,132,255,0.22), transparent 60%),
+      linear-gradient(180deg, var(--bg-2), var(--bg));
+    text-align: center;
+  }
+  .hero img.logo { width: 96px; height: 96px; filter: drop-shadow(0 10px 30px rgba(10,132,255,0.35)); }
+  .hero h1 { font-size: clamp(38px, 6vw, 64px); margin: 18px 0 8px; letter-spacing: -0.02em; }
+  .hero p.tag { font-size: clamp(16px, 2.4vw, 21px); color: var(--muted); max-width: 640px; margin: 0 auto 12px; }
+  .hero .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+  .pill { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); margin-top: 18px; }
+  .pill b { color: var(--text); }
+  .badges { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 22px; opacity: .9; }
+  .badges img { height: 20px; }
+
+  /* Sections */
+  section { padding: 72px 0; }
+  section h2 { font-size: clamp(26px, 4vw, 36px); text-align: center; margin: 0 0 6px; letter-spacing: -0.01em; }
+  section .sub { text-align: center; color: var(--muted); max-width: 620px; margin: 0 auto 40px; }
+
+  /* Gesture grid */
+  .gestures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+  .gcard {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; transition: transform .12s ease, border-color .15s ease;
+  }
+  .gcard:hover { transform: translateY(-3px); border-color: var(--border-strong); }
+  .gcard img { width: 100%; display: block; background: var(--surface); }
+  .gcard .label { padding: 14px 18px 16px; }
+  .gcard .label h3 { margin: 0 0 2px; font-size: 16px; }
+  .gcard .label p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .gcard.wide { grid-column: 1 / -1; }
+  .gcard.wide img { max-height: 320px; object-fit: contain; }
+
+  /* Features */
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .fcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+  .fcard .ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 19px; background: rgba(10,132,255,0.16); margin-bottom: 12px; }
+  .fcard h3 { margin: 0 0 6px; font-size: 16.5px; }
+  .fcard p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* Install */
+  .install-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; max-width: 760px; margin: 0 auto; }
+  .icard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+  .icard h3 { margin: 0 0 6px; font-size: 18px; }
+  .icard p { color: var(--muted); font-size: 14px; }
+  .icard .dl { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .note { text-align: center; color: var(--muted); font-size: 13px; margin-top: 22px; }
+
+  /* Footer */
+  footer { border-top: 1px solid var(--border); padding: 40px 0; color: var(--muted); font-size: 14px; }
+  .foot { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .foot .spacer { flex: 1; }
+  .foot a { color: var(--muted); font-weight: 600; }
+  .foot a:hover { color: var(--text); }
+
+  .center { text-align: center; }
+  @media (max-width: 760px) {
+    .features { grid-template-columns: 1fr; }
+    .gestures { grid-template-columns: 1fr; }
+    .gcard.wide { grid-column: auto; }
+    .install-cards { grid-template-columns: 1fr; }
+    .nav a.navlink { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <span class="brand"><img src="media/swoosh-256.png" alt="Swoosh logo" /> Swoosh</span>
+    <span class="spacer"></span>
+    <a class="navlink" href="#gestures">Gestures</a>
+    <a class="navlink" href="#features">Features</a>
+    <a class="navlink" href="#install">Install</a>
+    <a class="navlink" href="https://github.com/bwya77/swoosh">GitHub</a>
+    <a class="btn primary" id="nav-download" href="https://github.com/bwya77/swoosh/releases/latest">Download</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <img class="logo" src="media/swoosh-1024.png" alt="Swoosh" />
+    <h1>Window snapping, by touch.</h1>
+    <p class="tag">Swoosh brings macOS Swish-style window management to Windows. Hover a titlebar, then snap, move, and resize windows with simple Precision Touchpad gestures.</p>
+    <div class="ctas">
+      <a class="btn primary" id="hero-download" href="https://github.com/bwya77/swoosh/releases/latest">Download for Windows</a>
+      <a class="btn" href="https://github.com/bwya77/swoosh">View on GitHub</a>
+    </div>
+    <div class="pill" id="version-pill">Free and open source &middot; Windows 10 and 11 &middot; x64 and ARM64</div>
+    <div class="badges">
+      <img src="https://img.shields.io/github/v/release/bwya77/swoosh?sort=semver&label=release" alt="Latest release" />
+      <img src="https://img.shields.io/github/downloads/bwya77/swoosh/total?label=downloads" alt="Downloads" />
+      <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" />
+    </div>
+  </div>
+</section>
+
+<section id="gestures">
+  <div class="wrap">
+    <h2>See it in action</h2>
+    <p class="sub">Two fingers on your touchpad, and the window goes where you swipe. These are the live animations from the in-app tutorial.</p>
+    <div class="gestures">
+      <div class="gcard">
+        <img src="media/snap-right.gif" alt="Swipe right to snap to a half" loading="lazy" />
+        <div class="label"><h3>Snap to a half</h3><p>Swipe left or right.</p></div>
+      </div>
+      <div class="gcard">
+        <img src="media/maximize.gif" alt="Swipe up to maximize" loading="lazy" />
+        <div class="label"><h3>Maximize</h3><p>Swipe up. Swipe down to minimize.</p></div>
+      </div>
+      <div class="gcard">
+        <img src="media/snap-corner.gif" alt="Swipe diagonally to snap to a corner" loading="lazy" />
+        <div class="label"><h3>Snap to a corner</h3><p>Swipe diagonally.</p></div>
+      </div>
+      <div class="gcard">
+        <img src="media/resize.gif" alt="Spread five fingers to resize" loading="lazy" />
+        <div class="label"><h3>Resize</h3><p>Spread five fingers to grow, pinch to shrink.</p></div>
+      </div>
+      <div class="gcard wide">
+        <img src="media/desktops.gif" alt="Hold then swipe to switch desktops" loading="lazy" />
+        <div class="label"><h3>Switch desktops and displays</h3><p>Hold two fingers, then swipe to move a window to another virtual desktop or monitor.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features" style="background: linear-gradient(180deg, var(--bg), var(--bg-2));">
+  <div class="wrap">
+    <h2>Built for the trackpad</h2>
+    <p class="sub">Fast, native, and quietly out of the way until you need it.</p>
+    <div class="features">
+      <div class="fcard"><div class="ic">&#x1F446;</div><h3>Raw touchpad input</h3><p>Reads multi-finger contacts straight from the Precision Touchpad for precise, low-latency gestures.</p></div>
+      <div class="fcard"><div class="ic">&#x26A1;</div><h3>Live preview</h3><p>A preview shows where the window will land as you swipe. Lift to drop, or press Esc to cancel.</p></div>
+      <div class="fcard"><div class="ic">&#x1F3AF;</div><h3>Thirds and grids</h3><p>Hold Shift while swiping to snap into a 3x3 grid of thirds for tidy layouts.</p></div>
+      <div class="fcard"><div class="ic">&#x1F5A5;&#xFE0F;</div><h3>Desktops and monitors</h3><p>Move windows across virtual desktops and physical displays with a hold and a swipe.</p></div>
+      <div class="fcard"><div class="ic">&#x1F3A8;</div><h3>Yours to style</h3><p>Pick the highlight color, HUD theme and size, and tune sensitivity in a clean settings app.</p></div>
+      <div class="fcard"><div class="ic">&#x1F512;</div><h3>Signed and safe</h3><p>Code-signed builds with checksums and signed build provenance. No telemetry. Open source.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Get Swoosh</h2>
+    <p class="sub">No .NET needed. The runtime is bundled. Everything is code signed.</p>
+    <div class="install-cards">
+      <div class="icard">
+        <h3>Installer</h3>
+        <p>Recommended. Installs to Program Files, adds a Start Menu shortcut, can start with Windows, and updates itself.</p>
+        <div class="dl">
+          <a class="btn primary" id="dl-setup-x64" href="https://github.com/bwya77/swoosh/releases/latest">Installer for x64</a>
+          <a class="btn" id="dl-setup-arm64" href="https://github.com/bwya77/swoosh/releases/latest">Installer for ARM64</a>
+        </div>
+      </div>
+      <div class="icard">
+        <h3>Portable</h3>
+        <p>No install. Unzip and run Swoosh.exe. Great for trying it out or running from a USB drive.</p>
+        <div class="dl">
+          <a class="btn" id="dl-zip-x64" href="https://github.com/bwya77/swoosh/releases/latest">Portable zip for x64</a>
+          <a class="btn" id="dl-zip-arm64" href="https://github.com/bwya77/swoosh/releases/latest">Portable zip for ARM64</a>
+        </div>
+      </div>
+    </div>
+    <p class="note">ARM64 is for devices like the Surface Pro X and Surface Pro 9 5G. Choose x64 for everything else.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <span class="brand"><img src="media/swoosh-256.png" alt="" style="width:22px;height:22px;" /> Swoosh</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/bwya77/swoosh">GitHub</a>
+    <a href="https://github.com/bwya77/swoosh/blob/main/CHANGELOG.md">Changelog</a>
+    <a href="https://github.com/sponsors/bwya77">Sponsor</a>
+    <a href="https://github.com/bwya77/swoosh/blob/main/LICENSE">MIT License</a>
+  </div>
+</footer>
+
+<script>
+  // Populate direct download links and the version pill from the latest GitHub release.
+  // Falls back silently to the releases page links already in the markup.
+  (function () {
+    fetch("https://api.github.com/repos/bwya77/swoosh/releases/latest")
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (rel) {
+        var assets = rel.assets || [];
+        function find(re) { for (var i = 0; i < assets.length; i++) { if (re.test(assets[i].name)) return assets[i].browser_download_url; } return null; }
+        var map = {
+          "dl-setup-x64": /SwooshSetup-.*-win-x64\.exe$/,
+          "dl-setup-arm64": /SwooshSetup-.*-win-arm64\.exe$/,
+          "dl-zip-x64": /Swoosh-.*-win-x64\.zip$/,
+          "dl-zip-arm64": /Swoosh-.*-win-arm64\.zip$/
+        };
+        Object.keys(map).forEach(function (id) {
+          var url = find(map[id]); var el = document.getElementById(id);
+          if (url && el) el.href = url;
+        });
+        // Primary buttons point at the x64 installer for a one-click default.
+        var setupX64 = find(/SwooshSetup-.*-win-x64\.exe$/);
+        if (setupX64) {
+          ["hero-download", "nav-download"].forEach(function (id) {
+            var el = document.getElementById(id); if (el) el.href = setupX64;
+          });
+        }
+        var pill = document.getElementById("version-pill");
+        if (pill && rel.tag_name) {
+          pill.innerHTML = "<b>" + rel.tag_name + "</b> &middot; Free and open source &middot; Windows 10 and 11 &middot; x64 and ARM64";
+        }
+      })
+      .catch(function () { /* keep the static fallback links */ });
+  })();
+</script>
+
+</body>
+</html>
