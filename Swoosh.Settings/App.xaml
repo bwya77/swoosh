@@ -15,6 +15,16 @@
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="16,14" />
             </Style>
+            <!-- Compact toggles: WinUI's default ToggleSwitch reserves ~154px and an
+                 On/Off label, which crowds the text in a row and forces ugly per-character
+                 wrapping when the window narrows. Drop the label and min-width so rows stay
+                 readable at any width. -->
+            <Style TargetType="ToggleSwitch">
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="OnContent" Value="" />
+                <Setter Property="OffContent" Value="" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

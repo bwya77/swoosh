@@ -61,6 +61,7 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         ResizeForDpi(860, 680);
+        EnforceMinimumSize(600, 480);
         TrySetWindowIcon();
 
         UpdateCaptionButtonColors();
@@ -71,7 +72,13 @@ public sealed partial class MainWindow : Window
             RefreshSecondaryTexts();
         };
 
+        // Adaptive header: hide the Home status chips when the window is too narrow to
+        // show them without crowding the title, mirroring how Settings reflows. Done in
+        // code because AdaptiveTrigger is unreliable for content nested in a NavigationView.
+        RootGrid.SizeChanged += (_, e) => UpdateHeaderAdaptive(e.NewSize.Width);
+
         VersionText.Text = $"v{_updates.CurrentVersion}";
+        HeroVersion.Text = $"v{_updates.CurrentVersion}";
         TrySetAboutLogo();
         BuildSwatches();
         BuildGestureCards();
@@ -97,17 +104,31 @@ public sealed partial class MainWindow : Window
             UpdateCaptionButtonColors();
             HighlightSwatch(_overlayColor);
             RefreshSecondaryTexts();
+            UpdateHeaderAdaptive(RootGrid.ActualWidth);
 
             await RunUpdateCheck();
         };
     }
 
-    /// <summary>Render the lifetime swoosh tally in the nav pane footer, with a
-    /// thousands separator and singular/plural label.</summary>
+    /// <summary>Render the lifetime swoosh tally in the nav pane footer and the General
+    /// hero header, with a thousands separator and singular/plural label.</summary>
     private void UpdateSwooshCount(long n)
     {
-        SwooshCountText.Text = n.ToString("N0");
-        SwooshCountLabel.Text = n == 1 ? "lifetime swoosh" : "lifetime swooshes";
+        string num = n.ToString("N0");
+        string label = n == 1 ? "lifetime swoosh" : "lifetime swooshes";
+        SwooshCountText.Text = num;
+        SwooshCountLabel.Text = label;
+        HeroCountText.Text = num;
+        HeroCountLabel.Text = label;
+    }
+
+    /// <summary>Collapse the Home header status chips when the window is too narrow to fit
+    /// them beside the title, so the title and tagline keep a sensible width instead of
+    /// wrapping one character per line.</summary>
+    private void UpdateHeaderAdaptive(double width)
+    {
+        if (HeaderStats != null)
+            HeaderStats.Visibility = width >= 820 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Theme-aware "secondary" text colour for code-created TextBlocks.
@@ -140,6 +161,60 @@ public sealed partial class MainWindow : Window
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    // Enforce a minimum window size so the content never gets squeezed so narrow that the
+    // settings rows wrap one character per line. Done with a window subclass that handles
+    // WM_GETMINMAXINFO, the standard Win32 way to set a minimum track size.
+    private const int GWLP_WNDPROC = -4;
+    private const uint WM_GETMINMAXINFO = 0x0024;
+    private static int _minWinW = 640, _minWinH = 480;
+    private static IntPtr _origWndProc = IntPtr.Zero;
+    private static WndProcDelegate? _wndProcHolder;
+
+    private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, WndProcDelegate dwNewLong);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern IntPtr SetWindowLongPtrRaw(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT { public int X; public int Y; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MINMAXINFO
+    {
+        public POINT ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize;
+    }
+
+    /// <summary>Subclass the window to clamp its minimum track size (DPI-scaled).</summary>
+    private void EnforceMinimumSize(int logicalWidth, int logicalHeight)
+    {
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        uint dpi = GetDpiForWindow(hwnd);
+        double scale = dpi <= 0 ? 1.0 : dpi / 96.0;
+        _minWinW = (int)Math.Round(logicalWidth * scale);
+        _minWinH = (int)Math.Round(logicalHeight * scale);
+
+        _wndProcHolder = SubclassProc;
+        _origWndProc = SetWindowLongPtr(hwnd, GWLP_WNDPROC, _wndProcHolder);
+    }
+
+    private static IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        if (msg == WM_GETMINMAXINFO)
+        {
+            var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
+            mmi.ptMinTrackSize.X = _minWinW;
+            mmi.ptMinTrackSize.Y = _minWinH;
+            System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, false);
+        }
+        return CallWindowProc(_origWndProc, hWnd, msg, wParam, lParam);
+    }
 
     /// <summary>Paint the system caption buttons (minimize/maximize/close glyphs) to match
     /// the current theme. With an extended title bar + Mica these don't reliably follow the
@@ -192,17 +267,22 @@ public sealed partial class MainWindow : Window
         catch { /* non-fatal */ }
     }
 
-    /// <summary>Show the Swoosh logo on the About page from the PNG copied next to the
-    /// executable. Loaded by file path (not ms-appx) because this is an unpackaged app.</summary>
+    /// <summary>Show the Swoosh logo on the About page and the General hero header from the
+    /// PNG copied next to the executable. Loaded by file path (not ms-appx) because this is
+    /// an unpackaged app.</summary>
     private void TrySetAboutLogo()
     {
         try
         {
             string path = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "swoosh-256.png");
             if (System.IO.File.Exists(path))
-                AppLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(path));
+            {
+                var src = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(path));
+                AppLogo.Source = src;
+                GeneralLogo.Source = src;
+            }
         }
-        catch { /* non-fatal: the About card just shows no logo */ }
+        catch { /* non-fatal: the cards just show no logo */ }
     }
 
     // ---- Load / collect ----------------------------------------------------
@@ -675,11 +755,13 @@ public sealed partial class MainWindow : Window
             UpdateStatus.Text = $"Update available: v{info.Latest}";
             UpdateSub.Text = $"You're on v{_updates.CurrentVersion}.";
             DownloadBtn.Visibility = Visibility.Visible;
+            HeroUpdateTitle.Text = "Update available";
         }
         else
         {
             UpdateStatus.Text = "You're up to date";
             UpdateSub.Text = $"v{_updates.CurrentVersion} is the latest release.";
+            HeroUpdateTitle.Text = "Up to date";
         }
         CheckBtn.IsEnabled = true;
     }
