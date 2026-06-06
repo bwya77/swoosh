@@ -637,8 +637,8 @@ public sealed partial class MainWindow : Window
 
         _svBox.PointerPressed += (s, e) => { _svActive = true; _svBox.CapturePointer(e.Pointer); SetSvFromPointer(e); };
         _svBox.PointerMoved += (s, e) => { if (_svActive) SetSvFromPointer(e); };
-        _svBox.PointerReleased += (s, e) => { _svActive = false; _svBox.ReleasePointerCapture(e.Pointer); };
-        _svBox.PointerCanceled += (s, e) => { _svActive = false; };
+        _svBox.PointerReleased += (s, e) => { if (_svActive) { _svActive = false; _svBox.ReleasePointerCapture(e.Pointer); EditHsv(persist: true); } };
+        _svBox.PointerCanceled += (s, e) => { if (_svActive) { _svActive = false; EditHsv(persist: true); } };
         panel.Children.Add(_svBox);
 
         // ---- Hue bar ----
@@ -678,8 +678,8 @@ public sealed partial class MainWindow : Window
 
         _hueBar.PointerPressed += (s, e) => { _hueActive = true; _hueBar.CapturePointer(e.Pointer); SetHueFromPointer(e); };
         _hueBar.PointerMoved += (s, e) => { if (_hueActive) SetHueFromPointer(e); };
-        _hueBar.PointerReleased += (s, e) => { _hueActive = false; _hueBar.ReleasePointerCapture(e.Pointer); };
-        _hueBar.PointerCanceled += (s, e) => { _hueActive = false; };
+        _hueBar.PointerReleased += (s, e) => { if (_hueActive) { _hueActive = false; _hueBar.ReleasePointerCapture(e.Pointer); EditHsv(persist: true); } };
+        _hueBar.PointerCanceled += (s, e) => { if (_hueActive) { _hueActive = false; EditHsv(persist: true); } };
         panel.Children.Add(_hueBar);
 
         // ---- Preview + hex ----
@@ -733,7 +733,7 @@ public sealed partial class MainWindow : Window
         var p = e.GetCurrentPoint(_svBox).Position;
         _sat = Clamp01(p.X / SvW);
         _val = Clamp01(1 - p.Y / SvH);
-        UpdateFromHsv(commit: true);
+        EditHsv(persist: false); // live preview while dragging; persist on release
     }
 
     private void SetHueFromPointer(PointerRoutedEventArgs e)
@@ -741,12 +741,13 @@ public sealed partial class MainWindow : Window
         if (_hueBar == null) return;
         var p = e.GetCurrentPoint(_hueBar).Position;
         _hue = Clamp01(p.X / HueW) * 360.0;
-        UpdateFromHsv(commit: true);
+        EditHsv(persist: false);
     }
 
-    /// <summary>Push the current H/S/V state out to the field thumbs, hue base color, preview,
-    /// hex box, and RGB readout. Optionally commits the resulting color to settings.</summary>
-    private void UpdateFromHsv(bool commit)
+    /// <summary>Push the current H/S/V state to the editor's visuals only (thumbs, hue base,
+    /// preview, hex box, RGB readout). Cheap and allocation-light, safe to call on every
+    /// pointer move. Does not change saved state.</summary>
+    private void RenderHsv()
     {
         var c = FromHsv(_hue, _sat, _val);
         var hex = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
@@ -764,8 +765,25 @@ public sealed partial class MainWindow : Window
         if (_hexBox != null) _hexBox.Text = hex;
         if (_rgbReadout != null) _rgbReadout.Text = $"R {c.R}   G {c.G}   B {c.B}";
         _suppressColorEdit = false;
+    }
 
-        if (commit) CommitCustomColor(hex);
+    /// <summary>Apply the current H/S/V as the chosen overlay color. Always updates the editor
+    /// visuals and the live in-memory color; only writes to disk when <paramref name="persist"/>
+    /// is true. Dragging calls this with persist:false on every move (smooth, no disk I/O) and
+    /// persist:true once on release, so a fast drag through many colors no longer thrashes
+    /// settings.json or fights the file-watcher echo.</summary>
+    private void EditHsv(bool persist)
+    {
+        RenderHsv();
+        var c = FromHsv(_hue, _sat, _val);
+        _overlayColor = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+        if (!persist) return;
+
+        // Choosing a custom color implies the accent mode should be off.
+        OverlayAccentToggle.IsOn = false;
+        HighlightSwatch(_overlayColor);
+        if (_loading) return;
+        _store.Save(Collect());
     }
 
     private void ApplyHex()
@@ -778,23 +796,13 @@ public sealed partial class MainWindow : Window
             return;
         }
         ToHsv(c, out _hue, out _sat, out _val);
-        UpdateFromHsv(commit: true);
+        EditHsv(persist: true);
     }
 
     private void SyncEditorTo(string hex)
     {
         ToHsv(ParseColor(hex), out _hue, out _sat, out _val);
-        UpdateFromHsv(commit: false);
-    }
-
-    private void CommitCustomColor(string hex)
-    {
-        _overlayColor = hex;
-        // Choosing a custom color implies the accent mode should be off.
-        OverlayAccentToggle.IsOn = false;
-        HighlightSwatch(hex);
-        if (_loading) return;
-        _store.Save(Collect());
+        RenderHsv(); // visuals only: opening the editor must not flip accent off or save
     }
 
     private static double Clamp01(double v) => v < 0 ? 0 : v > 1 ? 1 : v;
@@ -1174,4 +1182,74 @@ public sealed partial class MainWindow : Window
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
         catch { /* no browser available */ }
     }
+
+    // ---- Share ------------------------------------------------------------
+
+    private const string ShareUrl = "https://github.com/bwya77/swoosh";
+    private const string ShareMessage =
+        "Swoosh brings macOS Swish-style touchpad window snapping to Windows. Free and open source: " + ShareUrl;
+
+    /// <summary>Copy the repo link to the clipboard and briefly confirm on the button.</summary>
+    private async void OnCopyShareLink(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var pkg = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            pkg.SetText(ShareUrl);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(pkg);
+        }
+        catch { /* clipboard unavailable */ }
+
+        if (CopyLinkText != null && CopyLinkIcon != null)
+        {
+            CopyLinkText.Text = "Copied!";
+            CopyLinkIcon.Glyph = "\uE73E"; // checkmark
+            await Task.Delay(1500);
+            CopyLinkText.Text = "Copy link";
+            CopyLinkIcon.Glyph = "\uE8C8"; // copy
+        }
+    }
+
+    /// <summary>Open the native Windows Share sheet so the link can go to Mail, Teams, etc.</summary>
+    private void OnShareNative(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var interop = Windows.ApplicationModel.DataTransfer.DataTransferManager
+                .As<IDataTransferManagerInterop>();
+            var iid = _dtmIid;
+            IntPtr result = interop.GetForWindow(hWnd, ref iid);
+            var dtm = WinRT.MarshalInterface<Windows.ApplicationModel.DataTransfer.DataTransferManager>.FromAbi(result);
+
+            dtm.DataRequested += (_, args) =>
+            {
+                var d = args.Request.Data;
+                d.Properties.Title = "Swoosh";
+                d.Properties.Description = "Swish-style touchpad window snapping for Windows";
+                d.SetWebLink(new Uri(ShareUrl));
+                d.SetText(ShareMessage);
+            };
+            interop.ShowShareUIForWindow(hWnd);
+        }
+        catch
+        {
+            // Share contract unavailable (rare): fall back to copying the link.
+            OnCopyShareLink(sender, e);
+        }
+    }
+
+    [System.Runtime.InteropServices.ComImport]
+    [System.Runtime.InteropServices.Guid("3A3DCD6C-3EAB-43DC-BCDE-45671CE800C8")]
+    [System.Runtime.InteropServices.InterfaceType(
+        System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IDataTransferManagerInterop
+    {
+        IntPtr GetForWindow([System.Runtime.InteropServices.In] IntPtr appWindow,
+            [System.Runtime.InteropServices.In] ref Guid riid);
+        void ShowShareUIForWindow(IntPtr appWindow);
+    }
+
+    private static readonly Guid _dtmIid =
+        new(0xa5caee9b, 0x8708, 0x49d1, 0x8d, 0x36, 0x67, 0xd2, 0x5a, 0x8d, 0xa0, 0x0c);
 }
