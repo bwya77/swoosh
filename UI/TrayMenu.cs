@@ -59,6 +59,9 @@ internal static class TrayMenu
 
     public static ContextMenuStrip Create(
         Func<bool> getGestures,
+        Func<(bool available, string? latest)> getUpdate,
+        Action onUpdate,
+        Action onCheckUpdates,
         Action onSettings,
         Action onToggleGestures,
         Action onTutorial,
@@ -80,6 +83,13 @@ internal static class TrayMenu
             Renderer = new DarkRenderer(),
         };
 
+        // Update-available item (top, hidden until an update is found) plus its separator.
+        var update = NewItem("Update available", onUpdate);
+        update.Font = new Font(menu.Font, FontStyle.Bold);
+        var updateSep = new ToolStripSeparator();
+
+        var check = NewItem("Check for updates", onCheckUpdates);
+
         var settings = NewItem("Settings", onSettings);
 
         var gestures = NewItem("Gestures enabled", onToggleGestures);
@@ -89,15 +99,18 @@ internal static class TrayMenu
 
         var quit = NewItem("Quit Swoosh", onQuit);
 
+        menu.Items.Add(update);
+        menu.Items.Add(updateSep);
         menu.Items.Add(settings);
         menu.Items.Add(gestures);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(tutorial);
+        menu.Items.Add(check);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(quit);
 
         // Each time the menu opens: re-read the OS theme so it tracks light/dark live,
-        // re-point the menu's own colors, and refresh the toggle state.
+        // re-point the menu's own colors, refresh the toggle, and reflect update state.
         menu.Opening += (_, _) =>
         {
             bool light = SystemUsesLightTheme();
@@ -105,6 +118,13 @@ internal static class TrayMenu
             menu.BackColor = Surface;
             menu.ForeColor = Text;
             gestures.Checked = getGestures();
+
+            var (available, latest) = getUpdate();
+            update.Text = available && !string.IsNullOrEmpty(latest)
+                ? $"Update to {latest}"
+                : "Update available";
+            update.Visible = available;
+            updateSep.Visible = available;
         };
 
         menu.HandleCreated += (_, _) => ApplyWindowTheme(menu.Handle);

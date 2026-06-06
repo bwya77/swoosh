@@ -8,6 +8,6 @@
     baseline. Bump it together with the CHANGELOG when cutting a release.
   -->
   <PropertyGroup>
-    <Version>0.1.52</Version>
+    <Version>0.1.53</Version>
   </PropertyGroup>
 </Project>

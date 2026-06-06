@@ -21,6 +21,7 @@ public partial class App : System.Windows.Application
     private readonly UpdateChecker _updates = new();
     private string? _updateUrl;
     private string? _installerUrl;
+    private string? _latestVersion;
 
     // Per-user single-instance guard. Held for the lifetime of the process so a
     // second launch (e.g. login Run key firing while the app is already up, or a
@@ -136,6 +137,9 @@ public partial class App : System.Windows.Application
         // killed the custom WPF popup - Windows runs the menu's own modal loop).
         _tray.ContextMenuStrip = UI.TrayMenu.Create(
             getGestures: () => _settings.Current.GesturesEnabled,
+            getUpdate: () => (!string.IsNullOrEmpty(_updateUrl), _latestVersion),
+            onUpdate: OnUpdateClicked,
+            onCheckUpdates: () => _ = CheckForUpdatesAsync(manual: true),
             onSettings: OpenSettings,
             onToggleGestures: () =>
             {
@@ -239,24 +243,28 @@ public partial class App : System.Windows.Application
     /// <summary>
     /// Find Swoosh.Settings.exe and return the NEWEST build available: next to the main exe
     /// (release layout, optionally in a "Settings" subfolder) and, for local dev runs, any
-    /// build under the WinUI project's bin folder. Choosing the newest means a stale copy
-    /// left next to the exe (for example from an earlier publish) never shadows a freshly
-    /// built one.
+    /// build under the WinUI project's bin folder. A Settings.exe co-located with the running
+    /// tray app is ALWAYS preferred (installed and published builds ship the two together, so
+    /// they share a version); the dev-bin scan is only a fallback for a pure source run where no
+    /// co-located Settings exists. This avoids an installed app ever launching a different
+    /// version's Settings (e.g. a stale dev build) on a developer's machine.
     /// </summary>
     private static string? ResolveSettingsExe()
     {
         string baseDir = AppContext.BaseDirectory;
 
-        // Release layout: the exe sits next to the main app (optionally in a subfolder).
+        // Release/installed layout: the exe sits next to the main app (optionally in a
+        // subfolder). If present, this is the version-matched companion: use it, full stop.
         var nextToExe = new[]
         {
             Path.Combine(baseDir, "Settings", "Swoosh.Settings.exe"),
             Path.Combine(baseDir, "Swoosh.Settings.exe"),
         };
+        var coLocated = nextToExe.FirstOrDefault(File.Exists);
+        if (coLocated != null) return coLocated;
 
-        // Dev: walk up to the repo root (has Swoosh.sln) and include every build under the
-        // settings project's bin folder.
-        var devBuilds = Array.Empty<string>();
+        // Pure dev run (the tray app's own bin has no co-located Settings): walk up to the repo
+        // root (has Swoosh.sln) and pick the newest build under the settings project's bin.
         var dir = new DirectoryInfo(baseDir);
         while (dir != null && !File.Exists(Path.Combine(dir.FullName, "Swoosh.sln")))
             dir = dir.Parent;
@@ -265,15 +273,17 @@ public partial class App : System.Windows.Application
             var projBin = Path.Combine(dir.FullName, "Swoosh.Settings", "bin");
             if (Directory.Exists(projBin))
             {
-                try { devBuilds = Directory.GetFiles(projBin, "Swoosh.Settings.exe", SearchOption.AllDirectories); }
-                catch { /* ignore enumeration failures, fall back to next-to-exe */ }
+                try
+                {
+                    return Directory.GetFiles(projBin, "Swoosh.Settings.exe", SearchOption.AllDirectories)
+                        .OrderByDescending(File.GetLastWriteTimeUtc)
+                        .FirstOrDefault();
+                }
+                catch { /* ignore enumeration failures */ }
             }
         }
 
-        return nextToExe.Concat(devBuilds)
-            .Where(File.Exists)
-            .OrderByDescending(File.GetLastWriteTimeUtc)
-            .FirstOrDefault();
+        return null;
     }
 
     private void OnSettingsChanged(AppSettings s)
@@ -305,6 +315,7 @@ public partial class App : System.Windows.Application
         {
             _updateUrl = info.HtmlUrl;
             _installerUrl = info.InstallerUrl;
+            _latestVersion = info.Latest?.ToString();
             _tray?.ShowBalloonTip(
                 10000,
                 "Swoosh update available",
@@ -314,6 +325,10 @@ public partial class App : System.Windows.Application
         }
         else if (manual)
         {
+            // Up to date: clear any stale update state so the tray item hides.
+            _updateUrl = null;
+            _installerUrl = null;
+            _latestVersion = null;
             _tray?.ShowBalloonTip(
                 4000,
                 "Swoosh",
