@@ -318,6 +318,7 @@ public sealed partial class MainWindow : Window
         RefreshGestureCards();
         AnimateToggle.IsOn = s.AnimateSnaps;
         DemoToggle.IsOn = s.DemoOverlay;
+        PhantomToggle.IsOn = s.PhantomRejection;
         ModifierCombo.SelectedIndex = s.GridModifier switch
         {
             GridModifier.Ctrl => 1,
@@ -375,6 +376,7 @@ public sealed partial class MainWindow : Window
         CenterEnabled = GestureOn("center"),
         AnimateSnaps = AnimateToggle.IsOn,
         DemoOverlay = DemoToggle.IsOn,
+        PhantomRejection = PhantomToggle.IsOn,
         GridModifierEnabled = GestureOn("thirds"),
         GridModifier = ModifierCombo.SelectedIndex switch
         {

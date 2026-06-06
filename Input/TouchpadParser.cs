@@ -23,6 +23,13 @@ public sealed class TouchpadParser
 
     private readonly Dictionary<IntPtr, DeviceLayout?> _devices = new();
 
+    /// <summary>When true (the default), apply the firmware phantom-contact rejection
+    /// heuristics. This is a diagnostic kill-switch: if a particular touchpad's gestures behave
+    /// erratically, turning it off skips the learned-phantom/residue suppression to see whether
+    /// those heuristics are the cause. The spec-safe duplicate-contact-id collapse and the
+    /// firmware contact-count clamp always run regardless of this flag.</summary>
+    public bool PhantomRejection = true;
+
     // Reused scratch buffer for HidP_GetUsages so the decoder allocates nothing
     // per report on the hot path.
     private readonly ushort[] _usageBuf = new ushort[16];
@@ -298,6 +305,9 @@ public sealed class TouchpadParser
                     foreach (var c in cand) _peakResidue.Add(c.col);
 
                 // Unlearn any phantom position now occupied by a MOVING contact.
+                int dropped = 0;
+                if (PhantomRejection)
+                {
                 for (int i = _phantoms.Count - 1; i >= 0; i--)
                 {
                     var ph = _phantoms[i];
@@ -308,8 +318,6 @@ public sealed class TouchpadParser
                 // Rule 1 — LONE: a sole frozen contact past LearnMs is a phantom.
                 if (curDown == 1 && !cand[0].moved && cand[0].frozenMs >= LearnMs)
                     Learn(cand[0].rawX, cand[0].rawY);
-
-                int dropped = 0;
 
                 // Rule 2 — MASS-RELEASE RESIDUE (collection-tracked). Once a
                 // multi-finger press starts collapsing (curDown drops below the
@@ -341,6 +349,7 @@ public sealed class TouchpadParser
                     cand = cand.Where(c => c.moved ||
                         !_phantoms.Any(p => Near(c.rawX, p.x) && Near(c.rawY, p.y))).ToList();
                     dropped += before - cand.Count;
+                }
                 }
 
                 // Contact-count clamp. The report's ContactCount is the firmware's

@@ -47,6 +47,11 @@ public sealed class AppSettings
     /// <summary>Show the polished touchpad demo overlay (presentation mode for recordings).</summary>
     public bool DemoOverlay { get; set; } = false;
 
+    /// <summary>Apply firmware phantom-contact rejection (default on). A diagnostic kill-switch:
+    /// turn it off only if a touchpad's gestures behave erratically, to test whether the
+    /// rejection heuristics are the cause.</summary>
+    public bool PhantomRejection { get; set; } = true;
+
     /// <summary>Animate window moves with an ease-out glide instead of snapping instantly.</summary>
     public bool AnimateSnaps { get; set; } = true;
 

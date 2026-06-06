@@ -134,6 +134,7 @@ public sealed class SwooshController : IDisposable
         _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
         _demo.SetAccent(AccentColors.Resolve(s.OverlayUseAccent, s.OverlayColor));
         _demo.SetVisible(s.DemoOverlay);
+        _touchpad.PhantomRejection = s.PhantomRejection;
         _livePreview = s.LivePreview;
         _moveCursor = s.MoveCursor;
         _previewDeskDest = s.PreviewDesktopDestination;

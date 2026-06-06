@@ -16,6 +16,13 @@ public sealed class RawTouchpadListener : IDisposable
 
     public event Action<TouchFrame>? FrameDecoded;
 
+    /// <summary>Forwards to the parser's phantom-rejection kill-switch (see TouchpadParser).</summary>
+    public bool PhantomRejection
+    {
+        get => _parser.PhantomRejection;
+        set => _parser.PhantomRejection = value;
+    }
+
     public RawTouchpadListener(MessageWindow window)
     {
         _window = window;

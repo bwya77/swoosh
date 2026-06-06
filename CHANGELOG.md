@@ -4,7 +4,8 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
-- New "Copy diagnostics" button in Settings under Home (Startup and troubleshooting). It copies a touchpad and system report (app version, OS, architecture, and the detected Precision Touchpad layout) to your clipboard. Paste it into a GitHub issue if gestures aren't working so the problem can be diagnosed.
+- New "Phantom contact filtering" toggle in Settings under Home (Startup and troubleshooting). It's on by default and filters out stuck firmware contacts that some touchpads report. If gestures behave erratically on your device, turning it off lets you check whether this filter is the cause.
+- New "Copy diagnostics" button in Settings under Home (Startup and troubleshooting).It copies a touchpad and system report (app version, OS, architecture, and the detected Precision Touchpad layout) to your clipboard. Paste it into a GitHub issue if gestures aren't working so the problem can be diagnosed.
 - Swoosh now warns you at startup if it can't find a Windows Precision Touchpad, instead of silently doing nothing. External mice and older (non-precision) touchpads aren't supported.
 - New "Share Swoosh" card in Settings under About.Copy the link with one click, open the native Windows share sheet, or post straight to X, LinkedIn, or Reddit with a ready-made message.
 - Fixed the custom overlay color picker being laggy when dragging quickly through colors. The picker now updates instantly while you drag and only saves once you release, so a fast drag is smooth.
