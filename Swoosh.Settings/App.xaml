@@ -15,10 +15,12 @@
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="16,14" />
             </Style>
-            <!-- Compact toggles: WinUI's default ToggleSwitch reserves ~154px and an
-                 On/Off label, which crowds the text in a row and forces ugly per-character
-                 wrapping when the window narrows. Drop the label and min-width so rows stay
-                 readable at any width. -->
+            <!-- Compact toggles: WinUI's default ToggleSwitch reserves ~154px (the old
+                 On/Off label area) with the knob pinned to the LEFT of that block, which
+                 leaves a big gap between the knob and the right edge of the row and forces
+                 ugly per-character wrapping when the window narrows. Collapse the reserved
+                 width to 0 and drop the labels so the knob sits flush at the right. -->
+            <x:Double x:Key="ToggleSwitchThemeMinWidth">0</x:Double>
             <Style TargetType="ToggleSwitch">
                 <Setter Property="MinWidth" Value="0" />
                 <Setter Property="OnContent" Value="" />

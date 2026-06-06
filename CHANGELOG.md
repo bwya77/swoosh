@@ -4,7 +4,9 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
-- You can now choose a custom overlay highlight color. In Settings under Appearance, the Overlay color row has a new palette swatch after the presets that opens a color picker with a click-and-drag color field, a hue bar, a live preview, and a hex box for entering an exact value. The selected color fills the swatch so it is easy to see at a glance.
+- Switching pages in the Settings app now has a smooth slide-up-and-fade transition, matching the Windows 11 Settings app.
+- Fixed the toggle switches in Settings sitting too far from the right edge of each row. They now line up flush at the right.
+- You can now choose a custom overlay highlight color.In Settings under Appearance, the Overlay color row has a new palette swatch after the presets that opens a color picker with a click-and-drag color field, a hue bar, a live preview, and a hex box for entering an exact value. The selected color fills the swatch so it is easy to see at a glance.
 - The Settings app has a refreshed look.The General page is now a Home page with the Swoosh logo, status chips, and grouped cards, and every section (Snapping, Appearance, Updates, About) now uses consistent section headers and leading icons. The window also has a sensible minimum size and adapts its header as you resize, so text no longer jumbles when the window gets narrow.
 - You can now support Swoosh's development. Settings under About has a Support card with GitHub Sponsors and Buy Me a Coffee links, and the repository has a Sponsor button.
 - New "HUD fade-out" slider in Settings under Appearance: control how long the gesture HUD takes to fade away when a gesture ends (0.10 to 1.50 s, default 0.36 s). Raise it to make the HUD linger and fade more slowly.

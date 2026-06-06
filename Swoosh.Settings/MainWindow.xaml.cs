@@ -3,6 +3,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
@@ -1101,6 +1102,39 @@ public sealed partial class MainWindow : Window
         AppearancePane.Visibility = tag == "appearance" ? Visibility.Visible : Visibility.Collapsed;
         UpdatesPane.Visibility = tag == "updates" ? Visibility.Visible : Visibility.Collapsed;
         AboutPane.Visibility = tag == "about" ? Visibility.Visible : Visibility.Collapsed;
+
+        FrameworkElement active = tag switch
+        {
+            "snapping" => SnappingPane,
+            "appearance" => AppearancePane,
+            "updates" => UpdatesPane,
+            "about" => AboutPane,
+            _ => GeneralPane,
+        };
+        AnimatePaneIn(active);
+    }
+
+    /// <summary>Windows 11 Settings-style page transition: the incoming pane slides up a few
+    /// pixels and fades in. Runs on the composition (GPU) layer so it stays smooth.</summary>
+    private void AnimatePaneIn(UIElement pane)
+    {
+        var visual = ElementCompositionPreview.GetElementVisual(pane);
+        var comp = visual.Compositor;
+        var ease = comp.CreateCubicBezierEasingFunction(
+            new System.Numerics.Vector2(0.1f, 0.9f), new System.Numerics.Vector2(0.2f, 1.0f));
+
+        var slide = comp.CreateVector3KeyFrameAnimation();
+        slide.InsertKeyFrame(0f, new System.Numerics.Vector3(0f, 56f, 0f));
+        slide.InsertKeyFrame(1f, System.Numerics.Vector3.Zero, ease);
+        slide.Duration = TimeSpan.FromMilliseconds(450);
+
+        var fade = comp.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(0f, 0f);
+        fade.InsertKeyFrame(1f, 1f, ease);
+        fade.Duration = TimeSpan.FromMilliseconds(450);
+
+        visual.StartAnimation("Offset", slide);
+        visual.StartAnimation("Opacity", fade);
     }
 
     // ---- Updates -----------------------------------------------------------
