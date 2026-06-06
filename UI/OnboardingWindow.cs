@@ -571,6 +571,8 @@ public sealed class OnboardingWindow : Window
     private TranslateTransform _chooserCircleT = null!;
     private Ellipse _chooserMin = null!, _chooserClose = null!;
     private TextBlock _chooserMinIcon = null!, _chooserCloseIcon = null!;
+    private Brush _dcMinNeutralFill = Brushes.Gray; // minimize circle when not selected
+    private SolidColorBrush _dcAccentFill = null!;   // minimize circle when leaned-toward (selected)
 
     private const double DcSqW = 74, DcSqH = 50, DcCircle = 42, DcCircleGap = 26;
 
@@ -580,6 +582,7 @@ public sealed class OnboardingWindow : Window
     private void BuildChooserDemo()
     {
         double sqX = (ScrW - DcSqW) / 2.0, sqY = 26;
+        _dcAccentFill = new SolidColorBrush(_accent);
         _chooserSquare = new Border
         {
             Width = DcSqW,
@@ -630,7 +633,8 @@ public sealed class OnboardingWindow : Window
             _chooserSquare.Background = new SolidColorBrush(Fade(_pal.SubText, 0.16));
             _chooserSquare.BorderBrush = new SolidColorBrush(Fade(_pal.SubText, 0.40));
             ((Border)_chooserSquare.Child).Background = new SolidColorBrush(Fade(_pal.SubText, 0.22));
-            _chooserMin.Fill = new SolidColorBrush(Fade(_pal.SubText, 0.18));
+            _dcMinNeutralFill = new SolidColorBrush(Fade(_pal.SubText, 0.18));
+            _chooserMin.Fill = _dcMinNeutralFill;
             _chooserMin.Stroke = new SolidColorBrush(Fade(_pal.SubText, 0.45));
             _chooserMinIcon.Foreground = new SolidColorBrush(_pal.Text);
         });
@@ -868,6 +872,29 @@ public sealed class OnboardingWindow : Window
         double fy = cy + dy * amp * rawT;
         double gapX = 15;
 
+        // Swipe-down chooser: after swiping down to summon the picker, the fingers lean LEFT to
+        // minimize first, then sweep RIGHT to close, so the demo shows both options being chosen.
+        bool chooserStep = step.Demo == Demo.DownChooser;
+        int chooserPick = 0; // -1 minimize, +1 close, 0 none
+        bool chooserLeaning = false;
+        if (chooserStep && !gap)
+        {
+            double settleLocal = swipeLocal - SwipeMs; // >=0 once the down swipe has fully emerged
+            if (settleLocal >= 0)
+            {
+                chooserLeaning = true;
+                double sp = Math.Clamp(settleLocal / SettleMs, 0, 1);
+                const double leanAmp = 27;
+                double leanX = sp < 0.5
+                    ? -leanAmp * EaseOut(sp / 0.5)                               // 0 -> left (minimize)
+                    : -leanAmp + 2 * leanAmp * EaseOut((sp - 0.5) / 0.5);        // left -> right (close)
+                fx = cx + leanX;
+                fy = cy + amp; // stay at the bottom of the swipe while leaning
+                const double thr = 7;
+                chooserPick = leanX < -thr ? -1 : (leanX > thr ? 1 : 0);
+            }
+        }
+
         double vis = hasSwipe && !gap ? 1 : 0;
         SetFinger(_f1, _f1Glow, fx - gapX, fy, vis);
         SetFinger(_f2, _f2Glow, fx + gapX, fy, vis);
@@ -879,7 +906,7 @@ public sealed class OnboardingWindow : Window
             _f1Glow.Opacity = pulse; _f2Glow.Opacity = pulse;
         }
 
-        if (hasSwipe && !gap && !holding)
+        if (hasSwipe && !gap && !holding && !chooserLeaning)
         {
             ExtendTrail(_trail1, new Point(fx - gapX, fy), rawT);
             ExtendTrail(_trail2, new Point(fx + gapX, fy), rawT);
@@ -887,7 +914,6 @@ public sealed class OnboardingWindow : Window
         else { _trail1.Points.Clear(); _trail2.Points.Clear(); }
 
         // ---- Screen ----
-        bool chooserStep = step.Demo == Demo.DownChooser;
         _chooserSquare.Visibility = chooserStep ? Visibility.Visible : Visibility.Collapsed;
         _chooserCircleHost.Visibility = chooserStep ? Visibility.Visible : Visibility.Collapsed;
 
@@ -928,22 +954,28 @@ public sealed class OnboardingWindow : Window
             case Demo.DownChooser:
             {
                 // The window stays put (greyed square already shown). As the fingers swipe down,
-                // the two option circles emerge downward and fade in, and the close option (right)
-                // highlights to show a lean toward it. In the gap they retract.
+                // the option circles emerge; then the fingers lean LEFT (minimize highlights with
+                // the accent fill) and sweep RIGHT (close highlights red). In the gap they retract.
                 _window.Visibility = Visibility.Collapsed;
 
                 double emerge = gap ? 0 : rawT;       // 0..1 reveal
                 _chooserCircleT.Y = -(DcCircle * 0.7) * (1 - emerge);
                 _chooserCircleHost.Opacity = gap ? 0 : EaseOut(Math.Clamp(rawT * 1.4, 0, 1));
 
-                // Lean toward close once the swipe is past the midpoint: brighten close, dim minimize.
-                bool closeLean = !gap && rawT > 0.5;
-                _chooserClose.Opacity = closeLean ? 1.0 : 0.55;
-                _chooserCloseIcon.Opacity = closeLean ? 1.0 : 0.55;
+                bool minLean = chooserPick < 0;
+                bool closeLean = chooserPick > 0;
+
+                // Minimize: fill with the accent (white glyph) when leaned-toward, else neutral.
+                _chooserMin.Fill = minLean ? _dcAccentFill : _dcMinNeutralFill;
+                _chooserMinIcon.Foreground = new SolidColorBrush(minLean ? Colors.White : _pal.Text);
                 _chooserMin.Opacity = closeLean ? 0.5 : 1.0;
                 _chooserMinIcon.Opacity = closeLean ? 0.5 : 1.0;
 
-                // The window dims further as the (highlighted) close action is about to commit.
+                // Close: always red; brightens when leaned-toward, dims otherwise.
+                _chooserClose.Opacity = closeLean ? 1.0 : (minLean ? 0.5 : 0.7);
+                _chooserCloseIcon.Opacity = closeLean ? 1.0 : (minLean ? 0.5 : 0.7);
+
+                // The window dims as a destructive close is leaned-toward.
                 _chooserSquare.Opacity = closeLean ? 0.5 : 1.0;
                 break;
             }
