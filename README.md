@@ -15,6 +15,22 @@ over a window's titlebar, then use simple Precision Touchpad gestures to snap,
 move, and resize it. Inspired by the macOS app
 [Swish](https://highlyopinionated.co/swish/).
 
+## See it in action
+
+Two fingers on your touchpad, and the window goes where you swipe.
+
+| | |
+| :---: | :---: |
+| ![Snap to a half](docs/media/snap-right.gif) | ![Maximize](docs/media/maximize.gif) |
+| **Swipe to snap to a half** | **Swipe up to maximize** |
+| ![Snap to a corner](docs/media/snap-corner.gif) | ![Resize with five fingers](docs/media/resize.gif) |
+| **Swipe diagonally for a corner** | **Spread five fingers to resize** |
+| ![Switch desktops](docs/media/desktops.gif) | |
+| **Hold, then swipe to change desktops** | |
+
+These are the same animations from the in-app tutorial, which runs on first launch
+and can be replayed any time from the Swoosh tray menu.
+
 ## Install
 
 Download the latest build from the

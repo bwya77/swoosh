@@ -88,6 +88,11 @@ public sealed class OnboardingWindow : Window
     private readonly DispatcherTimer _timer;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
+    // When set, the animation uses this fixed time instead of the wall clock, so frames can be
+    // rendered deterministically for exporting README GIFs.
+    private double? _timeOverrideMs;
+    private double Now() => _timeOverrideMs ?? _clock.Elapsed.TotalMilliseconds;
+
     private const double HoldRestMs = 600, SwipeMs = 1050, SettleMs = 750, GapMs = 450;
 
     public event Action? Completed;
@@ -725,7 +730,7 @@ public sealed class OnboardingWindow : Window
 
         double holdMs = step.Hold ? HoldRestMs : 0;
         double cycle = holdMs + SwipeMs + SettleMs + GapMs;
-        double local = _clock.Elapsed.TotalMilliseconds % cycle;
+        double local = Now() % cycle;
 
         bool holding = step.Hold && local < holdMs;
         bool gap = local >= holdMs + SwipeMs + SettleMs;
@@ -752,7 +757,7 @@ public sealed class OnboardingWindow : Window
         // Pulse the glow while holding to convey "hold still".
         if (holding)
         {
-            double pulse = 0.6 + 0.4 * Math.Sin(_clock.Elapsed.TotalMilliseconds / 130.0);
+            double pulse = 0.6 + 0.4 * Math.Sin(Now() / 130.0);
             _f1Glow.Opacity = pulse; _f2Glow.Opacity = pulse;
         }
 
@@ -813,7 +818,7 @@ public sealed class OnboardingWindow : Window
         _trail1.Points.Clear(); _trail2.Points.Clear();
 
         // s: 0 = pinched in (small), 1 = spread out (large), oscillating.
-        double phase = _clock.Elapsed.TotalMilliseconds / 1500.0; // ~1.5s per half
+        double phase = Now() / 1500.0; // ~1.5s per half
         double s = 0.5 - 0.5 * Math.Cos(phase * Math.PI); // smooth 0..1..0
 
         double cx = PadW / 2, cy = PadH / 2;
@@ -837,6 +842,67 @@ public sealed class OnboardingWindow : Window
         double h = 0.28 + 0.46 * s;   // 28% -> 74% height
         var rect = new Rect((1 - w) / 2, (1 - h) / 2, w, h);
         PlaceWindowInArea(area, rect);
+    }
+
+    // ---- GIF export support -----------------------------------------------
+    // Reused by the --export-tutorial command line path to render deterministic frames of each
+    // demo for the README, without screen-capture artifacts.
+
+    internal int StepCount => _steps.Length;
+    internal bool StepHasDemo(int i) => _steps[i].Demo != Demo.None;
+
+    /// <summary>A filename-safe key for a step's GIF (for example "snap-right").</summary>
+    internal string StepKey(int i)
+    {
+        var s = _steps[i];
+        return s.Demo switch
+        {
+            Demo.Resize => "resize",
+            Demo.Desktop => "desktops",
+            Demo.Snap => s.Swipe switch
+            {
+                Swipe.Right => "snap-right",
+                Swipe.Up => "maximize",
+                Swipe.UpLeft => "snap-corner",
+                _ => $"snap-{i}",
+            },
+            _ => $"step-{i}",
+        };
+    }
+
+    /// <summary>One full animation loop duration (ms) for the given step.</summary>
+    internal double StepCycleMs(int i)
+    {
+        var s = _steps[i];
+        if (s.Demo == Demo.Resize) return 3000; // s goes 0..1..0 over phase 0..2 (1500ms each)
+        double holdMs = s.Hold ? HoldRestMs : 0;
+        return holdMs + SwipeMs + SettleMs + GapMs;
+    }
+
+    /// <summary>Switch to a step and build its backdrop, ready for frame rendering. Stops the
+    /// live timer so only explicit RenderFrameAt calls drive the animation.</summary>
+    internal FrameworkElement PrepareExport(int i)
+    {
+        _timer.Stop();
+        _index = i;
+        RenderStep();
+        return _demoRow;
+    }
+
+    /// <summary>Force the dark palette for deterministic GIF export and stop following the OS
+    /// theme, so exported frames look the same regardless of the current system setting.</summary>
+    internal void ForceDarkForExport()
+    {
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        _pal = Palette.For(false);
+        foreach (var apply in _themeAppliers) apply();
+    }
+
+    /// <summary>Render the demo at a fixed time within the loop.</summary>
+    internal void RenderFrameAt(double ms)
+    {
+        _timeOverrideMs = ms;
+        Animate();
     }
 
     private void SetFinger(Ellipse dot, Ellipse glow, double x, double y, double opacity)

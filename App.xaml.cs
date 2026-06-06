@@ -46,6 +46,17 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
+        // Hidden developer path: render the tutorial demo animations to PNG frame sequences for
+        // building the README GIFs, then exit. Does not start the tray.
+        int exportIdx = Array.FindIndex(e.Args, a => string.Equals(a, "--export-tutorial", StringComparison.OrdinalIgnoreCase));
+        if (exportIdx >= 0)
+        {
+            string outDir = exportIdx + 1 < e.Args.Length ? e.Args[exportIdx + 1]
+                : Path.Combine(Path.GetTempPath(), "swoosh-tutorial-frames");
+            RunTutorialExport(outDir);
+            return;
+        }
+
         // Bail out quietly if another Swoosh is already running for this user.
         _instanceMutex = new Mutex(initiallyOwned: true, InstanceMutexName, out bool isNew);
         if (!isNew)
@@ -205,6 +216,74 @@ public partial class App : System.Windows.Application
             _onboarding.Activate();
         }
         catch (Exception ex) { Log.Write($"Onboarding failed: {ex}"); }
+    }
+
+    /// <summary>Render each tutorial demo step's animation to a PNG frame sequence (one folder per
+    /// gesture) for assembling README GIFs. Uses RenderTargetBitmap for crisp, deterministic
+    /// frames, then exits.</summary>
+    private void RunTutorialExport(string outDir)
+    {
+        var accent = UI.AccentColors.Resolve(true, "#0A84FF");
+        var win = new UI.OnboardingWindow(accent)
+        {
+            Left = -20000,
+            Top = -20000,
+            ShowInTaskbar = false,
+        };
+        win.Show();
+        win.ForceDarkForExport();
+
+        // Let the visual tree lay out, then render off the dispatcher queue.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try { ExportTutorialFrames(win, outDir); }
+            catch (Exception ex) { Log.Write($"Tutorial export failed: {ex}"); }
+            finally { try { win.Close(); } catch { } Shutdown(); }
+        }), System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private static void ExportTutorialFrames(UI.OnboardingWindow win, string outDir)
+    {
+        const int fps = 25;
+        const double scale = 2.0; // render at 2x for crisp downscaling
+        Directory.CreateDirectory(outDir);
+
+        for (int i = 0; i < win.StepCount; i++)
+        {
+            if (!win.StepHasDemo(i)) continue;
+
+            var el = win.PrepareExport(i);
+            el.UpdateLayout();
+            var size = el.RenderSize;
+            if (size.Width < 1 || size.Height < 1) continue;
+
+            string key = win.StepKey(i);
+            string dir = Path.Combine(outDir, key);
+            Directory.CreateDirectory(dir);
+
+            double cycle = win.StepCycleMs(i);
+            int frames = Math.Max(1, (int)Math.Round(cycle / 1000.0 * fps));
+
+            for (int f = 0; f < frames; f++)
+            {
+                double t = cycle * f / frames;
+                win.RenderFrameAt(t);
+                el.UpdateLayout();
+
+                var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                    (int)Math.Ceiling(size.Width * scale),
+                    (int)Math.Ceiling(size.Height * scale),
+                    96 * scale, 96 * scale,
+                    System.Windows.Media.PixelFormats.Pbgra32);
+                rtb.Render(el);
+
+                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                using var fs = File.Create(Path.Combine(dir, $"f{f:D3}.png"));
+                enc.Save(fs);
+            }
+            Log.Write($"Exported {frames} frames for '{key}'");
+        }
     }
 
     private void OpenSettings()
