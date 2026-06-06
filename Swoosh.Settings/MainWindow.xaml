@@ -196,7 +196,18 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Touch sensitivity" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Touch sensitivity" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <HyperlinkButton Grid.Column="1" Padding="4,0"
+                                                     VerticalAlignment="Center" Click="OnResetSensitivity"
+                                                     ToolTipService.ToolTip="Reset to default">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                    </HyperlinkButton>
+                                </Grid>
                                 <TextBlock Text="Lower values ignore vertical drift during a sideways swipe."
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -221,20 +232,39 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Grid spacing" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Grid spacing" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock x:Name="GridSpacingValue" Grid.Column="1" Text="0 px"
+                                               VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <HyperlinkButton Grid.Column="2" Padding="4,0"
+                                                     VerticalAlignment="Center" Click="OnResetGridSpacing"
+                                                     ToolTipService.ToolTip="Reset to default">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                    </HyperlinkButton>
+                                </Grid>
                                 <TextBlock Text="Gap left around snapped windows, in pixels."
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Slider x:Name="GridSpacingSlider" Grid.Column="0" Margin="0,0,12,0"
+                                    <TextBlock Grid.Column="0" Text="0 px" VerticalAlignment="Center"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <Slider x:Name="GridSpacingSlider" Grid.Column="1" Margin="12,0"
                                             Minimum="0" Maximum="10" StepFrequency="1"
                                             ValueChanged="OnGridSpacingChanged" />
-                                    <TextBlock x:Name="GridSpacingValue" Grid.Column="1" Text="0 px"
-                                               VerticalAlignment="Center" MinWidth="44"
+                                    <TextBlock Grid.Column="2" Text="10 px" VerticalAlignment="Center"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Grid>
@@ -243,20 +273,39 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Cancel timeout" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Cancel timeout" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock x:Name="CancelTimeoutValue" Grid.Column="1" Text="0.8 s"
+                                               VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <HyperlinkButton Grid.Column="2" Padding="4,0"
+                                                     VerticalAlignment="Center" Click="OnResetCancelTimeout"
+                                                     ToolTipService.ToolTip="Reset to default">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                    </HyperlinkButton>
+                                </Grid>
                                 <TextBlock Text="Cancel a gesture by pressing Esc, or by resting your fingers still for this long (0 = never)."
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Slider x:Name="CancelTimeoutSlider" Grid.Column="0" Margin="0,0,12,0"
+                                    <TextBlock Grid.Column="0" Text="Off" VerticalAlignment="Center"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <Slider x:Name="CancelTimeoutSlider" Grid.Column="1" Margin="12,0"
                                             Minimum="0" Maximum="3" StepFrequency="0.1"
                                             ValueChanged="OnCancelTimeoutChanged" />
-                                    <TextBlock x:Name="CancelTimeoutValue" Grid.Column="1" Text="0.8 s"
-                                               VerticalAlignment="Center" MinWidth="44"
+                                    <TextBlock Grid.Column="2" Text="3 s" VerticalAlignment="Center"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Grid>
@@ -344,21 +393,40 @@
 
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Desktop switch hold delay" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Desktop switch hold delay" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock x:Name="HoldDelayValue" Grid.Column="1" Text="0.30 s"
+                                               VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <HyperlinkButton Grid.Column="2" Padding="4,0"
+                                                     VerticalAlignment="Center" Click="OnResetHoldDelay"
+                                                     ToolTipService.ToolTip="Reset to default">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                    </HyperlinkButton>
+                                </Grid>
                                 <TextBlock Text="How long you must hold two fingers still before the virtual-desktop switcher engages and its HUD appears."
                                            TextWrapping="Wrap"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Slider x:Name="HoldDelaySlider" Grid.Column="0" Margin="0,0,12,0"
+                                    <TextBlock Grid.Column="0" Text="0.1 s" VerticalAlignment="Center"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <Slider x:Name="HoldDelaySlider" Grid.Column="1" Margin="12,0"
                                             Minimum="0" Maximum="0.9" StepFrequency="0.05"
                                             ValueChanged="OnHoldDelayChanged" />
-                                    <TextBlock x:Name="HoldDelayValue" Grid.Column="1" Text="0.30 s"
-                                               VerticalAlignment="Center" MinWidth="48"
+                                    <TextBlock Grid.Column="2" Text="1.0 s" VerticalAlignment="Center"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Grid>
@@ -427,7 +495,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Spacing="2">
                                     <TextBlock Text="HUD size" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="Size of the gesture HUD on screen. Small renders it at about half size."
+                                    <TextBlock Text="Size of the gesture HUD on screen. Large renders it bigger than Normal."
                                                TextWrapping="Wrap"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -439,6 +507,48 @@
                                     <ComboBoxItem Content="Large" />
                                 </ComboBox>
                             </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="HUD fade-out" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock x:Name="HudFadeValue" Grid.Column="1" Text="0.36 s"
+                                               VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <HyperlinkButton Grid.Column="2" Padding="4,0"
+                                                     VerticalAlignment="Center" Click="OnResetHudFade"
+                                                     ToolTipService.ToolTip="Reset to default">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                    </HyperlinkButton>
+                                </Grid>
+                                <TextBlock Text="How long the gesture HUD takes to fade away when a gesture ends. Higher values make it linger and fade more slowly."
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="0.1 s" VerticalAlignment="Center"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <Slider x:Name="HudFadeSlider" Grid.Column="1" Margin="12,0"
+                                            Minimum="0" Maximum="1.4" StepFrequency="0.05"
+                                            ValueChanged="OnHudFadeChanged" />
+                                    <TextBlock Grid.Column="2" Text="1.5 s" VerticalAlignment="Center"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Grid>
+                            </StackPanel>
                         </Border>
                     </StackPanel>
 

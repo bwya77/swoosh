@@ -90,6 +90,9 @@ public sealed class CursorChipOverlay
     // Whether the snap fill glides between zones (mirrors the window-move animation).
     private bool _animate = true;
 
+    // HUD fade-out duration in milliseconds, set from settings. Clamped to a sane range.
+    private double _fadeOutMs = 360;
+
     private static readonly Duration FillDuration = new(TimeSpan.FromMilliseconds(210));
     private static readonly IEasingFunction FillEase = new CubicEase { EasingMode = EasingMode.EaseOut };
 
@@ -162,11 +165,12 @@ public sealed class CursorChipOverlay
 
     /// <summary>Apply live appearance settings: whether the snap fill animates between
     /// zones, the highlight color (the Windows accent color or a custom hex), the HUD
-    /// backdrop theme (dark, light, or follow the system light/dark setting), and the HUD
-    /// size.</summary>
-    public void ApplyAppearance(bool animate, bool useAccent, string customHex, HudTheme mode, HudSize size)
+    /// backdrop theme (dark, light, or follow the system light/dark setting), the HUD
+    /// size, and the HUD fade-out duration in seconds.</summary>
+    public void ApplyAppearance(bool animate, bool useAccent, string customHex, HudTheme mode, HudSize size, double fadeOutSeconds)
     {
         _animate = animate;
+        _fadeOutMs = Math.Clamp(fadeOutSeconds, 0.1, 1.5) * 1000;
 
         _useAccent = useAccent;
         _customHex = customHex;
@@ -983,7 +987,7 @@ public sealed class CursorChipOverlay
             return;
         }
 
-        var fade = new DoubleAnimation(0, new Duration(TimeSpan.FromMilliseconds(360)))
+        var fade = new DoubleAnimation(0, new Duration(TimeSpan.FromMilliseconds(_fadeOutMs)))
         {
             EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
         };

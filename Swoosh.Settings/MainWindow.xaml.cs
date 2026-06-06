@@ -231,6 +231,10 @@ public sealed partial class MainWindow : Window
             _ => 0,
         };
         HudSizeCombo.SelectedIndex = s.HudSize == HudSize.Large ? 1 : 0;
+        // Same Minimum-0-plus-0.1-offset trick as the hold-delay slider: the fade duration is
+        // the slider value plus a 0.1s floor, so the usable range is 0.1 to 1.5s.
+        HudFadeSlider.Value = Math.Clamp(s.HudFadeOutSeconds - 0.1, 0.0, 1.4);
+        UpdateHudFadeLabel(Math.Clamp(s.HudFadeOutSeconds, 0.1, 1.5));
         _overlayColor = s.OverlayColor;
         HighlightSwatch(_overlayColor);
         SetSwatchesEnabled(!s.OverlayUseAccent);
@@ -283,6 +287,7 @@ public sealed partial class MainWindow : Window
             _ => HudTheme.Dark,
         },
         HudSize = HudSizeCombo.SelectedIndex == 1 ? HudSize.Large : HudSize.Normal,
+        HudFadeOutSeconds = HudFadeSlider.Value + 0.1,
         OverlayColor = _overlayColor,
         GridSpacing = (int)Math.Round(GridSpacingSlider.Value),
         CancelTimeoutSeconds = CancelTimeoutSlider.Value,
@@ -330,6 +335,27 @@ public sealed partial class MainWindow : Window
         SaveIfReady();
     }
 
+    private void OnHudFadeChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        UpdateHudFadeLabel(e.NewValue + 0.1);
+        SaveIfReady();
+    }
+
+    // Reset-to-default handlers. Setting the slider's Value fires its ValueChanged handler,
+    // which updates the label and saves. Defaults come from a fresh AppSettings so they stay
+    // in sync with the model. Sliders that use the Minimum-0 offset subtract the 0.1 floor.
+    private static readonly AppSettings Defaults = new();
+
+    private void OnResetSensitivity(object sender, RoutedEventArgs e) => SensitivitySlider.Value = Defaults.Sensitivity;
+
+    private void OnResetGridSpacing(object sender, RoutedEventArgs e) => GridSpacingSlider.Value = Defaults.GridSpacing;
+
+    private void OnResetCancelTimeout(object sender, RoutedEventArgs e) => CancelTimeoutSlider.Value = Defaults.CancelTimeoutSeconds;
+
+    private void OnResetHoldDelay(object sender, RoutedEventArgs e) => HoldDelaySlider.Value = Defaults.DesktopHoldDelaySeconds - 0.1;
+
+    private void OnResetHudFade(object sender, RoutedEventArgs e) => HudFadeSlider.Value = Defaults.HudFadeOutSeconds - 0.1;
+
     private void UpdateGridSpacingLabel(double v)
     {
         if (GridSpacingValue != null) GridSpacingValue.Text = $"{(int)Math.Round(v)} px";
@@ -344,6 +370,11 @@ public sealed partial class MainWindow : Window
     private void UpdateHoldDelayLabel(double delaySeconds)
     {
         if (HoldDelayValue != null) HoldDelayValue.Text = $"{delaySeconds:0.00} s";
+    }
+
+    private void UpdateHudFadeLabel(double fadeSeconds)
+    {
+        if (HudFadeValue != null) HudFadeValue.Text = $"{fadeSeconds:0.00} s";
     }
 
     private void OnAccentToggled(object sender, RoutedEventArgs e)

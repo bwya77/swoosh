@@ -113,5 +113,9 @@ public sealed class AppSettings
     /// virtual-desktop switcher engages and its HUD appears. Range about 0.1 to 1.0s.</summary>
     public double DesktopHoldDelaySeconds { get; set; } = 0.3;
 
+    /// <summary>How long the gesture HUD takes to fade out when a gesture ends, in seconds.
+    /// Higher values make the HUD linger and fade more slowly. Range about 0.1 to 1.5s.</summary>
+    public double HudFadeOutSeconds { get; set; } = 0.36;
+
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 }
