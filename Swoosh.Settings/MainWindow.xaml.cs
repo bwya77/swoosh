@@ -3,7 +3,9 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
 using Swoosh.Settings;
 using Swoosh.Updates;
@@ -28,6 +30,20 @@ public sealed partial class MainWindow : Window
     private static readonly string[] SwatchColors =
         { "#0A84FF", "#5AC8FA", "#34C759", "#AF52DE", "#FF2D55", "#FF9500", "#FFD60A", "#8E8E93" };
     private readonly List<Button> _swatches = new();
+    private Button? _customSwatch;
+    private Canvas? _svBox;
+    private Border? _svHueLayer;
+    private Ellipse? _svThumb;
+    private Canvas? _hueBar;
+    private Border? _hueThumb;
+    private TextBlock? _rgbReadout;
+    private TextBox? _hexBox;
+    private Border? _previewBox;
+    private double _hue, _sat, _val;
+    private bool _svActive, _hueActive;
+    private bool _suppressColorEdit;
+
+    private const double SvW = 220, SvH = 140, HueW = 220, HueH = 16, ThumbSize = 14;
 
     // ---- Per-gesture enable tiles (Swish-style) ----------------------------
     private sealed record GestureDef(string Key, string Name, string Gesture,
@@ -516,6 +532,322 @@ public sealed partial class MainWindow : Window
             _swatches.Add(btn);
             SwatchPanel.Children.Add(btn);
         }
+
+        BuildCustomSwatch();
+    }
+
+    /// <summary>A trailing swatch that opens a lightweight color editor (live preview, hex box,
+    /// and R/G/B sliders) so the user can choose any color beyond the presets. The native WinUI
+    /// ColorPicker spectrum is laggy on this hardware, so we use sliders which drag smoothly.
+    /// The swatch fills with the active custom color and is ringed when the current overlay color
+    /// is not one of the presets.</summary>
+    private void BuildCustomSwatch()
+    {
+        var icon = new FontIcon { Glyph = "\uE790", FontSize = 15 };
+
+        var btn = new Button
+        {
+            Width = 32,
+            Height = 32,
+            MinWidth = 0,
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            CornerRadius = new CornerRadius(16),
+            BorderThickness = new Thickness(2.5),
+            BorderBrush = UnselectedSwatchStroke(),
+            Content = icon,
+        };
+        ToolTipService.SetToolTip(btn, "Custom color");
+
+        var flyout = new Flyout { Content = BuildColorEditor() };
+        // Sync the editor to the current overlay color each time it opens.
+        flyout.Opened += (_, _) => SyncEditorTo(_overlayColor);
+        btn.Flyout = flyout;
+
+        _customSwatch = btn;
+        SwatchPanel.Children.Add(btn);
+    }
+
+    private FrameworkElement BuildColorEditor()
+    {
+        var panel = new StackPanel { Spacing = 12, Width = SvW };
+
+        // ---- Saturation/Value field (click or drag anywhere) ----
+        _svBox = new Canvas { Width = SvW, Height = SvH };
+
+        _svHueLayer = new Border
+        {
+            Width = SvW,
+            Height = SvH,
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(Colors.Red),
+        };
+
+        // White (left, opaque) -> transparent (right): saturation.
+        var satOverlay = new Border
+        {
+            Width = SvW,
+            Height = SvH,
+            CornerRadius = new CornerRadius(6),
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new Windows.Foundation.Point(0, 0),
+                EndPoint = new Windows.Foundation.Point(1, 0),
+                GradientStops =
+                {
+                    new GradientStop { Offset = 0, Color = Color.FromArgb(255, 255, 255, 255) },
+                    new GradientStop { Offset = 1, Color = Color.FromArgb(0, 255, 255, 255) },
+                },
+            },
+        };
+
+        // Transparent (top) -> black (bottom): value.
+        var valOverlay = new Border
+        {
+            Width = SvW,
+            Height = SvH,
+            CornerRadius = new CornerRadius(6),
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new Windows.Foundation.Point(0, 0),
+                EndPoint = new Windows.Foundation.Point(0, 1),
+                GradientStops =
+                {
+                    new GradientStop { Offset = 0, Color = Color.FromArgb(0, 0, 0, 0) },
+                    new GradientStop { Offset = 1, Color = Color.FromArgb(255, 0, 0, 0) },
+                },
+            },
+        };
+
+        _svThumb = new Ellipse
+        {
+            Width = ThumbSize,
+            Height = ThumbSize,
+            Stroke = new SolidColorBrush(Colors.White),
+            StrokeThickness = 2,
+            Fill = new SolidColorBrush(Colors.Transparent),
+            IsHitTestVisible = false,
+        };
+
+        _svBox.Children.Add(_svHueLayer);
+        _svBox.Children.Add(satOverlay);
+        _svBox.Children.Add(valOverlay);
+        _svBox.Children.Add(_svThumb);
+
+        _svBox.PointerPressed += (s, e) => { _svActive = true; _svBox.CapturePointer(e.Pointer); SetSvFromPointer(e); };
+        _svBox.PointerMoved += (s, e) => { if (_svActive) SetSvFromPointer(e); };
+        _svBox.PointerReleased += (s, e) => { _svActive = false; _svBox.ReleasePointerCapture(e.Pointer); };
+        _svBox.PointerCanceled += (s, e) => { _svActive = false; };
+        panel.Children.Add(_svBox);
+
+        // ---- Hue bar ----
+        _hueBar = new Canvas { Width = HueW, Height = HueH };
+        var hueFill = new Border
+        {
+            Width = HueW,
+            Height = HueH,
+            CornerRadius = new CornerRadius(4),
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new Windows.Foundation.Point(0, 0),
+                EndPoint = new Windows.Foundation.Point(1, 0),
+                GradientStops =
+                {
+                    new GradientStop { Offset = 0.0,    Color = Color.FromArgb(255, 255, 0, 0) },
+                    new GradientStop { Offset = 0.1667, Color = Color.FromArgb(255, 255, 255, 0) },
+                    new GradientStop { Offset = 0.3333, Color = Color.FromArgb(255, 0, 255, 0) },
+                    new GradientStop { Offset = 0.5,    Color = Color.FromArgb(255, 0, 255, 255) },
+                    new GradientStop { Offset = 0.6667, Color = Color.FromArgb(255, 0, 0, 255) },
+                    new GradientStop { Offset = 0.8333, Color = Color.FromArgb(255, 255, 0, 255) },
+                    new GradientStop { Offset = 1.0,    Color = Color.FromArgb(255, 255, 0, 0) },
+                },
+            },
+        };
+        _hueThumb = new Border
+        {
+            Width = 6,
+            Height = HueH,
+            CornerRadius = new CornerRadius(3),
+            BorderThickness = new Thickness(2),
+            BorderBrush = new SolidColorBrush(Colors.White),
+            IsHitTestVisible = false,
+        };
+        _hueBar.Children.Add(hueFill);
+        _hueBar.Children.Add(_hueThumb);
+
+        _hueBar.PointerPressed += (s, e) => { _hueActive = true; _hueBar.CapturePointer(e.Pointer); SetHueFromPointer(e); };
+        _hueBar.PointerMoved += (s, e) => { if (_hueActive) SetHueFromPointer(e); };
+        _hueBar.PointerReleased += (s, e) => { _hueActive = false; _hueBar.ReleasePointerCapture(e.Pointer); };
+        _hueBar.PointerCanceled += (s, e) => { _hueActive = false; };
+        panel.Children.Add(_hueBar);
+
+        // ---- Preview + hex ----
+        var bottom = new Grid();
+        bottom.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
+        bottom.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        _previewBox = new Border
+        {
+            Width = 36,
+            Height = 36,
+            CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(1),
+            BorderBrush = UnselectedSwatchStroke(),
+            VerticalAlignment = VerticalAlignment.Bottom,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Background = new SolidColorBrush(ParseColor(_overlayColor)),
+        };
+        Grid.SetColumn(_previewBox, 0);
+
+        _hexBox = new TextBox
+        {
+            Header = "Hex",
+            PlaceholderText = "#RRGGBB",
+            MaxLength = 7,
+        };
+        _hexBox.KeyDown += (_, e) =>
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter) ApplyHex();
+        };
+        _hexBox.LostFocus += (_, _) => ApplyHex();
+        Grid.SetColumn(_hexBox, 1);
+
+        bottom.Children.Add(_previewBox);
+        bottom.Children.Add(_hexBox);
+        panel.Children.Add(bottom);
+
+        _rgbReadout = new TextBlock
+        {
+            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            Foreground = SecondaryTextBrush(),
+        };
+        panel.Children.Add(_rgbReadout);
+
+        return panel;
+    }
+
+    private void SetSvFromPointer(PointerRoutedEventArgs e)
+    {
+        if (_svBox == null) return;
+        var p = e.GetCurrentPoint(_svBox).Position;
+        _sat = Clamp01(p.X / SvW);
+        _val = Clamp01(1 - p.Y / SvH);
+        UpdateFromHsv(commit: true);
+    }
+
+    private void SetHueFromPointer(PointerRoutedEventArgs e)
+    {
+        if (_hueBar == null) return;
+        var p = e.GetCurrentPoint(_hueBar).Position;
+        _hue = Clamp01(p.X / HueW) * 360.0;
+        UpdateFromHsv(commit: true);
+    }
+
+    /// <summary>Push the current H/S/V state out to the field thumbs, hue base color, preview,
+    /// hex box, and RGB readout. Optionally commits the resulting color to settings.</summary>
+    private void UpdateFromHsv(bool commit)
+    {
+        var c = FromHsv(_hue, _sat, _val);
+        var hex = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+
+        _suppressColorEdit = true;
+        if (_svHueLayer != null) _svHueLayer.Background = new SolidColorBrush(FromHsv(_hue, 1, 1));
+        if (_svThumb != null)
+        {
+            Canvas.SetLeft(_svThumb, _sat * SvW - ThumbSize / 2);
+            Canvas.SetTop(_svThumb, (1 - _val) * SvH - ThumbSize / 2);
+        }
+        if (_hueThumb != null)
+            Canvas.SetLeft(_hueThumb, Clamp01(_hue / 360.0) * HueW - 3);
+        if (_previewBox != null) _previewBox.Background = new SolidColorBrush(c);
+        if (_hexBox != null) _hexBox.Text = hex;
+        if (_rgbReadout != null) _rgbReadout.Text = $"R {c.R}   G {c.G}   B {c.B}";
+        _suppressColorEdit = false;
+
+        if (commit) CommitCustomColor(hex);
+    }
+
+    private void ApplyHex()
+    {
+        if (_suppressColorEdit || _hexBox == null) return;
+        if (!TryParseHex(_hexBox.Text, out var c))
+        {
+            // Reject invalid input: restore to the current color.
+            SyncEditorTo(_overlayColor);
+            return;
+        }
+        ToHsv(c, out _hue, out _sat, out _val);
+        UpdateFromHsv(commit: true);
+    }
+
+    private void SyncEditorTo(string hex)
+    {
+        ToHsv(ParseColor(hex), out _hue, out _sat, out _val);
+        UpdateFromHsv(commit: false);
+    }
+
+    private void CommitCustomColor(string hex)
+    {
+        _overlayColor = hex;
+        // Choosing a custom color implies the accent mode should be off.
+        OverlayAccentToggle.IsOn = false;
+        HighlightSwatch(hex);
+        if (_loading) return;
+        _store.Save(Collect());
+    }
+
+    private static double Clamp01(double v) => v < 0 ? 0 : v > 1 ? 1 : v;
+
+    private static Color FromHsv(double h, double s, double v)
+    {
+        h = ((h % 360) + 360) % 360;
+        double c = v * s;
+        double x = c * (1 - Math.Abs((h / 60.0 % 2) - 1));
+        double m = v - c;
+        double r = 0, g = 0, b = 0;
+        if (h < 60) { r = c; g = x; }
+        else if (h < 120) { r = x; g = c; }
+        else if (h < 180) { g = c; b = x; }
+        else if (h < 240) { g = x; b = c; }
+        else if (h < 300) { r = x; b = c; }
+        else { r = c; b = x; }
+        return Color.FromArgb(255,
+            (byte)Math.Round((r + m) * 255),
+            (byte)Math.Round((g + m) * 255),
+            (byte)Math.Round((b + m) * 255));
+    }
+
+    private static void ToHsv(Color col, out double h, out double s, out double v)
+    {
+        double r = col.R / 255.0, g = col.G / 255.0, b = col.B / 255.0;
+        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+        double d = max - min;
+        v = max;
+        s = max <= 0 ? 0 : d / max;
+        if (d <= 0) h = 0;
+        else if (max == r) h = 60 * ((((g - b) / d) % 6 + 6) % 6);
+        else if (max == g) h = 60 * (((b - r) / d) + 2);
+        else h = 60 * (((r - g) / d) + 4);
+    }
+
+    private static bool TryParseHex(string? text, out Color color)
+    {
+        color = Colors.Black;
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var hex = text.Trim().TrimStart('#');
+        if (hex.Length != 6) return false;
+        try
+        {
+            byte r = Convert.ToByte(hex.Substring(0, 2), 16);
+            byte g = Convert.ToByte(hex.Substring(2, 2), 16);
+            byte b = Convert.ToByte(hex.Substring(4, 2), 16);
+            color = Color.FromArgb(255, r, g, b);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void HighlightSwatch(string hex)
@@ -525,11 +857,47 @@ public sealed partial class MainWindow : Window
         // and a near-black ring on light themes.
         bool dark = RootGrid.ActualTheme == ElementTheme.Dark;
         var selBrush = new SolidColorBrush(dark ? Colors.White : Color.FromArgb(255, 0, 0, 0));
+        bool isPreset = false;
         foreach (var sw in _swatches)
         {
             bool sel = string.Equals((string)sw.Tag, hex, StringComparison.OrdinalIgnoreCase);
+            if (sel) isPreset = true;
             sw.BorderBrush = sel ? selBrush : UnselectedSwatchStroke();
         }
+
+        // The custom swatch is "selected" whenever the active color is not a preset. Fill it with
+        // the chosen color (with a contrasting glyph) so the picked color is unmistakable.
+        if (_customSwatch != null)
+        {
+            if (isPreset)
+            {
+                _customSwatch.Background = new SolidColorBrush(Colors.Transparent);
+                _customSwatch.Resources.Remove("ButtonBackground");
+                _customSwatch.Resources.Remove("ButtonBackgroundPointerOver");
+                _customSwatch.Resources.Remove("ButtonBackgroundPressed");
+                _customSwatch.Resources.Remove("ButtonBackgroundDisabled");
+                _customSwatch.BorderBrush = UnselectedSwatchStroke();
+                if (_customSwatch.Content is FontIcon fi) fi.Foreground = SecondaryTextBrush();
+            }
+            else
+            {
+                var c = ParseColor(hex);
+                _customSwatch.Background = new SolidColorBrush(c);
+                _customSwatch.Resources["ButtonBackground"] = new SolidColorBrush(c);
+                _customSwatch.Resources["ButtonBackgroundPointerOver"] = new SolidColorBrush(c);
+                _customSwatch.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(c);
+                _customSwatch.Resources["ButtonBackgroundDisabled"] = new SolidColorBrush(c);
+                _customSwatch.BorderBrush = selBrush;
+                if (_customSwatch.Content is FontIcon fi) fi.Foreground = new SolidColorBrush(ContrastOn(c));
+            }
+        }
+    }
+
+    /// <summary>Black or white, whichever reads better on the given background color.</summary>
+    private static Color ContrastOn(Color c)
+    {
+        double lum = (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255.0;
+        return lum > 0.6 ? Color.FromArgb(255, 0, 0, 0) : Colors.White;
     }
 
     /// <summary>A subtle theme-adaptive outline so every swatch is delineated from the

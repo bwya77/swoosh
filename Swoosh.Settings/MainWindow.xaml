@@ -591,7 +591,8 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="Overlay color" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock Text="Used when not following the accent color."
+                                <TextBlock Text="Pick a preset or choose your own. Used when not following the accent color."
+                                           TextWrapping="Wrap"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <StackPanel x:Name="SwatchPanel" Orientation="Horizontal" Spacing="8" />
