@@ -419,14 +419,31 @@ public partial class App : System.Windows.Application
         }
     }
 
-    /// <summary>Act on the "update available" balloon. An installed build downloads and
-    /// runs the signed installer (which closes and relaunches Swoosh); a portable build
-    /// just opens the releases page.</summary>
+    /// <summary>Act on the "update available" balloon or tray item. An installed build downloads
+    /// and runs the signed installer (which closes and relaunches Swoosh); a portable or dev
+    /// build opens the releases page. Logs which path is taken so fallbacks are diagnosable.</summary>
     private async void OnUpdateClicked()
     {
-        if (IsInstalled() && !string.IsNullOrEmpty(_installerUrl) &&
-            await TryRunInstallerAsync(_installerUrl!))
-            return;
+        bool installed = IsInstalled();
+        bool haveInstaller = !string.IsNullOrEmpty(_installerUrl);
+        Log.Write($"Update clicked: installed={installed} haveInstaller={haveInstaller} url={_installerUrl}");
+
+        if (installed && haveInstaller)
+        {
+            _tray?.ShowBalloonTip(4000, "Swoosh", "Downloading the update...", Forms.ToolTipIcon.Info);
+            if (await TryRunInstallerAsync(_installerUrl!))
+            {
+                Log.Write("Update: installer launched");
+                return;
+            }
+            // In-place update failed (download error, or the elevation prompt was declined):
+            // fall back to the releases page and say so, instead of failing silently.
+            _tray?.ShowBalloonTip(5000, "Swoosh",
+                "Could not start the in-app update. Opening the download page instead.",
+                Forms.ToolTipIcon.Warning);
+            Log.Write("Update: installer launch failed, opening releases page");
+        }
+
         OpenUpdateUrl();
     }
 
@@ -448,8 +465,9 @@ public partial class App : System.Windows.Application
         return false;
     }
 
-    /// <summary>Download the signed installer to a temp file and launch it. The installer's
-    /// Restart Manager support closes the running app, updates in place, and relaunches it.</summary>
+    /// <summary>Download the signed installer to a temp file and launch it silently. The
+    /// installer's Restart Manager support closes the running app, updates in place, and
+    /// relaunches it, so the update applies with just the one elevation prompt.</summary>
     private static async Task<bool> TryRunInstallerAsync(string url)
     {
         try
@@ -462,11 +480,19 @@ public partial class App : System.Windows.Application
                 await using var fs = File.Create(dest);
                 await resp.Content.CopyToAsync(fs);
             }
-            Process.Start(new ProcessStartInfo(dest) { UseShellExecute = true });
+            // /VERYSILENT runs the Inno Setup installer without its wizard; Restart Manager
+            // (CloseApplications/RestartApplications) closes and relaunches Swoosh. The admin
+            // manifest still triggers a single UAC prompt via ShellExecute.
+            Process.Start(new ProcessStartInfo(dest)
+            {
+                UseShellExecute = true,
+                Arguments = "/VERYSILENT /SUPPRESSMSGBOXES",
+            });
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Write($"Installer launch failed: {ex.Message}");
             return false;
         }
     }

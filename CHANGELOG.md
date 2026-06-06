@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- In-app updates now install silently and in place. When you update an installed copy, Swoosh downloads the signed installer, applies it with a single permission prompt, and relaunches itself, instead of opening the download page. If the in-app update can't start, it now tells you and falls back to the download page rather than failing quietly. Portable builds still open the download page.
 - The system tray menu now has a "Check for updates" item, and shows an "Update to ..." item at the top whenever a newer version is available so you can update right from the tray.
 - Fixed a case where an installed Swoosh could open a different version of its Settings window than the tray app itself (only seen on machines that also had the source repo). An installed build now always opens its own matching Settings.
 - New first-run tutorial.The first time you launch Swoosh, a short visual walkthrough shows each touchpad gesture and what it does: snapping to halves and corners, maximizing, resizing with five fingers, and switching virtual or physical desktops. It follows your Windows light or dark theme. You can replay it any time from the Swoosh tray menu (Show tutorial) or from Settings under Home (Startup and troubleshooting).
