@@ -130,9 +130,46 @@
     .install-cards { grid-template-columns: 1fr; }
     .nav a.navlink { display: none; }
   }
+
+  /* Top-left "open beta" corner ribbon */
+  .beta-ribbon {
+    position: fixed;
+    top: 0; left: 0;
+    width: 150px; height: 150px;
+    overflow: hidden;
+    z-index: 1000;
+    pointer-events: none;
+  }
+  .beta-ribbon a {
+    position: absolute;
+    display: block;
+    width: 200px;
+    top: 34px; left: -54px;
+    padding: 7px 0;
+    transform: rotate(-45deg);
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-align: center;
+    text-transform: uppercase;
+    text-decoration: none;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+    pointer-events: auto;
+  }
+  .beta-ribbon a:hover { text-decoration: none; filter: brightness(1.08); }
+  @media (max-width: 760px) {
+    .beta-ribbon { width: 124px; height: 124px; }
+    .beta-ribbon a { top: 26px; left: -58px; font-size: 12px; padding: 6px 0; }
+  }
 </style>
 </head>
 <body>
+
+<div class="beta-ribbon">
+  <a href="https://github.com/bwya77/swoosh/releases/latest" title="Swoosh is in open beta">Beta</a>
+</div>
 
 <header>
   <div class="wrap nav">
