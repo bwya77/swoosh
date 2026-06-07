@@ -304,12 +304,24 @@
           var url = find(map[id]); var el = document.getElementById(id);
           if (url && el) el.href = url;
         });
-        // Primary buttons point at the x64 installer for a one-click default.
-        var setupX64 = find(/SwooshSetup-.*-win-x64\.exe$/);
-        if (setupX64) {
+        // Primary buttons auto-pick the installer for the visitor's CPU architecture
+        // (ARM64 on Windows on ARM, otherwise x64), falling back to x64 if unsure.
+        function applyPrimary(isArm) {
+          var setup = find(isArm ? /SwooshSetup-.*-win-arm64\.exe$/ : /SwooshSetup-.*-win-x64\.exe$/)
+            || find(/SwooshSetup-.*-win-x64\.exe$/);
           ["hero-download", "nav-download"].forEach(function (id) {
-            var el = document.getElementById(id); if (el) el.href = setupX64;
+            var el = document.getElementById(id); if (el && setup) el.href = setup;
           });
+          var hero = document.getElementById("hero-download");
+          if (hero) hero.textContent = isArm ? "Download for Windows (ARM64)" : "Download for Windows";
+        }
+        var uad = navigator.userAgentData;
+        if (uad && uad.getHighEntropyValues) {
+          uad.getHighEntropyValues(["architecture"]).then(function (v) {
+            applyPrimary((((v && v.architecture) || "").toLowerCase().indexOf("arm")) !== -1);
+          }).catch(function () { applyPrimary(/arm64|aarch64/i.test(navigator.userAgent)); });
+        } else {
+          applyPrimary(/arm64|aarch64/i.test(navigator.userAgent));
         }
         var pill = document.getElementById("version-pill");
         if (pill && rel.tag_name) {
