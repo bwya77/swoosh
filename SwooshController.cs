@@ -138,6 +138,8 @@ public sealed class SwooshController : IDisposable
         _swipeDownMode = s.SwipeDownAction;
         _downThreshold = Math.Clamp(s.SwipeDownThreshold, 0.02, 0.30);
         _snapper.AnimateSnaps = s.AnimateSnaps;
+        double snapMs = Math.Clamp(s.SnapAnimationSeconds, 0.05, 0.5) * 1000;
+        _snapper.AnimationMs = snapMs;
         _snapper.GridSpacing = Math.Clamp(s.GridSpacing, 0, 10);
         _gestures.IdleCancelMs = s.CancelTimeoutSeconds > 0
             ? (long)Math.Round(Math.Clamp(s.CancelTimeoutSeconds, 0, 10) * 1000)
@@ -157,8 +159,8 @@ public sealed class SwooshController : IDisposable
             GridModifier.Shift => Win32.VK_SHIFT,
             _ => Win32.VK_MENU,
         };
-        _chip.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor, s.HudBackground, s.HudSize, s.HudFadeOutSeconds);
-        _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor);
+        _chip.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor, s.HudBackground, s.HudSize, s.HudFadeOutSeconds, snapMs);
+        _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor, snapMs);
         _demo.SetAccent(AccentColors.Resolve(s.OverlayUseAccent, s.OverlayColor));
         _demo.SetVisible(s.DemoOverlay);
         _touchpad.PhantomRejection = s.PhantomRejection;

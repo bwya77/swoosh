@@ -37,7 +37,7 @@ public sealed class PreviewOverlay
     // Position glide (mirrors WindowSnapper.AnimateTo: ease-out cubic over GlideMs).
     // Driven off CompositionTarget.Rendering so frames are vsync-paced and evenly
     // spaced; timeBeginPeriod(1) keeps the system scheduler fine-grained meanwhile.
-    private const double GlideMs = 200;
+    private double _glideMs = 200;
     private readonly Stopwatch _clock = new();
     private bool _gliding;
     private bool _timerRaised;
@@ -46,13 +46,15 @@ public sealed class PreviewOverlay
     private double _cx, _cy, _cw, _ch;   // current on-screen rect
     private bool _hasRect;
 
-    /// <summary>Apply live appearance: glide on/off and the highlight color.</summary>
-    public void ApplyAppearance(bool animate, bool useAccent, string customHex)
+    /// <summary>Apply live appearance: glide on/off, the highlight color, and the glide
+    /// duration in ms (matched to the window-move speed).</summary>
+    public void ApplyAppearance(bool animate, bool useAccent, string customHex, double glideMs)
     {
         _animate = animate;
         _useAccent = useAccent;
         _customHex = customHex;
         _fill = AccentColors.Resolve(useAccent, customHex);
+        _glideMs = Math.Clamp(glideMs, 50, 500);
     }
 
     /// <summary>When following the Windows accent, re-read it (throttled) so a changed accent
@@ -187,7 +189,7 @@ public sealed class PreviewOverlay
 
     private void OnRendering(object? sender, EventArgs e)
     {
-        double t = GlideMs <= 0 ? 1.0 : _clock.Elapsed.TotalMilliseconds / GlideMs;
+        double t = _glideMs <= 0 ? 1.0 : _clock.Elapsed.TotalMilliseconds / _glideMs;
         if (t >= 1.0) t = 1.0;
         double p = 1.0 - Math.Pow(1.0 - t, 3); // ease-out cubic
 

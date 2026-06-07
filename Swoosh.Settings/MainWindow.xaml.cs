@@ -318,6 +318,7 @@ public sealed partial class MainWindow : Window
         _gestureEnabled["thirds"] = s.GridModifierEnabled;
         RefreshGestureCards();
         AnimateToggle.IsOn = s.AnimateSnaps;
+        SnapSpeedSlider.Value = Math.Clamp((s.SnapAnimationSeconds * 1000.0 - 50) / 10.0, 0, 35);
         DemoToggle.IsOn = s.DemoOverlay;
         PhantomToggle.IsOn = s.PhantomRejection;
         ModifierCombo.SelectedIndex = s.GridModifier switch
@@ -386,6 +387,7 @@ public sealed partial class MainWindow : Window
         MinimizeEnabled = GestureOn("minimize"),
         CenterEnabled = GestureOn("center"),
         AnimateSnaps = AnimateToggle.IsOn,
+        SnapAnimationSeconds = (50 + SnapSpeedSlider.Value * 10) / 1000.0,
         DemoOverlay = DemoToggle.IsOn,
         PhantomRejection = PhantomToggle.IsOn,
         GridModifierEnabled = GestureOn("thirds"),
@@ -468,6 +470,8 @@ public sealed partial class MainWindow : Window
 
     private void OnSensitivityChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 
+    private void OnSnapSpeedChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
+
     private void OnGridSpacingChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
         UpdateGridSpacingLabel(e.NewValue);
@@ -502,6 +506,8 @@ public sealed partial class MainWindow : Window
     private void OnResetSwipeDownThreshold(object sender, RoutedEventArgs e) => SwipeDownThresholdSlider.Value = Defaults.SwipeDownThreshold * 100.0 - 2;
 
     private void OnResetGridSpacing(object sender, RoutedEventArgs e) => GridSpacingSlider.Value = Defaults.GridSpacing;
+
+    private void OnResetSnapSpeed(object sender, RoutedEventArgs e) => SnapSpeedSlider.Value = Math.Clamp((Defaults.SnapAnimationSeconds * 1000.0 - 50) / 10.0, 0, 35);
 
     private void OnResetCancelTimeout(object sender, RoutedEventArgs e) => CancelTimeoutSlider.Value = Defaults.CancelTimeoutSeconds;
 

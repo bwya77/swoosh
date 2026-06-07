@@ -80,6 +80,10 @@ public sealed class AppSettings
     /// <summary>Animate window moves with an ease-out glide instead of snapping instantly.</summary>
     public bool AnimateSnaps { get; set; } = true;
 
+    /// <summary>How long the window-move glide takes, in seconds (when AnimateSnaps is on). The
+    /// HUD fill and preview ghost glides match this so they feel in sync. Clamped at apply time.</summary>
+    public double SnapAnimationSeconds { get; set; } = 0.22;
+
     /// <summary>When true, holding the modifier during a snap swipe targets a column/row third.</summary>
     public bool GridModifierEnabled { get; set; } = true;
 

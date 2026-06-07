@@ -93,7 +93,8 @@ public sealed class CursorChipOverlay
     // HUD fade-out duration in milliseconds, set from settings. Clamped to a sane range.
     private double _fadeOutMs = 360;
 
-    private static readonly Duration FillDuration = new(TimeSpan.FromMilliseconds(210));
+    private static readonly Duration FillDurationDefault = new(TimeSpan.FromMilliseconds(210));
+    private Duration _fillDuration = FillDurationDefault;
     private static readonly IEasingFunction FillEase = new CubicEase { EasingMode = EasingMode.EaseOut };
 
     // Desktop-strip "unfold" reveal: the extra squares slide out from behind the current one.
@@ -188,11 +189,13 @@ public sealed class CursorChipOverlay
     /// <summary>Apply live appearance settings: whether the snap fill animates between
     /// zones, the highlight color (the Windows accent color or a custom hex), the HUD
     /// backdrop theme (dark, light, or follow the system light/dark setting), the HUD
-    /// size, and the HUD fade-out duration in seconds.</summary>
-    public void ApplyAppearance(bool animate, bool useAccent, string customHex, HudTheme mode, HudSize size, double fadeOutSeconds)
+    /// size, the HUD fade-out duration in seconds, and the snap-glide duration in ms
+    /// (the fill glide matches the window-move speed).</summary>
+    public void ApplyAppearance(bool animate, bool useAccent, string customHex, HudTheme mode, HudSize size, double fadeOutSeconds, double glideMs)
     {
         _animate = animate;
         _fadeOutMs = Math.Clamp(fadeOutSeconds, 0.1, 1.5) * 1000;
+        _fillDuration = new Duration(TimeSpan.FromMilliseconds(Math.Clamp(glideMs, 50, 500)));
 
         _useAccent = useAccent;
         _customHex = customHex;
@@ -891,9 +894,9 @@ public sealed class CursorChipOverlay
         }
     }
 
-    private static void AnimateTo(UIElement el, DependencyProperty prop, double to)
+    private void AnimateTo(UIElement el, DependencyProperty prop, double to)
     {
-        var anim = new DoubleAnimation(to, FillDuration) { EasingFunction = FillEase };
+        var anim = new DoubleAnimation(to, _fillDuration) { EasingFunction = FillEase };
         el.BeginAnimation(prop, anim, HandoffBehavior.SnapshotAndReplace);
     }
 
