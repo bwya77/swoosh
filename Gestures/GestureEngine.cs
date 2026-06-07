@@ -128,6 +128,20 @@ public sealed class GestureEngine
     /// <summary>Live pinch feedback before commit: outward (spreading) plus progress 0..1.</summary>
     public event Action<bool, double>? PinchUpdated;
 
+    /// <summary>When either is true, a two-finger spread does an axis-constrained live resize
+    /// instead of the pinch-to-maximize. Set from settings.</summary>
+    public bool AxisResizeH { get; set; }
+    public bool AxisResizeV { get; set; }
+
+    /// <summary>Axis-constrained two-finger resize engaged: the locked axis is horizontal (true)
+    /// or vertical (false). The controller arms the target and captures its rect.</summary>
+    public event Action<bool>? AxisResizeBegan;
+    /// <summary>Per-frame axis-resize step: multiplicative gap factor since the last frame, on the
+    /// locked axis (horizontal = true).</summary>
+    public event Action<double, bool>? AxisResizeDelta;
+    /// <summary>Axis-resize gesture ended (fingers lifted or cancelled).</summary>
+    public event Action? AxisResizeEnded;
+
     private bool _tracking;
     private bool _cancelled;
     private double _startX, _startY, _lastX, _lastY;
@@ -180,6 +194,13 @@ public sealed class GestureEngine
     // the centroid stays roughly fixed.
     private double _startSpread;
     private bool _pinchFired;
+
+    // Axis-constrained two-finger resize. Per-axis finger gaps from the gesture start; once the
+    // spread engages, the dominant enabled axis locks and drives a per-frame resize factor.
+    private double _startGapX, _startGapY;
+    private bool _axisResizeActive;
+    private bool _axisHorizontal;
+    private double _axisLastGap;
 
     private bool _free;
     private double _freeLastX, _freeLastY;
@@ -297,6 +318,9 @@ public sealed class GestureEngine
                 _startY = _lastY = cy;
                 _startTime = frame.TimestampMs;
                 _startSpread = Spread(frame);
+                _startGapX = GapX(frame);
+                _startGapY = GapY(frame);
+                _axisResizeActive = false;
                 _pinchFired = false;
                 _monitorActive = MonitorMoveMode;
                 _monitorDir = null;
@@ -389,6 +413,33 @@ public sealed class GestureEngine
             double spread = Spread(frame);
             double gain = spread - _startSpread;
             bool centroidFixed = _maxDist <= PinchMaxCentroidTravel;
+
+            // Axis-constrained two-finger resize replaces the maximize pinch while enabled: a
+            // horizontal spread grows width, a vertical spread grows height. Once engaged it owns
+            // the gesture (no centroid-fixed requirement) so a little drift doesn't drop it.
+            if ((AxisResizeH || AxisResizeV) && !_hold &&
+                (_axisResizeActive || (centroidFixed && Math.Abs(gain) >= PinchPreviewDelta)))
+            {
+                _holdEligible = false;
+                double gapX = GapX(frame), gapY = GapY(frame);
+                if (!_axisResizeActive)
+                {
+                    // Lock the dominant enabled axis (by how much its gap has changed from start).
+                    double dX = Math.Abs(gapX - _startGapX), dY = Math.Abs(gapY - _startGapY);
+                    _axisHorizontal = (AxisResizeH && AxisResizeV) ? dX >= dY : AxisResizeH;
+                    _axisLastGap = Math.Max(1e-4, _axisHorizontal ? gapX : gapY);
+                    _axisResizeActive = true;
+                    AxisResizeBegan?.Invoke(_axisHorizontal);
+                }
+                else
+                {
+                    double cur = _axisHorizontal ? gapX : gapY;
+                    double factor = (cur < 1e-4 || _axisLastGap < 1e-4) ? 1.0 : cur / _axisLastGap;
+                    AxisResizeDelta?.Invoke(factor, _axisHorizontal);
+                    _axisLastGap = cur;
+                }
+                return;
+            }
 
             if (!_hold && centroidFixed && Math.Abs(gain) >= PinchPreviewDelta)
             {
@@ -499,6 +550,14 @@ public sealed class GestureEngine
         _tracking = false;
         long dur = endTime - _startTime;
 
+        // An axis-constrained resize already applied live; release just tears it down.
+        if (_axisResizeActive)
+        {
+            _axisResizeActive = false;
+            AxisResizeEnded?.Invoke();
+            return;
+        }
+
         // A pinch-out already fired its action live; release just tears down.
         if (_pinchFired)
         {
@@ -547,6 +606,7 @@ public sealed class GestureEngine
         if (!_tracking) return;
         _cancelled = true;
         _tracking = false;
+        if (_axisResizeActive) { _axisResizeActive = false; AxisResizeEnded?.Invoke(); return; }
         GestureCancelled?.Invoke();
     }
 
@@ -612,7 +672,8 @@ public sealed class GestureEngine
         {
             _cancelled = true;
             _tracking = false;
-            GestureCancelled?.Invoke();
+            if (_axisResizeActive) { _axisResizeActive = false; AxisResizeEnded?.Invoke(); }
+            else GestureCancelled?.Invoke();
         }
         if (_free)
         {
@@ -646,6 +707,32 @@ public sealed class GestureEngine
         if (n < 2) return 0;
         double dx = bx - ax, dy = by - ay;
         return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    /// <summary>Absolute horizontal gap between the first two tip-down contacts (0 if fewer).</summary>
+    private static double GapX(TouchFrame f)
+    {
+        double ax = 0, bx = 0; int n = 0;
+        foreach (var c in f.Contacts)
+        {
+            if (!c.TipDown) continue;
+            if (n == 0) ax = c.X; else if (n == 1) bx = c.X;
+            if (++n == 2) break;
+        }
+        return n < 2 ? 0 : Math.Abs(bx - ax);
+    }
+
+    /// <summary>Absolute vertical gap between the first two tip-down contacts (0 if fewer).</summary>
+    private static double GapY(TouchFrame f)
+    {
+        double ay = 0, by = 0; int n = 0;
+        foreach (var c in f.Contacts)
+        {
+            if (!c.TipDown) continue;
+            if (n == 0) ay = c.Y; else if (n == 1) by = c.Y;
+            if (++n == 2) break;
+        }
+        return n < 2 ? 0 : Math.Abs(by - ay);
     }
 
     /// <summary>Mean distance of the tip-down contacts from their centroid - a finger-spread

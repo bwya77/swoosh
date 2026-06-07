@@ -65,6 +65,16 @@ public sealed class AppSettings
     /// <summary>Five-finger tap to center the window without resizing it.</summary>
     public bool CenterEnabled { get; set; } = true;
 
+    /// <summary>When enabled, spreading two fingers apart horizontally resizes the window's width
+    /// only (move together to shrink). Replaces the two-finger pinch-to-maximize while either this
+    /// or <see cref="ResizeVerticalEnabled"/> is on; maximize stays available via swipe-up.</summary>
+    public bool ResizeHorizontalEnabled { get; set; } = false;
+
+    /// <summary>When enabled, spreading two fingers apart vertically resizes the window's height
+    /// only (move together to shrink). Replaces the two-finger pinch-to-maximize while either this
+    /// or <see cref="ResizeHorizontalEnabled"/> is on; maximize stays available via swipe-up.</summary>
+    public bool ResizeVerticalEnabled { get; set; } = false;
+
     /// <summary>Show the polished touchpad demo overlay (presentation mode for recordings).</summary>
     public bool DemoOverlay { get; set; } = false;
 

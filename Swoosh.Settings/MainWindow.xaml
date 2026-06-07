@@ -668,6 +668,56 @@
                         </Border>
 
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,8,0,0">
+                            <FontIcon Glyph="&#xE740;" FontSize="16" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                            <TextBlock Text="Two-finger resize"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                        </StackPanel>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE89F;" FontSize="18" Margin="0,0,16,0"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Resize width with two fingers" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Spread two fingers apart horizontally over a titlebar to grow the window's width, or together to shrink it. While either two-finger resize is on, the two-finger pinch no longer maximizes (swipe up still does)."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="ResizeHorizontalToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE8A0;" FontSize="18" Margin="0,0,16,0"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Resize height with two fingers" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Spread two fingers apart vertically over a titlebar to grow the window's height, or together to shrink it. While either two-finger resize is on, the two-finger pinch no longer maximizes (swipe up still does)."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="ResizeVerticalToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,8,0,0">
                             <FontIcon Glyph="&#xE7F8;" FontSize="16" VerticalAlignment="Center"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                             <TextBlock Text="Virtual desktops and displays"

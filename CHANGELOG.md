@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- New optional two-finger resize, off by default. In Settings under Snapping (Two-finger resize), you can turn on "Resize width with two fingers" and/or "Resize height with two fingers". When on, spreading two fingers apart over a titlebar grows the window along that axis only (horizontal for width, vertical for height) and pinching together shrinks it, live and clamped to the visible monitor. While either is enabled the two-finger pinch no longer maximizes; swipe up still does. Both stay off unless you enable them, so the default pinch-to-maximize is unchanged.
 - The five-finger resize no longer grows a window past the edges of the visible monitor; it now stays within the work area as it expands.
 - Fixed the snap HUD briefly flashing when you start a five-finger resize. Placing five fingers (which begins as two) no longer flashes the two-finger HUD before the resize takes over.
 - Swiping up on a window that is already maximized now restores it to its previous size and location, the same as double-clicking its title bar, instead of doing nothing. The live preview, the on-screen HUD, and the snap overlay all show the restored size and location while you swipe.

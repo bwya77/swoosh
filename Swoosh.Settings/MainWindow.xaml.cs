@@ -368,6 +368,8 @@ public sealed partial class MainWindow : Window
         UpdateCancelTimeoutLabel(CancelTimeoutSlider.Value);
         LivePreviewToggle.IsOn = s.LivePreview;
         MoveCursorToggle.IsOn = s.MoveCursor;
+        ResizeHorizontalToggle.IsOn = s.ResizeHorizontalEnabled;
+        ResizeVerticalToggle.IsOn = s.ResizeVerticalEnabled;
         PreviewDesktopDestinationToggle.IsOn = s.PreviewDesktopDestination;
         // The slider's Minimum is 0 (so its default value needs no coercion, which crashes
         // WinUI when a ValueChanged handler is attached); the delay is the slider value plus
@@ -426,6 +428,8 @@ public sealed partial class MainWindow : Window
         CancelTimeoutSeconds = CancelTimeoutSlider.Value,
         LivePreview = LivePreviewToggle.IsOn,
         MoveCursor = MoveCursorToggle.IsOn,
+        ResizeHorizontalEnabled = ResizeHorizontalToggle.IsOn,
+        ResizeVerticalEnabled = ResizeVerticalToggle.IsOn,
         PreviewDesktopDestination = PreviewDesktopDestinationToggle.IsOn,
         DesktopHoldDelaySeconds = HoldDelaySlider.Value + 0.1,
     };

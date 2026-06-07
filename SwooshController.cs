@@ -50,6 +50,14 @@ public sealed class SwooshController : IDisposable
     /// <summary>Smallest window the five-finger resize will shrink to (physical pixels).</summary>
     private const int MinFreeW = 260, MinFreeH = 180;
 
+    // Two-finger axis-constrained resize state (horizontal width-only or vertical height-only).
+    private bool _axisResize;
+    private bool _axisHorizontal;
+    private double _arWinX, _arWinY, _arWinW, _arWinH;
+    private int _arWorkX, _arWorkY, _arWorkW = 1, _arWorkH = 1;
+    /// <summary>Amplifies the raw two-finger gap ratio so a modest spread makes a clear size change.</summary>
+    private const double AxisResizeGain = 1.5;
+
     public bool GesturesEnabled { get; set; } = true;
 
     // Live preview: when on, the real window moves to the target zone as you swipe
@@ -142,6 +150,8 @@ public sealed class SwooshController : IDisposable
         _quartersEnabled = s.QuartersEnabled;
         _minimizeEnabled = s.MinimizeEnabled;
         _centerEnabled = s.CenterEnabled;
+        _gestures.AxisResizeH = s.ResizeHorizontalEnabled;
+        _gestures.AxisResizeV = s.ResizeVerticalEnabled;
         _swipeDownMode = s.SwipeDownAction;
         _downThreshold = Math.Clamp(s.SwipeDownThreshold, 0.02, 0.30);
         _snapper.AnimateSnaps = s.AnimateSnaps;
@@ -271,6 +281,9 @@ public sealed class SwooshController : IDisposable
         _gestures.PinchOut += OnPinchOut;
         _gestures.PinchIn += OnPinchIn;
         _gestures.PinchUpdated += OnPinchUpdated;
+        _gestures.AxisResizeBegan += OnAxisResizeBegan;
+        _gestures.AxisResizeDelta += OnAxisResizeDelta;
+        _gestures.AxisResizeEnded += OnAxisResizeEnded;
         _hotkeys.Triggered += OnHotkey;
     }
 
@@ -1084,6 +1097,72 @@ public sealed class SwooshController : IDisposable
         _stats.Add();
         Log.Write("PinchIn -> Restore");
         _armed = false;
+    }
+
+    /// <summary>Begin a two-finger axis-constrained resize: arm the target (already armed by the
+    /// gesture begin), restore it if maximized, capture its rect and the monitor work area, and
+    /// hide the snap HUD. The window itself is the live feedback.</summary>
+    private void OnAxisResizeBegan(bool horizontal)
+    {
+        if (!_armed || _target == IntPtr.Zero) { _axisResize = false; return; }
+
+        long style = Win32.GetWindowLong(_target, Win32.GWL_STYLE);
+        if ((style & (Win32.WS_MAXIMIZE | Win32.WS_MINIMIZE)) != 0)
+            Win32.ShowWindow(_target, Win32.SW_RESTORE);
+
+        _axisResize = true;
+        _axisHorizontal = horizontal;
+        if (Win32.GetWindowRect(_target, out var wr))
+        {
+            _arWinX = wr.Left; _arWinY = wr.Top;
+            _arWinW = Math.Max(MinFreeW, wr.Right - wr.Left);
+            _arWinH = Math.Max(MinFreeH, wr.Bottom - wr.Top);
+        }
+        var work = _snapper.WorkAreaFor(_target);
+        _arWorkX = work.Left; _arWorkY = work.Top;
+        _arWorkW = Math.Max(1, work.Width); _arWorkH = Math.Max(1, work.Height);
+
+        _preview.Hide();
+        _chip.Hide();
+    }
+
+    /// <summary>Scale only the locked axis (width or height) about the window's center by the
+    /// per-frame gap factor, clamped to the min size and the visible monitor.</summary>
+    private void OnAxisResizeDelta(double factor, bool horizontal)
+    {
+        if (!_axisResize || _target == IntPtr.Zero) return;
+        double g = Math.Pow(factor, AxisResizeGain);
+
+        if (horizontal)
+        {
+            double cx = _arWinX + _arWinW / 2.0;
+            _arWinW = Math.Clamp(_arWinW * g, MinFreeW, _arWorkW);
+            _arWinX = cx - _arWinW / 2.0;
+            _arWinX = Math.Clamp(_arWinX, _arWorkX, _arWorkX + _arWorkW - _arWinW);
+        }
+        else
+        {
+            double cy = _arWinY + _arWinH / 2.0;
+            _arWinH = Math.Clamp(_arWinH * g, MinFreeH, _arWorkH);
+            _arWinY = cy - _arWinH / 2.0;
+            _arWinY = Math.Clamp(_arWinY, _arWorkY, _arWorkY + _arWorkH - _arWinH);
+        }
+
+        // Synchronous resize with normal notifications so the app repaints the revealed area
+        // (an async grow shows black until the app catches up, as with the five-finger resize).
+        Win32.SetWindowPos(_target, IntPtr.Zero,
+            (int)Math.Round(_arWinX), (int)Math.Round(_arWinY),
+            (int)Math.Round(_arWinW), (int)Math.Round(_arWinH),
+            Win32.SWP_NOZORDER | Win32.SWP_NOOWNERZORDER | Win32.SWP_NOACTIVATE);
+    }
+
+    private void OnAxisResizeEnded()
+    {
+        if (_axisResize && _target != IntPtr.Zero) _stats.Add();
+        _axisResize = false;
+        _armed = false;
+        _preview.Hide();
+        _chip.Hide();
     }
 
     private void OnHotkey(SnapZone zone)
