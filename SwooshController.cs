@@ -38,6 +38,7 @@ public sealed class SwooshController : IDisposable
     private double _freeWinX, _freeWinY;
     private double _freeWinW, _freeWinH;
     private int _freeWorkW = 1, _freeWorkH = 1;
+    private int _freeWorkX, _freeWorkY;
 
     /// <summary>How much screen the window covers per unit of pad travel (1.0 = pad spans the monitor).</summary>
     private const double FreeMoveScale = 1.0;
@@ -59,6 +60,10 @@ public sealed class SwooshController : IDisposable
     private bool _liveWasMax;
     private bool _targetWasMax;  // the armed window was maximized at gesture start (swipe up restores it)
     private bool _maxRestored;   // we already live-restored a maximized window this gesture
+    private long _armedTick;     // when the current two-finger gesture armed (for the HUD-show guard)
+    // Briefly suppress the at-rest snap chip after a gesture arms, so placing five fingers (which
+    // lands two first, then three-to-five) doesn't flash the two-finger HUD before free-move begins.
+    private const long HudArmGuardMs = 110;
     private bool _liveMoved;
     private SnapZone _liveZone = SnapZone.None;
 
@@ -304,6 +309,7 @@ public sealed class SwooshController : IDisposable
         _monCur = null;
         _target = _snapper.ArmTarget(out string diag);
         _armed = _target != IntPtr.Zero;
+        _armedTick = Environment.TickCount64;
         _targetWasMax = _armed && WindowSnapper.IsMaximized(_target);
         _maxRestored = false;
         _liveMoved = false;
@@ -349,7 +355,8 @@ public sealed class SwooshController : IDisposable
                     _liveWasMax = WindowSnapper.IsMaximized(_target);
                     Win32.GetWindowRect(_target, out _liveOrigRect);
                 }
-                _chip.ShowSnap(SnapZone.None, 0);
+                // The at-rest chip is shown by OnGestureUpdated after the brief arm guard, so a
+                // five-finger landing (which begins as two fingers) doesn't flash it first.
             }
         }
         Log.Write($"GestureBegan fingers={fingers} armed={_armed} live={_livePreview} {diag}");
@@ -468,6 +475,14 @@ public sealed class SwooshController : IDisposable
                 _downEngaged = false;
                 _preview.Hide();
                 _chip.Hide();
+                return;
+            }
+            // Arm guard: for the first moment after a gesture begins, don't paint the at-rest chip.
+            // This lets a five-finger gesture (which lands as two fingers first) take over without
+            // flashing the two-finger HUD. A real swipe is unaffected (it has a direction/progress).
+            if (Environment.TickCount64 - _armedTick < HudArmGuardMs)
+            {
+                _preview.Hide();
                 return;
             }
             if (_livePreview)
@@ -913,6 +928,8 @@ public sealed class SwooshController : IDisposable
         var work = _snapper.WorkAreaFor(_target);
         _freeWorkW = Math.Max(1, work.Width);
         _freeWorkH = Math.Max(1, work.Height);
+        _freeWorkX = work.Left;
+        _freeWorkY = work.Top;
 
         // The window itself is the live feedback here — no snap/desktop HUD.
         _preview.Hide();
@@ -939,6 +956,11 @@ public sealed class SwooshController : IDisposable
             _freeWinH = Math.Clamp(_freeWinH * g, MinFreeH, _freeWorkH);
             _freeWinX = cx - _freeWinW / 2.0;
             _freeWinY = cy - _freeWinH / 2.0;
+
+            // Keep a growing window within the visible monitor: clamp its edges to the work area
+            // so center-scaling near a screen edge can't push the window off-screen.
+            _freeWinX = Math.Clamp(_freeWinX, _freeWorkX, _freeWorkX + _freeWorkW - _freeWinW);
+            _freeWinY = Math.Clamp(_freeWinY, _freeWorkY, _freeWorkY + _freeWorkH - _freeWinH);
         }
 
         // For a pure move, post the change asynchronously and skip the changing

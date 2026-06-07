@@ -4,6 +4,8 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- The five-finger resize no longer grows a window past the edges of the visible monitor; it now stays within the work area as it expands.
+- Fixed the snap HUD briefly flashing when you start a five-finger resize. Placing five fingers (which begins as two) no longer flashes the two-finger HUD before the resize takes over.
 - Swiping up on a window that is already maximized now restores it to its previous size and location, the same as double-clicking its title bar, instead of doing nothing. The live preview, the on-screen HUD, and the snap overlay all show the restored size and location while you swipe.
 - The Settings window now opens a bit larger by default, so more of each page is visible without resizing.
 - Swoosh now catches unexpected errors instead of disappearing silently.An unhandled error is written to a crash log next to the diagnostics report, the tray app keeps running, and you get a one-time notification pointing you at "Report a problem".
