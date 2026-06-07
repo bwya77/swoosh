@@ -607,13 +607,17 @@ public sealed class CursorChipOverlay
         long token = ++_retractToken;
 
         var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
-        var slide = new DoubleAnimation(0, -(CircleD + ChooserVGap) * 0.6, new Duration(TimeSpan.FromMilliseconds(170)))
+        var slide = new DoubleAnimation(0, -(CircleD + ChooserVGap) * 1.1, new Duration(TimeSpan.FromMilliseconds(360)))
         {
             EasingFunction = ease,
         };
         _chooserSlide.BeginAnimation(TranslateTransform.YProperty, slide);
 
-        var fade = new DoubleAnimation(1, 0, new Duration(TimeSpan.FromMilliseconds(150)));
+        // Hold opacity briefly so the upward slide is clearly visible, then fade the circles out.
+        var fade = new DoubleAnimation(1, 0, new Duration(TimeSpan.FromMilliseconds(260)))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(100),
+        };
         fade.Completed += (_, _) =>
         {
             // Only hide if this retract is still the current intent: a new chooser engage or a
