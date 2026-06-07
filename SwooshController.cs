@@ -57,6 +57,8 @@ public sealed class SwooshController : IDisposable
     private bool _livePreview;
     private Win32.RECT _liveOrigRect;
     private bool _liveWasMax;
+    private bool _targetWasMax;  // the armed window was maximized at gesture start (swipe up restores it)
+    private bool _maxRestored;   // we already live-restored a maximized window this gesture
     private bool _liveMoved;
     private SnapZone _liveZone = SnapZone.None;
 
@@ -302,6 +304,8 @@ public sealed class SwooshController : IDisposable
         _monCur = null;
         _target = _snapper.ArmTarget(out string diag);
         _armed = _target != IntPtr.Zero;
+        _targetWasMax = _armed && WindowSnapper.IsMaximized(_target);
+        _maxRestored = false;
         _liveMoved = false;
         _liveZone = SnapZone.None;
         _downLatched = false;
@@ -521,7 +525,13 @@ public sealed class SwooshController : IDisposable
             return;
         }
 
-        _demo.SetCaption(ZoneCaption(zone));
+        // Swipe up on an already-maximized window restores it (like double-clicking the title
+        // bar), rather than re-maximizing. The decision is fixed for the gesture (captured at the
+        // start), so it can be driven live without flicker.
+        bool restoreInsteadOfMax = zone == SnapZone.Maximize && _targetWasMax;
+        bool showRestore = zone == SnapZone.Maximize && (_targetWasMax || _maxRestored);
+
+        _demo.SetCaption(showRestore ? "Restore" : ZoneCaption(zone));
 
         // Track dwell on the currently-aimed non-minimize direction so cancelling the chooser later
         // can restore it (only when it was dwelled on, not merely passed through).
@@ -548,21 +558,56 @@ public sealed class SwooshController : IDisposable
                     // Bring the window forward on the first live move so the preview is
                     // actually visible (not hidden behind other windows).
                     if (!_liveMoved) Win32.ForceForeground(_target);
-                    _snapper.Apply(_target, zone);
+                    if (restoreInsteadOfMax)
+                    {
+                        _snapper.RestoreFromMaximized(_target);
+                        // The window is now a normal, restored window. Clear the maximized flags
+                        // and re-baseline to its restored rect so continued swiping snaps cleanly,
+                        // a retreat doesn't pop it back to full screen, and the commit doesn't treat
+                        // it as a maximize. (Without this the gesture flickers max<->restore.)
+                        _targetWasMax = false;
+                        _liveWasMax = false;
+                        _haveCurFrac = false;
+                        _maxRestored = true;
+                        Win32.GetWindowRect(_target, out _liveOrigRect);
+                    }
+                    else _snapper.Apply(_target, zone);
                     _liveMoved = true;
                 }
                 _liveZone = zone;
             }
-            _chip.ShowSnap(zone, progress);
+            ShowZoneOrRestoreChip(zone, progress, showRestore);
             return;
         }
 
         var work = _snapper.WorkAreaFor(_target);
-        Win32.RECT rect = zone == SnapZone.Minimize
-            ? MinimizeHint(work)
-            : WindowSnapper.ZoneRect(work, zone);
+        Win32.RECT rect;
+        if (restoreInsteadOfMax && WindowSnapper.TryGetRestoreRect(_target, out var restoreRect))
+            rect = restoreRect; // preview the pre-maximize size/location, not full screen
+        else
+            rect = zone == SnapZone.Minimize ? MinimizeHint(work) : WindowSnapper.ZoneRect(work, zone);
         _preview.ShowZone(rect, progress);
-        _chip.ShowSnap(zone, progress);
+        ShowZoneOrRestoreChip(zone, progress, showRestore);
+    }
+
+    /// <summary>Show the snap-zone chip, or — when restoring a maximized window — fill the chip to
+    /// the window's restored proportions instead of the full-screen maximize fill.</summary>
+    private void ShowZoneOrRestoreChip(SnapZone zone, double progress, bool restore)
+    {
+        if (restore && WindowSnapper.TryGetRestoreRect(_target, out var rr))
+        {
+            var work = _snapper.WorkAreaFor(_target);
+            double w = Math.Max(1, work.Width), h = Math.Max(1, work.Height);
+            double x0 = Math.Clamp((rr.Left - work.Left) / w, 0, 1);
+            double y0 = Math.Clamp((rr.Top - work.Top) / h, 0, 1);
+            double x1 = Math.Clamp((rr.Right - work.Left) / w, 0, 1);
+            double y1 = Math.Clamp((rr.Bottom - work.Top) / h, 0, 1);
+            _chip.ShowFraction(x0, y0, x1, y1, progress);
+        }
+        else
+        {
+            _chip.ShowSnap(zone, progress);
+        }
     }
 
     /// <summary>Drive the down-swipe chooser/close HUD (rendered by the snap HUD so it matches
@@ -681,6 +726,21 @@ public sealed class SwooshController : IDisposable
             _liveMoved = false;
             return;
         }
+        // Swipe up on a window that was maximized at gesture start restores it to its previous
+        // size and location (like double-clicking the title bar) instead of re-maximizing.
+        if (zone == SnapZone.Maximize && _targetWasMax)
+        {
+            if (!(_livePreview && _liveMoved && _liveZone == zone))
+                _snapper.RestoreFromMaximized(_target);
+            _stats.Add();
+            _demo.SetCaption("Restore");
+            Win32.ForceForeground(_target);
+            _armed = false;
+            _liveMoved = false;
+            _haveCurFrac = false;
+            return;
+        }
+
         // Live preview already glided the window to this zone during the swipe.
         // Re-applying here restarts the glide (or fires a redundant SetWindowPos to
         // the same spot), which makes the target app repaint at the moment of

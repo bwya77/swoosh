@@ -367,6 +367,37 @@ public sealed class WindowSnapper
         hwnd != IntPtr.Zero &&
         (Win32.GetWindowLong(hwnd, Win32.GWL_STYLE) & Win32.WS_MAXIMIZE) != 0;
 
+    /// <summary>Restore a maximized window to its previous (pre-maximize) size and location, the
+    /// same as double-clicking its title bar. No-op if the window is not maximized.</summary>
+    public void RestoreFromMaximized(IntPtr hwnd)
+    {
+        if (!IsManageable(hwnd) || !IsMaximized(hwnd)) return;
+        CancelAnimation();
+        Win32.ShowWindow(hwnd, Win32.SW_RESTORE);
+    }
+
+    /// <summary>The outer screen rect a maximized window would return to when restored (its
+    /// pre-maximize position). Returns false if it can't be determined. rcNormalPosition is in
+    /// work-area coordinates, so it is offset by the window monitor's taskbar inset.</summary>
+    public static bool TryGetRestoreRect(IntPtr hwnd, out Win32.RECT rect)
+    {
+        rect = default;
+        var wp = new Win32.WINDOWPLACEMENT { length = System.Runtime.InteropServices.Marshal.SizeOf<Win32.WINDOWPLACEMENT>() };
+        if (!Win32.GetWindowPlacement(hwnd, ref wp)) return false;
+
+        var r = wp.rcNormalPosition;
+        IntPtr mon = Win32.MonitorFromWindow(hwnd, Win32.MONITOR_DEFAULTTONEAREST);
+        var mi = new Win32.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<Win32.MONITORINFO>() };
+        if (mon != IntPtr.Zero && Win32.GetMonitorInfo(mon, ref mi))
+        {
+            int dx = mi.rcWork.Left - mi.rcMonitor.Left;
+            int dy = mi.rcWork.Top - mi.rcMonitor.Top;
+            r = new Win32.RECT { Left = r.Left + dx, Top = r.Top + dy, Right = r.Right + dx, Bottom = r.Bottom + dy };
+        }
+        rect = r;
+        return true;
+    }
+
     /// <summary>When true, window snaps glide to the target instead of jumping.</summary>
     public bool AnimateSnaps { get; set; } = true;
 

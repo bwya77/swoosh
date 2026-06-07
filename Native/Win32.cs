@@ -129,6 +129,20 @@ public static class Win32
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPLACEMENT
+    {
+        public int length;
+        public uint flags;
+        public uint showCmd;
+        public POINT ptMinPosition;
+        public POINT ptMaxPosition;
+        public RECT rcNormalPosition;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct RAWINPUTHEADER
     {
         public uint dwType;
