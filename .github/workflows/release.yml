@@ -43,6 +43,12 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # Gate the release on the unit tests: if they fail, the job fails here and
+      # nothing is published or signed.
+      - name: Run tests
+        shell: pwsh
+        run: dotnet test Swoosh.Tests/Swoosh.Tests.csproj -c Release --nologo
+
       - name: Compute version
         id: ver
         shell: pwsh
