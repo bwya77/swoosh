@@ -4,7 +4,8 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
-- Swoosh now catches unexpected errors instead of disappearing silently. An unhandled error is written to a crash log next to the diagnostics report, the tray app keeps running, and you get a one-time notification pointing you at "Report a problem".
+- The Settings window now opens a bit larger by default, so more of each page is visible without resizing.
+- Swoosh now catches unexpected errors instead of disappearing silently.An unhandled error is written to a crash log next to the diagnostics report, the tray app keeps running, and you get a one-time notification pointing you at "Report a problem".
 - New "Report a problem" item in the tray menu and in Settings (Home, under Startup and troubleshooting). It opens a pre-filled GitHub issue with your touchpad/system diagnostics attached, so beta problems can be looked into with one click.
 - New "Restore defaults" button in Settings (Home, under Startup and troubleshooting) resets every setting to its original value after a confirmation. The small per-setting reset icons next to each slider have been removed in favor of this single app-wide reset.
 - New "Snap speed" slider in Settings under Snapping (below Animate window snaps). It controls how fast windows glide into place, from fast to smooth, and the on-screen HUD fill and preview ghost glide at the same speed so everything stays in sync.

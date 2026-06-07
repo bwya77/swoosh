@@ -78,7 +78,7 @@ public sealed partial class MainWindow : Window
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
-        ResizeForDpi(860, 680);
+        ResizeForDpi(1060, 840);
         EnforceMinimumSize(600, 480);
         TrySetWindowIcon();
 
