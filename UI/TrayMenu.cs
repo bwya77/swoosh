@@ -65,6 +65,7 @@ internal static class TrayMenu
         Action onSettings,
         Action onToggleGestures,
         Action onTutorial,
+        Action onReport,
         Action onQuit)
     {
         // Match the OS light/dark setting from the start so the first open is themed.
@@ -97,6 +98,8 @@ internal static class TrayMenu
 
         var tutorial = NewItem("Show tutorial", onTutorial);
 
+        var report = NewItem("Report a problem", onReport);
+
         var quit = NewItem("Quit Swoosh", onQuit);
 
         menu.Items.Add(update);
@@ -106,6 +109,7 @@ internal static class TrayMenu
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(tutorial);
         menu.Items.Add(check);
+        menu.Items.Add(report);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(quit);
 

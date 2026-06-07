@@ -496,24 +496,43 @@ public sealed partial class MainWindow : Window
         SaveIfReady();
     }
 
-    // Reset-to-default handlers. Setting the slider's Value fires its ValueChanged handler,
-    // which updates the label and saves. Defaults come from a fresh AppSettings so they stay
-    // in sync with the model. Sliders that use the Minimum-0 offset subtract the 0.1 floor.
+    // A fresh AppSettings supplies the default values used by "Restore defaults".
     private static readonly AppSettings Defaults = new();
 
-    private void OnResetSensitivity(object sender, RoutedEventArgs e) => SensitivitySlider.Value = Defaults.Sensitivity;
+    /// <summary>Reset every setting to its default and persist it, after a confirmation prompt.</summary>
+    private async void OnRestoreDefaults(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Restore defaults?",
+            Content = "This resets all Swoosh settings to their original values. Your gestures keep working; only your customizations are cleared.",
+            PrimaryButtonText = "Restore",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Content.XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
 
-    private void OnResetSwipeDownThreshold(object sender, RoutedEventArgs e) => SwipeDownThresholdSlider.Value = Defaults.SwipeDownThreshold * 100.0 - 2;
+        _store.Save(Defaults);
+        LoadFrom(Defaults);
+    }
 
-    private void OnResetGridSpacing(object sender, RoutedEventArgs e) => GridSpacingSlider.Value = Defaults.GridSpacing;
+    /// <summary>Open a pre-filled GitHub issue with the diagnostics report attached, so beta users
+    /// can report a problem in one click.</summary>
+    private void OnReportProblem(object sender, RoutedEventArgs e)
+    {
+        string diag;
+        try { diag = System.IO.File.ReadAllText(DiagnosticsPath); }
+        catch { diag = "(diagnostics unavailable - make sure Swoosh is running)"; }
 
-    private void OnResetSnapSpeed(object sender, RoutedEventArgs e) => SnapSpeedSlider.Value = Math.Clamp((Defaults.SnapAnimationSeconds * 1000.0 - 50) / 10.0, 0, 35);
-
-    private void OnResetCancelTimeout(object sender, RoutedEventArgs e) => CancelTimeoutSlider.Value = Defaults.CancelTimeoutSeconds;
-
-    private void OnResetHoldDelay(object sender, RoutedEventArgs e) => HoldDelaySlider.Value = Defaults.DesktopHoldDelaySeconds - 0.1;
-
-    private void OnResetHudFade(object sender, RoutedEventArgs e) => HudFadeSlider.Value = Defaults.HudFadeOutSeconds - 0.1;
+        string body =
+            "## What happened?\n\n_Describe the problem and the steps to reproduce it._\n\n" +
+            "## Diagnostics\n```\n" + diag + "\n```\n";
+        string url = "https://github.com/bwya77/swoosh/issues/new?labels=beta" +
+                     "&title=" + Uri.EscapeDataString("[Beta] ") +
+                     "&body=" + Uri.EscapeDataString(body);
+        OpenUrl(url);
+    }
 
     private void UpdateGridSpacingLabel(double v)
     {

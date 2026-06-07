@@ -46,6 +46,8 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
+        RegisterGlobalExceptionHandlers();
+
         // Hidden developer path: render the tutorial demo animations to PNG frame sequences for
         // building the README GIFs, then exit. Does not start the tray.
         int exportIdx = Array.FindIndex(e.Args, a => string.Equals(a, "--export-tutorial", StringComparison.OrdinalIgnoreCase));
@@ -159,6 +161,7 @@ public partial class App : System.Windows.Application
                 _settings.Save(s);
             },
             onTutorial: ShowOnboarding,
+            onReport: ReportProblem,
             onQuit: () => Shutdown());
         _tray.DoubleClick += (_, _) => OpenSettings();
         _tray.BalloonTipClicked += (_, _) => OnUpdateClicked();
@@ -505,6 +508,75 @@ public partial class App : System.Windows.Application
             Process.Start(new ProcessStartInfo(_updateUrl) { UseShellExecute = true });
         }
         catch { /* nothing actionable if the shell can't open a browser */ }
+    }
+
+    private const string RepoUrl = "https://github.com/bwya77/swoosh";
+
+    /// <summary>Open a prefilled GitHub issue (with a diagnostics block) so beta users can report
+    /// problems in one click. The body has a placeholder for the description plus the current
+    /// touchpad/system diagnostics.</summary>
+    private void ReportProblem()
+    {
+        try
+        {
+            string diag;
+            try { diag = Diagnostics.Build(); }
+            catch { diag = "(diagnostics unavailable)"; }
+
+            string body =
+                "## What happened?\n\n_Describe the problem and the steps to reproduce it._\n\n" +
+                "## Diagnostics\n```\n" + diag + "\n```\n";
+            string url = $"{RepoUrl}/issues/new?labels=beta&title={Uri.EscapeDataString("[Beta] ")}" +
+                         $"&body={Uri.EscapeDataString(body)}";
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex) { Log.Write($"ReportProblem failed: {ex.Message}"); }
+    }
+
+    private bool _crashNotified;
+
+    /// <summary>Register process-wide handlers so an unhandled exception is logged (with a crash
+    /// report) and surfaced to the user, instead of the tray app vanishing silently. UI-thread
+    /// exceptions are marked handled so a transient hiccup doesn't kill the long-running tray app.</summary>
+    private void RegisterGlobalExceptionHandlers()
+    {
+        DispatcherUnhandledException += (_, args) =>
+        {
+            WriteCrashReport(args.Exception, "Dispatcher");
+            args.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            WriteCrashReport(args.ExceptionObject as Exception, "AppDomain");
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            WriteCrashReport(args.Exception, "Task");
+            args.SetObserved();
+        };
+    }
+
+    /// <summary>Append an unhandled exception to crash.log next to the diagnostics report and show
+    /// a one-time balloon pointing the user at "Report a problem". Never throws.</summary>
+    private void WriteCrashReport(Exception? ex, string source)
+    {
+        try
+        {
+            Log.Write($"UNHANDLED [{source}]: {ex}");
+            string dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Swoosh");
+            Directory.CreateDirectory(dir);
+            string entry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [{source}]{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}";
+            File.AppendAllText(Path.Combine(dir, "crash.log"), entry);
+
+            if (!_crashNotified)
+            {
+                _crashNotified = true;
+                Dispatcher.BeginInvoke(() => _tray?.ShowBalloonTip(
+                    8000, "Swoosh hit an error",
+                    "Something went wrong, but Swoosh is still running. Use the tray menu's \"Report a problem\" to send the details.",
+                    Forms.ToolTipIcon.Error));
+            }
+        }
+        catch { /* last-ditch: a crash handler must never throw */ }
     }
 
     /// <summary>

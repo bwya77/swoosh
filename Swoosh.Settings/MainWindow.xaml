@@ -190,11 +190,6 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="Snap speed" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                        <HyperlinkButton Grid.Column="1" Padding="4,0"
-                                                         VerticalAlignment="Center" Click="OnResetSnapSpeed"
-                                                         ToolTipService.ToolTip="Reset to default">
-                                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                                        </HyperlinkButton>
                                     </Grid>
                                     <TextBlock Text="How fast windows glide into place. The HUD matches this speed."
                                                TextWrapping="Wrap"
@@ -349,6 +344,62 @@
                                         </StackPanel>
                                     </Button>
                                 </Grid>
+
+                                <Border Height="1" Margin="34,0,0,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                                <Grid Padding="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xE939;" FontSize="18" Margin="0,0,16,0"
+                                              VerticalAlignment="Top"
+                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Report a problem" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Text="Open a pre-filled GitHub issue with your diagnostics attached, so the problem can be looked into."
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <Button x:Name="ReportBtn" Grid.Column="2" Margin="12,0,0,0"
+                                            VerticalAlignment="Top" Click="OnReportProblem">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE939;" FontSize="14" />
+                                            <TextBlock Text="Report" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <Border Height="1" Margin="34,0,0,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                                <Grid Padding="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xE72C;" FontSize="18" Margin="0,0,16,0"
+                                              VerticalAlignment="Top"
+                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Restore defaults" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Text="Reset all Swoosh settings to their original values."
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <Button x:Name="RestoreDefaultsBtn" Grid.Column="2" Margin="12,0,0,0"
+                                            VerticalAlignment="Top" Click="OnRestoreDefaults">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                            <TextBlock Text="Restore" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -447,11 +498,6 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Swipe-down deliberateness" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <HyperlinkButton Grid.Column="1" Padding="4,0"
-                                                     VerticalAlignment="Center" Click="OnResetSwipeDownThreshold"
-                                                     ToolTipService.ToolTip="Reset to default">
-                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                                    </HyperlinkButton>
                                 </Grid>
                                 <TextBlock Text="How far down you must pull before close/minimize engages. Higher means only a long, deliberate swipe triggers it, so other gestures won't."
                                            TextWrapping="Wrap"
@@ -484,11 +530,6 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="Touch sensitivity" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <HyperlinkButton Grid.Column="1" Padding="4,0"
-                                                     VerticalAlignment="Center" Click="OnResetSensitivity"
-                                                     ToolTipService.ToolTip="Reset to default">
-                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                                    </HyperlinkButton>
                                 </Grid>
                                 <TextBlock Text="Lower values ignore vertical drift during a sideways swipe."
                                            Style="{StaticResource CaptionTextBlockStyle}"
@@ -525,11 +566,6 @@
                                                VerticalAlignment="Center" Margin="0,0,8,0"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <HyperlinkButton Grid.Column="2" Padding="4,0"
-                                                     VerticalAlignment="Center" Click="OnResetGridSpacing"
-                                                     ToolTipService.ToolTip="Reset to default">
-                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                                    </HyperlinkButton>
                                 </Grid>
                                 <TextBlock Text="Gap left around snapped windows, in pixels."
                                            Style="{StaticResource CaptionTextBlockStyle}"
@@ -566,11 +602,6 @@
                                                VerticalAlignment="Center" Margin="0,0,8,0"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <HyperlinkButton Grid.Column="2" Padding="4,0"
-                                                     VerticalAlignment="Center" Click="OnResetCancelTimeout"
-                                                     ToolTipService.ToolTip="Reset to default">
-                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                                    </HyperlinkButton>
                                 </Grid>
                                 <TextBlock Text="Cancel a gesture by pressing Esc, or by resting your fingers still for this long (0 = never)."
                                            Style="{StaticResource CaptionTextBlockStyle}"
@@ -706,11 +737,6 @@
                                                VerticalAlignment="Center" Margin="0,0,8,0"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <HyperlinkButton Grid.Column="2" Padding="4,0"
-                                                     VerticalAlignment="Center" Click="OnResetHoldDelay"
-                                                     ToolTipService.ToolTip="Reset to default">
-                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                                    </HyperlinkButton>
                                 </Grid>
                                 <TextBlock Text="How long you must hold two fingers still before the virtual-desktop switcher engages and its HUD appears."
                                            TextWrapping="Wrap"
@@ -854,11 +880,6 @@
                                                VerticalAlignment="Center" Margin="0,0,8,0"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <HyperlinkButton Grid.Column="2" Padding="4,0"
-                                                     VerticalAlignment="Center" Click="OnResetHudFade"
-                                                     ToolTipService.ToolTip="Reset to default">
-                                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                                    </HyperlinkButton>
                                 </Grid>
                                 <TextBlock Text="How long the gesture HUD takes to fade away when a gesture ends. Higher values make it linger and fade more slowly."
                                            TextWrapping="Wrap"
