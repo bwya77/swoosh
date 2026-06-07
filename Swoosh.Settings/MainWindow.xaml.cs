@@ -336,7 +336,6 @@ public sealed partial class MainWindow : Window
         // Slider runs 0..28 (Minimum must be 0 or WinUI throws at parse time); the real percent is
         // value + 2, i.e. a 2%..30% pull. Threshold is stored as a 0..1 fraction.
         SwipeDownThresholdSlider.Value = Math.Clamp(s.SwipeDownThreshold * 100.0 - 2, 0, 28);
-        UpdateSwipeDownThresholdEnabled();
         UpdateMinimizeCardTitle();
         SensitivitySlider.Value = s.Sensitivity;
         // Move to display is one control: Off, or the modifier key that engages it.
@@ -442,18 +441,8 @@ public sealed partial class MainWindow : Window
     private void OnModifierChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
     private void OnSwipeDownChanged(object sender, SelectionChangedEventArgs e)
     {
-        UpdateSwipeDownThresholdEnabled();
         UpdateMinimizeCardTitle();
         SaveIfReady();
-    }
-
-    // The deliberateness slider only matters when the down-action is Close or Choose; grey it out
-    // for the default Minimize mode (where every down swipe simply minimizes).
-    private void UpdateSwipeDownThresholdEnabled()
-    {
-        bool on = SwipeDownCombo.SelectedIndex > 0;
-        if (SwipeDownThresholdSlider != null) SwipeDownThresholdSlider.IsEnabled = on;
-        if (SwipeDownThresholdCard != null) SwipeDownThresholdCard.Opacity = on ? 1.0 : 0.5;
     }
 
     // Retitle the swipe-down gesture tile to match the configured action so the card doesn't

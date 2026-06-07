@@ -88,6 +88,7 @@ public sealed class SwooshController : IDisposable
     private bool _downEngaged;   // the chooser/close HUD is currently shown (swipe past dead-zone)
     private bool _downPickClose; // current pick in the chooser: true = close, false = minimize
     private double _downPeakY;   // deepest (most positive) downward vector reached while latched
+    private double _downMaxY;    // deepest downward vector reached this gesture (all modes; gates the commit)
     private SwipeDirection _lastPreviewDir = SwipeDirection.None; // last real direction aimed before a down dip
     private SwipeDirection _downRestoreDir = SwipeDirection.None; // direction to restore when the chooser is cancelled
     private const double ChooseBand = 0.045; // horizontal lean needed to pick Close
@@ -297,6 +298,7 @@ public sealed class SwooshController : IDisposable
         _downEngaged = false;
         _downPickClose = false;
         _downPeakY = 0;
+        _downMaxY = 0;
         _lastPreviewDir = SwipeDirection.None;
         _downRestoreDir = SwipeDirection.None;
 
@@ -386,6 +388,10 @@ public sealed class SwooshController : IDisposable
     {
         if (!_armed) { _preview.Hide(); _chip.Hide(); return; }
 
+        // Track the deepest downward travel this gesture; it gates both the live preview and the
+        // commit-on-release for a down swipe, so the deliberateness threshold is meaningful.
+        _downMaxY = Math.Max(_downMaxY, _lastVecY);
+
         // Escape the down-action by reversing upward. We detect a reversal from the deepest point
         // reached (not an absolute position relative to the gesture start): after a deep down-pull
         // the finger sits near the bottom of the pad, so requiring it to travel back above the
@@ -441,11 +447,13 @@ public sealed class SwooshController : IDisposable
         }
         var zone = MapZone(dir);
 
-        // Deliberateness gate: under Close/Choose mode, require a real downward pull before the
-        // down-action engages, so a shallow or incidental down motion does nothing at all (no
-        // minimize preview, no commit). The threshold is user-tunable; an already-latched gesture
-        // bypasses it since it has committed to the chooser. (Down is positive; up is negative.)
-        if (downMode && !_downLatched && zone == SnapZone.Minimize && _lastVecY < _downThreshold)
+        // Deliberateness gate: require a real downward pull before a down swipe does anything,
+        // whatever the swipe-down action is (minimize, close, or the chooser). Sticky on the deepest
+        // travel so far, so once you have pulled past the threshold it stays engaged. A shallow or
+        // incidental down motion is ignored entirely (no preview, no commit), and the commit-on-
+        // release is gated the same way below. The threshold is user-tunable; an already-latched
+        // chooser gesture bypasses it. (Down is positive; up is negative.)
+        if (_minimizeEnabled && !_downLatched && zone == SnapZone.Minimize && _downMaxY < _downThreshold)
         {
             _preview.Hide();
             _chip.ShowSnap(SnapZone.None, 0);
@@ -589,6 +597,17 @@ public sealed class SwooshController : IDisposable
         if (zone == SnapZone.None)
         {
             // Nothing aimed: in live preview, put the window back where it started.
+            if (_livePreview) RestoreLiveOriginal();
+            _armed = false;
+            _liveMoved = false;
+            return;
+        }
+
+        // A down swipe that never reached the deliberateness threshold must not commit a minimize,
+        // even though it classified as the Minimize zone. Without this the slider would have no
+        // effect in Minimize mode (the live gate only suppresses the preview, not the commit).
+        if (zone == SnapZone.Minimize && _minimizeEnabled && _downMaxY < _downThreshold)
+        {
             if (_livePreview) RestoreLiveOriginal();
             _armed = false;
             _liveMoved = false;
