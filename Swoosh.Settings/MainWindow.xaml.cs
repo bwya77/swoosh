@@ -371,6 +371,7 @@ public sealed partial class MainWindow : Window
         ResizeHorizontalToggle.IsOn = s.ResizeHorizontalEnabled;
         ResizeVerticalToggle.IsOn = s.ResizeVerticalEnabled;
         PreviewDesktopDestinationToggle.IsOn = s.PreviewDesktopDestination;
+        CreateDesktopOverflowToggle.IsOn = s.CreateDesktopOnOverflow;
         // The slider's Minimum is 0 (so its default value needs no coercion, which crashes
         // WinUI when a ValueChanged handler is attached); the delay is the slider value plus
         // a 0.1s floor, so the usable range is 0.1 to 1.0s.
@@ -431,6 +432,7 @@ public sealed partial class MainWindow : Window
         ResizeHorizontalEnabled = ResizeHorizontalToggle.IsOn,
         ResizeVerticalEnabled = ResizeVerticalToggle.IsOn,
         PreviewDesktopDestination = PreviewDesktopDestinationToggle.IsOn,
+        CreateDesktopOnOverflow = CreateDesktopOverflowToggle.IsOn,
         DesktopHoldDelaySeconds = HoldDelaySlider.Value + 0.1,
     };
 

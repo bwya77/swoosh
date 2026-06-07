@@ -304,6 +304,67 @@ public static class VirtualDesktop
     }
 
     /// <summary>
+    /// Creates a new virtual desktop (appended to the right), moves <paramref name="hwnd"/> to it,
+    /// follows it there with <paramref name="followHwnd"/> (e.g. the HUD overlay), and switches with
+    /// the native slide. Returns false (with a reason in <paramref name="diag"/>) on COM failure.
+    /// </summary>
+    public static bool MoveToNewDesktop(IntPtr hwnd, IntPtr followHwnd, out string diag)
+    {
+        diag = "";
+        if (hwnd == IntPtr.Zero) { diag = "no-window"; return false; }
+
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                EnsureCom();
+
+                int rc = _avc!.GetViewForHwnd(hwnd, out var view);
+                if (rc != 0 || view == null) { diag = $"no-view hr=0x{rc:X8}"; return false; }
+
+                var target = _vdmInternal!.CreateDesktop();
+                if (target == null) { diag = "create-failed"; SafeRelease(view); return false; }
+
+                _vdmInternal.MoveViewToDesktop(view, target);
+
+                string followDiag = "";
+                if (followHwnd != IntPtr.Zero)
+                {
+                    try
+                    {
+                        int frc = _avc.GetViewForHwnd(followHwnd, out var fview);
+                        if (frc == 0 && fview != null)
+                        {
+                            _vdmInternal.MoveViewToDesktop(fview, target);
+                            SafeRelease(fview);
+                            followDiag = " follow=ok";
+                        }
+                        else followDiag = $" follow=no-view(0x{frc:X8})";
+                    }
+                    catch (Exception fex) { followDiag = $" follow=err(0x{fex.HResult:X8})"; }
+                }
+
+                _vdmInternal.SwitchDesktopWithAnimation(target);
+                diag = $"moved-to-new{followDiag}";
+                SafeRelease(view);
+                SafeRelease(target);
+                return true;
+            }
+            catch (COMException ex) when (attempt == 0)
+            {
+                diag = $"com-retry 0x{ex.HResult:X8}";
+                ResetCom();
+            }
+            catch (Exception ex)
+            {
+                diag = $"new-desktop-failed {ex.GetType().Name} 0x{ex.HResult:X8} {ex.Message}";
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Reports the current virtual-desktop topology: the total number of desktops
     /// and the zero-based index (from the leftmost) of the one currently shown.
     /// Used to render the HUD mini-map. Returns false on COM failure.

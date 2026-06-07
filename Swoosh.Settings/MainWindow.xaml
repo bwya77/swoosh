@@ -775,6 +775,27 @@
                         </Border>
 
                         <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE710;" FontSize="18" Margin="0,0,16,0"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Create a new desktop on overflow" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="When you hold then swipe past the last virtual desktop, create a new one and move the window there instead of stopping at the edge. Off by default."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="CreateDesktopOverflowToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>

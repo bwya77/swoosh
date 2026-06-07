@@ -51,6 +51,7 @@ public sealed class CursorChipOverlay
     private const double MapDisabledOpacity = 0.26; // a direction with no monitor reads as dimmed
 
     private static readonly Brush WhiteEdge = Freeze(new SolidColorBrush(Color.FromArgb(245, 255, 255, 255)));
+    private static readonly System.Windows.Media.FontFamily SymbolFont = new("Segoe MDL2 Assets");
     // Near-opaque dark backdrop so the (user-coloured) highlight fill always reads,
     // even with a grey accent over a light or busy wallpaper. A mostly-translucent
     // backdrop blended into bright desktops and washed the contrast out.
@@ -122,6 +123,7 @@ public sealed class CursorChipOverlay
     private Grid? _strip;
     private readonly List<Border> _stripFills = new();
     private readonly List<Border> _stripScreens = new();
+    private readonly List<TextBlock> _stripPlus = new();
     private readonly List<double> _stripLefts = new();
     private int _stripCount = -1;
     private double _stripDesignW = SingleCanvasW;
@@ -380,17 +382,39 @@ public sealed class CursorChipOverlay
 
         _stripFills.Clear();
         _stripScreens.Clear();
+        _stripPlus.Clear();
         _stripLefts.Clear();
         for (int i = 0; i < count; i++)
         {
-            var (screen, _, fill) = BuildScreen(DeskW);
+            var (screen, inner, fill) = BuildScreen(DeskW);
             double left = Margin + i * (DeskW + Gap);
             Canvas.SetLeft(screen, left);
             Canvas.SetTop(screen, Margin);
             host.Children.Add(screen);
             ResetFullFill(fill, DeskW);
+
+            // A centred "+" glyph that marks a not-yet-created "new desktop" tile (used for the
+            // overflow affordance). Sits on top of the fill, hidden until that tile is shown.
+            double innerW = DeskW - 2 * Stroke;
+            double innerH = ChipH - 2 * Stroke;
+            var plus = new TextBlock
+            {
+                Text = "\uE710",   // Add (plus) symbol
+                FontFamily = SymbolFont,
+                FontSize = 22,
+                Width = innerW,
+                TextAlignment = TextAlignment.Center,
+                Foreground = MutedIcon(),
+                Visibility = Visibility.Collapsed,
+                IsHitTestVisible = false,
+            };
+            Canvas.SetLeft(plus, 0);
+            Canvas.SetTop(plus, (innerH - 26) / 2.0);
+            inner.Children.Add(plus);
+
             _stripFills.Add(fill);
             _stripScreens.Add(screen);
+            _stripPlus.Add(plus);
             _stripLefts.Add(left);
         }
 
@@ -918,7 +942,7 @@ public sealed class CursorChipOverlay
     /// <summary>Show the desktop mini-map: <paramref name="count"/> squares with the
     /// current desktop (where the held window lives) filled solid blue, and the neighbor
     /// you are leaning toward faintly tinted. Stays up until the gesture ends.</summary>
-    public void ShowDesktopStrip(int count, int currentIndex, DesktopDirection? lean, bool animateReveal = false, bool previewDestination = false, int destIndexOverride = -1)
+    public void ShowDesktopStrip(int count, int currentIndex, DesktopDirection? lean, bool animateReveal = false, bool previewDestination = false, int destIndexOverride = -1, bool overflowNewTile = false)
     {
         if (count < 1) count = 1;
         SyncSystemTheme();
@@ -928,6 +952,10 @@ public sealed class CursorChipOverlay
         CancelHideTimer();
         EnsureStrip(count);
         SetStripMode();
+
+        // The last tile is a not-yet-created "new desktop" when overflow is enabled: it carries a
+        // "+" and reads as a ghost slot until the user aims onto it.
+        int newTileIdx = overflowNewTile ? count - 1 : -1;
 
         // The highlighted neighbour/target: an explicit index (multi-desktop preview) when
         // provided, otherwise the single leaned-toward neighbour.
@@ -946,12 +974,14 @@ public sealed class CursorChipOverlay
         // neighbour is faintly tinted. A target equal to the current desktop is not a move.
         bool emphasizeDest = previewDestination && leanIdx >= 0 && leanIdx < count && leanIdx != currentIndex;
 
-        string key = $"strip|{count}|{currentIndex}|{leanIdx}|{(emphasizeDest ? 1 : 0)}";
+        string key = $"strip|{count}|{currentIndex}|{leanIdx}|{(emphasizeDest ? 1 : 0)}|{newTileIdx}";
         if (key != _lastKey)
         {
             for (int i = 0; i < _stripFills.Count; i++)
             {
                 var fill = _stripFills[i];
+                bool isNewTile = i == newTileIdx;
+                bool aimingNewTile = isNewTile && emphasizeDest && i == leanIdx;
                 if (emphasizeDest && i == leanIdx)
                 {
                     fill.Background = _solid;
@@ -973,6 +1003,26 @@ public sealed class CursorChipOverlay
                     fill.Visibility = Visibility.Visible;
                 }
                 else fill.Visibility = Visibility.Collapsed;
+
+                // Drive the "+" glyph and the ghost dimming on the new-desktop tile.
+                if (i < _stripPlus.Count)
+                {
+                    var plus = _stripPlus[i];
+                    plus.Visibility = isNewTile ? Visibility.Visible : Visibility.Collapsed;
+                    if (isNewTile)
+                    {
+                        // Bright white "+" when the user is aiming onto it (about to create);
+                        // muted otherwise so the slot reads as an available affordance.
+                        plus.Foreground = aimingNewTile
+                            ? Freeze(new SolidColorBrush(Color.FromArgb(255, 255, 255, 255)))
+                            : MutedIcon();
+                    }
+                }
+                // The ghost slot sits dimmed until it is the active destination.
+                if (isNewTile && i < _stripScreens.Count)
+                    _stripScreens[i].Opacity = aimingNewTile ? 1.0 : 0.6;
+                else if (i < _stripScreens.Count)
+                    _stripScreens[i].Opacity = 1.0;
             }
             _lastKey = key;
         }

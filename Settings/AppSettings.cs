@@ -153,6 +153,10 @@ public sealed class AppSettings
     /// than switching live as the fingers sweep. On by default.</summary>
     public bool PreviewDesktopDestination { get; set; } = true;
 
+    /// <summary>When true, holding then swiping past the last (rightmost) virtual desktop creates a
+    /// new desktop and moves the window there, instead of stopping at the edge. Off by default.</summary>
+    public bool CreateDesktopOnOverflow { get; set; } = false;
+
     /// <summary>Seconds two fingers must rest (near-still) before the press-and-hold
     /// virtual-desktop switcher engages and its HUD appears. Range about 0.1 to 1.0s.</summary>
     public double DesktopHoldDelaySeconds { get; set; } = 0.3;

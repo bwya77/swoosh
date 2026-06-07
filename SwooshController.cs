@@ -25,6 +25,7 @@ public sealed class SwooshController : IDisposable
     private bool _armed;
     private int _deskCount = 2;
     private int _deskIndex;
+    private bool _createDesktopOverflow;  // swiping past the last desktop creates a new one
 
     // Pinch-out fullscreen remembers the window's pre-fullscreen rect so a
     // following pinch-in restores it to exactly where it was.
@@ -185,6 +186,7 @@ public sealed class SwooshController : IDisposable
         _moveCursor = s.MoveCursor;
         _previewDeskDest = s.PreviewDesktopDestination;
         _gestures.DesktopMoveOnRelease = s.PreviewDesktopDestination;
+        _createDesktopOverflow = s.CreateDesktopOnOverflow;
         _gestures.HoldDelayMs = (long)Math.Round(Math.Clamp(s.DesktopHoldDelaySeconds, 0.1, 1.0) * 1000);
     }
 
@@ -853,7 +855,16 @@ public sealed class SwooshController : IDisposable
             _deskCount = Math.Max(1, cnt);
             _deskIndex = Math.Clamp(idx, 0, _deskCount - 1);
         }
-        _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, animateReveal: true, previewDestination: _previewDeskDest);
+        if (_createDesktopOverflow)
+        {
+            // Reveal the ghost "+" tile alongside the real desktops from the moment the hold
+            // engages, so the create-on-overflow affordance is visible before the user swipes.
+            _chip.ShowDesktopStrip(_deskCount + 1, _deskIndex, null, animateReveal: true, previewDestination: _previewDeskDest, overflowNewTile: true);
+        }
+        else
+        {
+            _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, animateReveal: true, previewDestination: _previewDeskDest);
+        }
         Log.Write($"HoldEngaged layout({ld})");
     }
 
@@ -863,9 +874,28 @@ public sealed class SwooshController : IDisposable
         if (_previewDeskDest)
         {
             // Preview the desktop the window will jump to: aim is the signed number of
-            // desktops from the start, clamped to what exists.
-            int target = Math.Clamp(_deskIndex + aim, 0, _deskCount - 1);
-            _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, previewDestination: true, destIndexOverride: target);
+            // desktops from the start. With overflow enabled, always render an extra ghost tile
+            // (a "+" slot) at the right end so the user can see that swiping past the last desktop
+            // will create a new one; aiming onto it lights it up as the destination.
+            int raw = _deskIndex + aim;
+            if (_createDesktopOverflow)
+            {
+                int target = Math.Clamp(raw, 0, _deskCount); // _deskCount == the ghost (new) slot
+                _chip.ShowDesktopStrip(_deskCount + 1, _deskIndex, null, previewDestination: true, destIndexOverride: target, overflowNewTile: true);
+            }
+            else
+            {
+                int target = Math.Clamp(raw, 0, _deskCount - 1);
+                _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, previewDestination: true, destIndexOverride: target);
+            }
+        }
+        else if (_createDesktopOverflow)
+        {
+            // Live-ratchet mode with overflow on: still present the ghost "+" tile so the
+            // affordance is visible while the user leans toward the edge.
+            int destOverride = lean == DesktopDirection.Right && _deskIndex >= _deskCount - 1 ? _deskCount : -1;
+            _chip.ShowDesktopStrip(_deskCount + 1, _deskIndex, destOverride < 0 ? lean : null,
+                previewDestination: destOverride >= 0, destIndexOverride: destOverride, overflowNewTile: true);
         }
         else
         {
@@ -877,6 +907,25 @@ public sealed class SwooshController : IDisposable
     {
         _preview.Hide();
         if (!_armed) { return; }
+
+        // Overflow: swiping right at the last desktop creates a new one (when enabled) and moves
+        // the window there, instead of stopping at the edge.
+        if (dir == DesktopDirection.Right && _createDesktopOverflow && _deskIndex >= _deskCount - 1)
+        {
+            bool created = VirtualDesktop.MoveToNewDesktop(_target, _chip.Handle, out string ndiag);
+            Log.Write($"DesktopMove new-desktop ok={created} {ndiag}");
+            if (created)
+            {
+                _deskCount += 1;
+                _deskIndex = _deskCount - 1;
+                Win32.ForceForeground(_target);
+                _chip.ShowDesktopStrip(_deskCount + 1, _deskIndex, null, overflowNewTile: true);
+                _stats.Add();
+                _demo.SetCaption("New desktop \u2192");
+            }
+            return;
+        }
+
         // Live ratchet: carry the HUD overlay to the new desktop so it stays visible, and
         // keep the gesture armed so the user can step to further desktops without lifting.
         bool ok = VirtualDesktop.MoveAdjacent(_target, dir, _chip.Handle, out string diag);
@@ -886,7 +935,10 @@ public sealed class SwooshController : IDisposable
             // We follow the window, so the current desktop is now the neighbor.
             _deskIndex = Math.Clamp(_deskIndex + (dir == DesktopDirection.Right ? 1 : -1), 0, _deskCount - 1);
             Win32.ForceForeground(_target);
-            _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
+            if (_createDesktopOverflow)
+                _chip.ShowDesktopStrip(_deskCount + 1, _deskIndex, null, overflowNewTile: true);
+            else
+                _chip.ShowDesktopStrip(_deskCount, _deskIndex, null);
             _stats.Add();
             _demo.SetCaption(dir == DesktopDirection.Right ? "Desktop \u2192" : "\u2190 Desktop");
         }
@@ -898,6 +950,26 @@ public sealed class SwooshController : IDisposable
     {
         _preview.Hide();
         if (!_armed) { return; }
+
+        // Overflow: an aim past the last desktop (with the setting on) creates a new desktop and
+        // moves the window there. Over-aiming creates exactly one new desktop.
+        if (_createDesktopOverflow && _deskIndex + aim > _deskCount - 1)
+        {
+            bool created = VirtualDesktop.MoveToNewDesktop(_target, _chip.Handle, out string ndiag);
+            Log.Write($"DesktopJump new-desktop aim={aim} ok={created} {ndiag}");
+            if (created)
+            {
+                _deskCount += 1;
+                _deskIndex = _deskCount - 1;
+                Win32.ForceForeground(_target);
+                _chip.ShowDesktopStrip(_deskCount, _deskIndex, null, previewDestination: _previewDeskDest);
+                _stats.Add();
+            }
+            _armed = false;
+            _chip.Hide();
+            return;
+        }
+
         int target = Math.Clamp(_deskIndex + aim, 0, _deskCount - 1);
         int delta = target - _deskIndex;
         if (delta != 0)
