@@ -135,7 +135,7 @@ public sealed class AppSettings
 
     /// <summary>Seconds of resting (fingers still) before an in-progress gesture cancels
     /// itself. Pressing Esc cancels immediately. 0 disables the rest-timeout.</summary>
-    public double CancelTimeoutSeconds { get; set; } = 0.8;
+    public double CancelTimeoutSeconds { get; set; } = 0.9;
 
     /// <summary>When true, the actual window moves live to the target zone as you swipe
     /// (instead of showing the translucent zone overlay), so you preview on the real app.
