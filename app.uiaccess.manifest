@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="0.1.0.0" name="Swoosh.app" />
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 / 11 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+  <!--
+    UIAccess build: grants Swoosh the right to move/resize/focus windows owned by
+    higher-integrity (elevated/admin) processes, which medium-integrity apps are
+    blocked from by UIPI. This is NOT full admin: the process runs just above
+    medium integrity and cannot touch the UAC secure desktop.
+
+    Windows only honors uiAccess="true" when BOTH are true:
+      1. the exe is Authenticode-signed with a cert chaining to a trusted root, and
+      2. the exe runs from a secure location (Program Files / System32).
+    A uiAccess exe launched from a non-secure path (e.g. a dev bin\ folder) will
+    FAIL to start, so this manifest is selected only for release publishes via the
+    MSBuild property -p:UiAccess=true. Dev builds keep app.manifest (asInvoker).
+  -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="true" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+</assembly>

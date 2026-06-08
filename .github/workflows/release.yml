@@ -85,6 +85,7 @@ jobs:
           $v = "${{ steps.ver.outputs.version }}"
           dotnet publish Swoosh.csproj -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:UiAccess=true `
             -p:Version=$v -o publish/win-x64
           dotnet publish Swoosh.Settings/Swoosh.Settings.csproj -c Release -r win-x64 `
             -p:Platform=x64 --self-contained true -p:WindowsAppSDKSelfContained=true `
@@ -96,6 +97,7 @@ jobs:
           $v = "${{ steps.ver.outputs.version }}"
           dotnet publish Swoosh.csproj -c Release -r win-arm64 --self-contained true `
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:UiAccess=true `
             -p:Version=$v -o publish/win-arm64
           dotnet publish Swoosh.Settings/Swoosh.Settings.csproj -c Release -r win-arm64 `
             -p:Platform=arm64 --self-contained true -p:WindowsAppSDKSelfContained=true `

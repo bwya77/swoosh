@@ -7,7 +7,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Dev/default builds use app.manifest (asInvoker). Release publishes pass
+         -p:UiAccess=true to select the UIAccess manifest so the signed Program Files
+         build can snap elevated/admin windows. See app.uiaccess.manifest. -->
+    <ApplicationManifest Condition="'$(UiAccess)' == 'true'">app.uiaccess.manifest</ApplicationManifest>
+    <ApplicationManifest Condition="'$(UiAccess)' != 'true'">app.manifest</ApplicationManifest>
     <Platforms>AnyCPU;arm64;x64</Platforms>
     <AssemblyName>Swoosh</AssemblyName>
     <RootNamespace>Swoosh</RootNamespace>
