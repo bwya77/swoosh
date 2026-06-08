@@ -153,6 +153,11 @@ public sealed class AppSettings
     /// than switching live as the fingers sweep. On by default.</summary>
     public bool PreviewDesktopDestination { get; set; } = true;
 
+    /// <summary>When true, holding a window then swiping no longer moves it between virtual
+    /// desktops; instead the HUD shows your open apps and swiping changes focus to the selected
+    /// app so you can work in it (like Alt+Tab driven by the hold-swipe gesture). Off by default.</summary>
+    public bool AppSwitchOnHold { get; set; } = false;
+
     /// <summary>When true, holding then swiping past the last (rightmost) virtual desktop creates a
     /// new desktop and moves the window there, instead of stopping at the edge. Off by default.</summary>
     public bool CreateDesktopOnOverflow { get; set; } = false;

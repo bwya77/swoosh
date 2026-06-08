@@ -19,6 +19,19 @@ public static class Win32
 
     // GetAncestor
     public const uint GA_ROOT = 2;
+    public const uint GA_ROOTOWNER = 3;
+
+    // Window enumeration / alt-tab eligibility.
+    public const int GW_OWNER = 4;
+    public const long WS_EX_APPWINDOW = 0x00040000;
+    public const int DWMWA_CLOAKED = 14;
+    public const int WM_GETICON = 0x007F;
+    public const int ICON_SMALL = 0;
+    public const int ICON_BIG = 1;
+    public const int ICON_SMALL2 = 2;
+    public const int GCL_HICON = -14;
+    public const int GCL_HICONSM = -34;
+    public const uint SMTO_ABORTIFHUNG = 0x0002;
 
     // SetWindowPos flags
     public const uint SWP_NOSIZE = 0x0001;
@@ -415,4 +428,35 @@ public static class Win32
         int n = GetWindowText(hWnd, buf, buf.Length);
         return new string(buf, 0, n);
     }
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetWindow(IntPtr hWnd, int uCmd);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    public static extern int DwmGetWindowAttributeInt(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+
+    /// <summary>True if a window is cloaked by DWM (e.g. on another virtual desktop, or a
+    /// suspended UWP shell window). Cloaked windows should be excluded from the app switcher.</summary>
+    public static bool IsCloaked(IntPtr hWnd)
+    {
+        return DwmGetWindowAttributeInt(hWnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0;
+    }
+
+    [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")]
+    public static extern IntPtr GetClassLongPtr(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr SendMessageTimeout(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam,
+        uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 }

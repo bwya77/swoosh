@@ -732,6 +732,27 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE71D;" FontSize="18" Margin="0,0,16,0"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Switch apps instead of desktops" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Replaces the hold-and-swipe virtual-desktop move. When on, holding a window then swiping shows your open apps in the HUD; swipe to highlight one and release to focus it so you can work in it, like Alt+Tab driven by the touchpad. Off by default."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="AppSwitchOnHoldToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
                                 <FontIcon Grid.Column="0" Glyph="&#xE7F8;" FontSize="18" Margin="0,0,16,0"
                                           VerticalAlignment="Center"
                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />

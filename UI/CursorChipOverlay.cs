@@ -12,6 +12,7 @@ using Swoosh.Snapping;
 using Brushes = System.Windows.Media.Brushes;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
+using Image = System.Windows.Controls.Image;
 
 namespace Swoosh.UI;
 
@@ -49,6 +50,17 @@ public sealed class CursorChipOverlay
     private const double MapGap = 9;
     private const double MapBaseHeightPx = 122; // taller HUD so the 3-row plus is legible
     private const double MapDisabledOpacity = 0.26; // a direction with no monitor reads as dimmed
+
+    // App-switcher strip: one rounded tile per open window, each holding the app icon,
+    // with the selected app's title on a row beneath the tiles.
+    private const double AppTileW = 66;
+    private const double AppTileH = 60;
+    private const double AppTileGap = 10;
+    private const double AppIconSize = 34;
+    private const double AppTitleGap = 9;     // gap between the tile row and the title row
+    private const double AppTitleH = 24;
+    private const double AppBaseHeightPx = 96; // taller HUD so icons + title are legible
+    private const int AppMaxVisible = 5;       // cap visible tiles; scroll to reveal the rest
 
     private static readonly Brush WhiteEdge = Freeze(new SolidColorBrush(Color.FromArgb(245, 255, 255, 255)));
     private static readonly System.Windows.Media.FontFamily SymbolFont = new("Segoe MDL2 Assets");
@@ -136,6 +148,20 @@ public sealed class CursorChipOverlay
     private Border? _mapUp, _mapDown, _mapLeft, _mapRight, _mapCenter;
     private Border? _mapUpFill, _mapDownFill, _mapLeftFill, _mapRightFill, _mapCenterFill;
     private double _mapDesignW = SingleCanvasW, _mapDesignH = CanvasH;
+
+    // App-switcher strip: one icon tile per open window plus a title row.
+    private Grid? _appStrip;
+    private readonly List<Border> _appScreens = new();
+    private readonly List<Border> _appFills = new();
+    private readonly List<Image> _appIcons = new();
+    private readonly List<TextBlock> _appInitials = new();
+    private readonly List<double> _appLefts = new();
+    private TextBlock? _appTitle;
+    private int _appCount = -1;
+    private double _appDesignW = SingleCanvasW, _appDesignH = CanvasH;
+    private bool _appAnchored;
+    private int _appAnchorX, _appAnchorY;
+    private int _appWinStart;  // index of the first app shown in the visible window
 
     // Down-action chooser: the snap HUD square stays visible but greyed out, and two circular
     // option buttons emerge downward beneath it — left = minimize (minus), right = close (red, X).
@@ -303,6 +329,14 @@ public sealed class CursorChipOverlay
         _map = null;
         _mapAnchored = false;
         _stripAnchored = false;
+        _appStrip = null;
+        _appCount = -1;
+        _appAnchored = false;
+        _appScreens.Clear();
+        _appFills.Clear();
+        _appIcons.Clear();
+        _appInitials.Clear();
+        _appLefts.Clear();
         _chooser = null;
         _chooserCount = -1;
         _chooserActive = false;
@@ -551,6 +585,7 @@ public sealed class CursorChipOverlay
         _single.Visibility = Visibility.Collapsed;
         if (_strip != null) _strip.Visibility = Visibility.Collapsed;
         if (_map != null) _map.Visibility = Visibility.Collapsed;
+        if (_appStrip != null) _appStrip.Visibility = Visibility.Collapsed;
         _chooser.Visibility = Visibility.Visible;
         _canvas.Width = _chooserDesignW;
         _canvas.Height = _chooserDesignH;
@@ -764,6 +799,7 @@ public sealed class CursorChipOverlay
         _single.Visibility = Visibility.Collapsed;
         if (_strip != null) _strip.Visibility = Visibility.Collapsed;
         if (_chooser != null) _chooser.Visibility = Visibility.Collapsed;
+        if (_appStrip != null) _appStrip.Visibility = Visibility.Collapsed;
         _chooserActive = false;
         _map.Visibility = Visibility.Visible;
         _canvas.Width = _mapDesignW;
@@ -834,6 +870,264 @@ public sealed class CursorChipOverlay
         else
         {
             fill.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    // ---- App switcher strip --------------------------------------------------
+
+    private Grid BuildAppStrip(int count)
+    {
+        double tilesW = count * AppTileW + (count - 1) * AppTileGap;
+        double canvasW = Math.Max(SingleChipW, tilesW) + 2 * Margin;
+        double canvasH = Margin + AppTileH + AppTitleGap + AppTitleH + Margin;
+        var root = new Grid { Width = canvasW, Height = canvasH };
+        var host = new Canvas { Width = canvasW, Height = canvasH };
+
+        _appScreens.Clear();
+        _appFills.Clear();
+        _appIcons.Clear();
+        _appInitials.Clear();
+        _appLefts.Clear();
+
+        double rowLeft = (canvasW - tilesW) / 2.0;
+        double innerW = AppTileW - 2 * Stroke;
+        double innerH = AppTileH - 2 * Stroke;
+        for (int i = 0; i < count; i++)
+        {
+            var (screen, inner, fill) = BuildScreenWH(AppTileW, AppTileH);
+            double left = rowLeft + i * (AppTileW + AppTileGap);
+            Canvas.SetLeft(screen, left);
+            Canvas.SetTop(screen, Margin);
+            host.Children.Add(screen);
+            ResetFullFillWH(fill, AppTileW, AppTileH);
+
+            // Letter fallback shown when a window exposes no resolvable icon, so every tile
+            // still identifies its app. Sits under the icon; only one of the two is visible.
+            var initial = new TextBlock
+            {
+                Width = innerW,
+                TextAlignment = TextAlignment.Center,
+                FontSize = 24,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = MutedIcon(),
+                Visibility = Visibility.Collapsed,
+                IsHitTestVisible = false,
+            };
+            Canvas.SetLeft(initial, 0);
+            Canvas.SetTop(initial, (innerH - 34) / 2.0);
+            inner.Children.Add(initial);
+
+            var icon = new Image
+            {
+                Width = AppIconSize,
+                Height = AppIconSize,
+                Stretch = Stretch.Uniform,
+                IsHitTestVisible = false,
+            };
+            RenderOptions.SetBitmapScalingMode(icon, BitmapScalingMode.HighQuality);
+            Canvas.SetLeft(icon, (innerW - AppIconSize) / 2.0);
+            Canvas.SetTop(icon, (innerH - AppIconSize) / 2.0);
+            inner.Children.Add(icon);
+
+            _appScreens.Add(screen);
+            _appFills.Add(fill);
+            _appIcons.Add(icon);
+            _appInitials.Add(initial);
+            _appLefts.Add(left);
+        }
+
+        // Title row under the tiles, showing the selected app's window title.
+        _appTitle = new TextBlock
+        {
+            Width = canvasW - 2 * Margin,
+            TextAlignment = TextAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            FontSize = 13,
+            Foreground = MutedIcon(),
+            IsHitTestVisible = false,
+        };
+        Canvas.SetLeft(_appTitle, Margin);
+        Canvas.SetTop(_appTitle, Margin + AppTileH + AppTitleGap);
+        host.Children.Add(_appTitle);
+
+        root.Children.Add(host);
+        _appDesignW = canvasW;
+        _appDesignH = canvasH;
+        return root;
+    }
+
+    private void EnsureAppStrip(int count)
+    {
+        if (_appStrip != null && _appCount == count) return;
+        if (_appStrip != null) _canvas!.Children.Remove(_appStrip);
+        _appStrip = BuildAppStrip(count);
+        _appCount = count;
+        _canvas!.Children.Add(_appStrip);
+    }
+
+    private void SetAppStripMode()
+    {
+        if (_single == null || _appStrip == null || _canvas == null) return;
+        _single.Visibility = Visibility.Collapsed;
+        if (_strip != null) _strip.Visibility = Visibility.Collapsed;
+        if (_map != null) _map.Visibility = Visibility.Collapsed;
+        if (_chooser != null) _chooser.Visibility = Visibility.Collapsed;
+        _chooserActive = false;
+        _appStrip.Visibility = Visibility.Visible;
+        _canvas.Width = _appDesignW;
+        _canvas.Height = _appDesignH;
+    }
+
+    /// <summary>Show the app-switcher strip. Up to <see cref="AppMaxVisible"/> tiles are shown at
+    /// once; when there are more apps, the visible window scrolls to keep the selected app in view.
+    /// The selected tile is highlighted with an accent border and its title shown beneath. On the
+    /// first frame of a gesture the tiles bloom outward from the selection, like the desktop strip.</summary>
+    public void ShowAppStrip(IReadOnlyList<Swoosh.Native.AppWindow> apps, int selected, bool animateReveal = false)
+    {
+        if (apps.Count == 0) return;
+        SyncSystemTheme();
+        SyncAccentColor();
+        EnsureWindow();
+        if (_win == null) return;
+        CancelHideTimer();
+
+        int visN = Math.Min(AppMaxVisible, apps.Count);
+        EnsureAppStrip(visN);
+        SetAppStripMode();
+
+        selected = Math.Clamp(selected, 0, apps.Count - 1);
+
+        // A fresh gesture resets the scroll window; otherwise keep the selected app visible by
+        // sliding the window of tiles as the selection moves past either edge.
+        if (animateReveal) _appWinStart = 0;
+        if (selected < _appWinStart) _appWinStart = selected;
+        else if (selected > _appWinStart + visN - 1) _appWinStart = selected - visN + 1;
+        _appWinStart = Math.Clamp(_appWinStart, 0, Math.Max(0, apps.Count - visN));
+        int selTile = selected - _appWinStart;
+
+        string key = $"app|{apps.Count}|{_appWinStart}|{selected}";
+        if (key != _lastKey)
+        {
+            for (int i = 0; i < _appScreens.Count && i < visN; i++)
+            {
+                int ai = _appWinStart + i;          // index into the full app list
+                bool sel = ai == selected;
+
+                // Show the real icon when we have one; otherwise fall back to the app's initial so
+                // the tile is never blank.
+                var img = apps[ai].Icon;
+                if (img != null)
+                {
+                    _appIcons[i].Source = img;
+                    _appIcons[i].Visibility = Visibility.Visible;
+                    _appInitials[i].Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    _appIcons[i].Source = null;
+                    _appIcons[i].Visibility = Visibility.Collapsed;
+                    string t = apps[ai].Title.TrimStart();
+                    _appInitials[i].Text = t.Length > 0 ? char.ToUpperInvariant(t[0]).ToString() : "?";
+                    _appInitials[i].Visibility = Visibility.Visible;
+                }
+
+                // Every tile stays a fully opaque card so icons read clearly against any wallpaper.
+                // Selection is shown by an accent border + faint accent wash, not by dimming the
+                // others into transparency.
+                _appScreens[i].BorderBrush = sel ? _solid : _screenEdge;
+                _appScreens[i].BorderThickness = new Thickness(sel ? Stroke * 1.8 : Stroke);
+                _appFills[i].Background = _faint;
+                _appFills[i].Visibility = sel ? Visibility.Visible : Visibility.Collapsed;
+            }
+            if (_appTitle != null)
+            {
+                // Hint that more apps exist beyond the visible window: "Title (3/9)".
+                _appTitle.Text = apps.Count > visN
+                    ? $"{apps[selected].Title}  ({selected + 1}/{apps.Count})"
+                    : apps[selected].Title;
+            }
+            _lastKey = key;
+        }
+
+        // Prime the bloom start-state before placing/resizing the window so a resize paint never
+        // catches the strip fully expanded for a frame.
+        if (animateReveal) PrimeAppReveal(selTile);
+
+        // Anchor the strip to the cursor once per gesture so it holds still while the user swipes.
+        if (!_appAnchored && Win32.GetCursorPos(out var pt))
+        {
+            _appAnchorX = pt.X;
+            _appAnchorY = pt.Y;
+            _appAnchored = true;
+        }
+        Place(_appDesignW, _appDesignH, AppBaseHeightPx, _appAnchored ? (_appAnchorX, _appAnchorY) : null);
+
+        if (animateReveal) RunAppReveal(selTile);
+    }
+
+    /// <summary>Synchronously collapse every tile onto the origin (selected) tile and hide them,
+    /// so the bloom can expand outward from there. Mirrors <see cref="PrimeStripReveal"/>.</summary>
+    private void PrimeAppReveal(int originIndex)
+    {
+        int n = _appScreens.Count;
+        if (n == 0) return;
+        if (originIndex < 0 || originIndex >= n) originIndex = 0;
+        double originLeft = _appLefts[originIndex];
+
+        for (int i = 0; i < n; i++)
+        {
+            var screen = _appScreens[i];
+            double finalLeft = _appLefts[i];
+            bool isOrigin = i == originIndex;
+
+            screen.BeginAnimation(Canvas.LeftProperty, null);
+            screen.BeginAnimation(UIElement.OpacityProperty, null);
+
+            if (!_animate || n == 1 || isOrigin)
+            {
+                Canvas.SetLeft(screen, finalLeft);
+                screen.Opacity = 1;
+            }
+            else
+            {
+                Canvas.SetLeft(screen, originLeft);
+                screen.Opacity = 0;
+            }
+        }
+    }
+
+    /// <summary>Bloom the tiles out from the origin (selected) tile, cascading outward by distance.
+    /// Mirrors <see cref="RunStripReveal"/>.</summary>
+    private void RunAppReveal(int originIndex)
+    {
+        if (!_animate) return;
+        int n = _appScreens.Count;
+        if (n <= 1) return;
+        if (originIndex < 0 || originIndex >= n) originIndex = 0;
+        double originLeft = _appLefts[originIndex];
+
+        for (int i = 0; i < n; i++)
+        {
+            if (i == originIndex) continue;
+            var screen = _appScreens[i];
+            double finalLeft = _appLefts[i];
+
+            int distance = Math.Abs(i - originIndex);
+            var begin = TimeSpan.FromMilliseconds(34 * (distance - 1));
+
+            var slide = new DoubleAnimation(originLeft, finalLeft, RevealDuration)
+            {
+                BeginTime = begin,
+                EasingFunction = RevealEase,
+            };
+            screen.BeginAnimation(Canvas.LeftProperty, slide);
+
+            var fade = new DoubleAnimation(0, 1, RevealFadeDuration)
+            {
+                BeginTime = begin,
+                EasingFunction = RevealEase,
+            };
+            screen.BeginAnimation(UIElement.OpacityProperty, fade);
         }
     }
 
@@ -1137,6 +1431,7 @@ public sealed class CursorChipOverlay
         if (_strip != null) _strip.Visibility = Visibility.Collapsed;
         if (_map != null) _map.Visibility = Visibility.Collapsed;
         if (_chooser != null) _chooser.Visibility = Visibility.Collapsed;
+        if (_appStrip != null) _appStrip.Visibility = Visibility.Collapsed;
         _chooserActive = false;
         _canvas.Width = SingleCanvasW;
         _canvas.Height = CanvasH;
@@ -1149,6 +1444,7 @@ public sealed class CursorChipOverlay
         _strip.Visibility = Visibility.Visible;
         if (_map != null) _map.Visibility = Visibility.Collapsed;
         if (_chooser != null) _chooser.Visibility = Visibility.Collapsed;
+        if (_appStrip != null) _appStrip.Visibility = Visibility.Collapsed;
         _chooserActive = false;
         _canvas.Width = _stripDesignW;
         _canvas.Height = CanvasH;
@@ -1281,6 +1577,8 @@ public sealed class CursorChipOverlay
         _lastPlace = (-99999, 0, 0, 0);
         _mapAnchored = false;
         _stripAnchored = false;
+        _appAnchored = false;
+        _appWinStart = 0;
         _chooserActive = false;
         _shown = false;
         if (_win == null) return;

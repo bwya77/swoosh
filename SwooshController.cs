@@ -27,6 +27,15 @@ public sealed class SwooshController : IDisposable
     private int _deskIndex;
     private bool _createDesktopOverflow;  // swiping past the last desktop creates a new one
 
+    // App-switcher mode: the hold-swipe gesture cycles focus through open apps instead of
+    // moving the window across virtual desktops. Captured at hold-engage, committed on lift.
+    private bool _appSwitch;
+    private List<Native.AppWindow> _apps = new();
+    private int _appStart;
+    private int _appSel;
+    private Win32.RECT _appTargetRect;  // rect of the window we held over, to place the chosen app into
+    private bool _appTargetMax;          // whether that window was maximized
+
     // Pinch-out fullscreen remembers the window's pre-fullscreen rect so a
     // following pinch-in restores it to exactly where it was.
     private Win32.RECT _preMaxRect;
@@ -185,8 +194,11 @@ public sealed class SwooshController : IDisposable
         _livePreview = s.LivePreview;
         _moveCursor = s.MoveCursor;
         _previewDeskDest = s.PreviewDesktopDestination;
-        _gestures.DesktopMoveOnRelease = s.PreviewDesktopDestination;
         _createDesktopOverflow = s.CreateDesktopOnOverflow;
+        _appSwitch = s.AppSwitchOnHold;
+        // App switching focuses on lift only (never live, which would steal focus mid-swipe), so
+        // force commit-on-release whenever app mode is on; otherwise follow the desktop preview pref.
+        _gestures.DesktopMoveOnRelease = s.AppSwitchOnHold || s.PreviewDesktopDestination;
         _gestures.HoldDelayMs = (long)Math.Round(Math.Clamp(s.DesktopHoldDelaySeconds, 0.1, 1.0) * 1000);
     }
 
@@ -810,6 +822,7 @@ public sealed class SwooshController : IDisposable
         _chip.Hide();
         _demo.SetCaption(null);
         _armed = false;
+        _apps = new();
         _liveMoved = false;
         _downLatched = false;
         _downEngaged = false;
@@ -850,6 +863,25 @@ public sealed class SwooshController : IDisposable
     private void OnHoldEngaged()
     {
         if (!_armed) return;
+        if (_appSwitch)
+        {
+            // Capture the open-app list once at engage. Start the selection on the app after the
+            // current foreground one (the window we armed over), so a single step swaps to it,
+            // mirroring how Alt+Tab lands on the previous app.
+            _apps = Native.WindowList.GetSwitchableWindows();
+            if (_apps.Count == 0) { _armed = false; return; }
+            int cur = _apps.FindIndex(a => a.Hwnd == _target);
+            if (cur < 0) cur = _apps.FindIndex(a => a.Hwnd == Win32.GetForegroundWindow());
+            _appStart = cur < 0 ? 0 : cur;
+            _appSel = _appStart;
+            // Capture the held window's frame so the chosen app can take its exact place (size and
+            // location), effectively swapping the new app in over the old one on release.
+            Win32.GetWindowRect(_target, out _appTargetRect);
+            _appTargetMax = WindowSnapper.IsMaximized(_target);
+            _chip.ShowAppStrip(_apps, _appSel, animateReveal: true);
+            Log.Write($"HoldEngaged appswitch n={_apps.Count} start={_appStart}");
+            return;
+        }
         if (VirtualDesktop.GetLayout(out int cnt, out int idx, out string ld))
         {
             _deskCount = Math.Max(1, cnt);
@@ -871,6 +903,13 @@ public sealed class SwooshController : IDisposable
     private void OnHoldUpdated(DesktopDirection? lean, double progress, int aim)
     {
         if (!_armed) return;
+        if (_appSwitch)
+        {
+            if (_apps.Count == 0) return;
+            _appSel = Math.Clamp(_appStart + aim, 0, _apps.Count - 1);
+            _chip.ShowAppStrip(_apps, _appSel);
+            return;
+        }
         if (_previewDeskDest)
         {
             // Preview the desktop the window will jump to: aim is the signed number of
@@ -907,6 +946,7 @@ public sealed class SwooshController : IDisposable
     {
         _preview.Hide();
         if (!_armed) { return; }
+        if (_appSwitch) { return; } // app mode commits focus on lift, never live-steps
 
         // Overflow: swiping right at the last desktop creates a new one (when enabled) and moves
         // the window there, instead of stopping at the edge.
@@ -950,6 +990,29 @@ public sealed class SwooshController : IDisposable
     {
         _preview.Hide();
         if (!_armed) { return; }
+
+        if (_appSwitch)
+        {
+            int sel = Math.Clamp(_appStart + aim, 0, Math.Max(0, _apps.Count - 1));
+            if (_apps.Count > 0 && sel != _appStart)
+            {
+                IntPtr hwnd = _apps[sel].Hwnd;
+                if (Win32.IsIconic(hwnd)) Win32.ShowWindow(hwnd, Win32.SW_RESTORE);
+                // Place the chosen app into the held window's slot so it replaces it in-place: same
+                // maximized state, or same size and location for a normal window.
+                if (_appTargetMax)
+                    Win32.ShowWindow(hwnd, Win32.SW_MAXIMIZE);
+                else
+                    _snapper.RestoreToRect(hwnd, _appTargetRect);
+                Win32.ForceForeground(hwnd);
+                _stats.Add();
+                Log.Write($"AppSwitch commit -> [{sel}] {_apps[sel].Title} max={_appTargetMax}");
+            }
+            _armed = false;
+            _apps = new();
+            _chip.Hide();
+            return;
+        }
 
         // Overflow: an aim past the last desktop (with the setting on) creates a new desktop and
         // moves the window there. Over-aiming creates exactly one new desktop.
