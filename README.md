@@ -72,6 +72,9 @@ A few more:
 - Hold Shift (configurable) while swiping to snap to a 3x3 grid of thirds.
 - Hold two fingers, then swipe to move the window to another monitor or virtual
   desktop.
+- Optionally, switch apps instead of desktops: enable it in Settings and the
+  hold-then-swipe shows your open apps in the HUD, and releasing focuses the one
+  you pick, dropping it into the held window's size and place.
 - Hold Alt (configurable) and swipe to send the window to the next display.
 - Five-finger drag to free move the window with fine control.
 - Five-finger tap to center the window on its monitor.
@@ -98,6 +101,8 @@ Open Settings from the tray icon. You can:
 - Adjust touch sensitivity, grid spacing, and the cancel timeout.
 - Turn on live preview, where the real window moves as you swipe instead of a
   translucent overlay.
+- Switch apps instead of desktops, so the hold-then-swipe gesture flips through
+  your open apps and focuses the one you pick.
 - Pick the overlay color or follow your Windows accent color.
 - Check for updates and read the changelog.
 
