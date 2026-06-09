@@ -370,6 +370,7 @@ public sealed partial class MainWindow : Window
         MoveCursorToggle.IsOn = s.MoveCursor;
         ResizeHorizontalToggle.IsOn = s.ResizeHorizontalEnabled;
         ResizeVerticalToggle.IsOn = s.ResizeVerticalEnabled;
+        FiveFingerToggle.IsOn = s.FiveFingerEnabled;
         PreviewDesktopDestinationToggle.IsOn = s.PreviewDesktopDestination;
         CreateDesktopOverflowToggle.IsOn = s.CreateDesktopOnOverflow;
         AppSwitchOnHoldToggle.IsOn = s.AppSwitchOnHold;
@@ -432,6 +433,7 @@ public sealed partial class MainWindow : Window
         MoveCursor = MoveCursorToggle.IsOn,
         ResizeHorizontalEnabled = ResizeHorizontalToggle.IsOn,
         ResizeVerticalEnabled = ResizeVerticalToggle.IsOn,
+        FiveFingerEnabled = FiveFingerToggle.IsOn,
         PreviewDesktopDestination = PreviewDesktopDestinationToggle.IsOn,
         CreateDesktopOnOverflow = CreateDesktopOverflowToggle.IsOn,
         AppSwitchOnHold = AppSwitchOnHoldToggle.IsOn,

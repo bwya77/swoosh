@@ -39,6 +39,11 @@ public sealed class GestureEngine
     /// <summary>Simultaneous contacts that engage fine-grained free positioning.</summary>
     public int FreeMoveEngageContacts { get; set; } = 5;
 
+    /// <summary>Master switch for all five-finger gestures (free move, free resize, and the
+    /// five-finger tap to center). When false, five-finger touches are ignored entirely and
+    /// behave like a three/four-finger touch (they just abandon any in-flight 2-finger gesture).</summary>
+    public bool FiveFingerEnabled { get; set; } = true;
+
     /// <summary>Contacts that keep free-move alive once engaged (hysteresis for finger flicker).</summary>
     public int FreeMoveKeepContacts { get; set; } = 4;
 
@@ -284,7 +289,7 @@ public sealed class GestureEngine
             return;
         }
 
-        if (down >= FreeMoveEngageContacts)
+        if (FiveFingerEnabled && down >= FreeMoveEngageContacts)
         {
             // Abandon any in-flight 2-finger snap/hold and switch to free-move.
             if (_tracking) { _tracking = false; GestureCancelled?.Invoke(); }

@@ -717,6 +717,27 @@
                             </Grid>
                         </Border>
 
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE815;" FontSize="18" Margin="0,0,16,0"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Five-finger gestures" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Use five fingers to free-move a window, spread or pinch to resize it, and tap to center it. Turn this off to disable all five-finger gestures (for example if your touchpad misreads them)."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="FiveFingerToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,8,0,0">
                             <FontIcon Glyph="&#xE7F8;" FontSize="16" VerticalAlignment="Center"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />

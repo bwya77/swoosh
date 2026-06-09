@@ -160,6 +160,7 @@ public sealed class SwooshController : IDisposable
         _quartersEnabled = s.QuartersEnabled;
         _minimizeEnabled = s.MinimizeEnabled;
         _centerEnabled = s.CenterEnabled;
+        _gestures.FiveFingerEnabled = s.FiveFingerEnabled;
         _gestures.AxisResizeH = s.ResizeHorizontalEnabled;
         _gestures.AxisResizeV = s.ResizeVerticalEnabled;
         _swipeDownMode = s.SwipeDownAction;

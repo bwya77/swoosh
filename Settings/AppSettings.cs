@@ -62,6 +62,11 @@ public sealed class AppSettings
     /// Clamped to a sane range at apply time.</summary>
     public double SwipeDownThreshold { get; set; } = 0.15;
 
+    /// <summary>Master switch for all five-finger gestures: five-finger drag to free-move, the
+    /// expand/pinch free resize, and the five-finger tap to center. When off, five-finger touches
+    /// are ignored. The five-finger tap-to-center also requires <see cref="CenterEnabled"/>.</summary>
+    public bool FiveFingerEnabled { get; set; } = true;
+
     /// <summary>Five-finger tap to center the window without resizing it.</summary>
     public bool CenterEnabled { get; set; } = true;
 

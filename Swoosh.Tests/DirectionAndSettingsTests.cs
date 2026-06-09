@@ -15,7 +15,7 @@ public class AppSettingsTests
         Assert.True(s.AnimateSnaps);
         Assert.Equal(0.10, s.Sensitivity, 5);
         Assert.Equal(0, s.GridSpacing);
-        Assert.Equal(0.8, s.CancelTimeoutSeconds, 5);
+        Assert.Equal(0.9, s.CancelTimeoutSeconds, 5);
         Assert.False(s.LivePreview);
         Assert.False(s.LaunchAtLogin);
         Assert.Equal("#0A84FF", s.OverlayColor);
