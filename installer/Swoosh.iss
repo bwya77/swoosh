@@ -66,13 +66,20 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 ; the app persists the LaunchAtLogin setting and registers the Run key itself (the app
 ; stays the single owner of that key). runasoriginaluser drops admin so the tray app and
 ; its per-user settings run as the actual user, not the elevated installer account.
-Filename: "{app}\Swoosh.exe"; Parameters: "--enable-startup"; Description: "Launch Swoosh"; Tasks: startupwithwindows; Flags: nowait postinstall skipifsilent runasoriginaluser
-Filename: "{app}\Swoosh.exe"; Description: "Launch Swoosh"; Tasks: not startupwithwindows; Flags: nowait postinstall skipifsilent runasoriginaluser
+; shellexec is REQUIRED because Swoosh.exe is a UIAccess app (uiAccess="true" in its
+; manifest, so it can control elevated windows). Windows refuses to start a UIAccess
+; binary via CreateProcess/CreateProcessAsUser (ERROR_ELEVATION_REQUIRED / code 740) unless
+; the caller holds SeTcbPrivilege; it must be launched through ShellExecuteEx instead, which
+; is the same path the Start menu and a double-click use. runasoriginaluser keeps that
+; shell-launch at the user's normal (medium) integrity rather than the installer's admin.
+Filename: "{app}\Swoosh.exe"; Parameters: "--enable-startup"; Description: "Launch Swoosh"; Tasks: startupwithwindows; Flags: nowait postinstall skipifsilent runasoriginaluser shellexec
+Filename: "{app}\Swoosh.exe"; Description: "Launch Swoosh"; Tasks: not startupwithwindows; Flags: nowait postinstall skipifsilent runasoriginaluser shellexec
 ; Silent in-app update path: the postinstall checkbox above is skipped under /SILENT and
 ; /VERYSILENT, so relaunch Swoosh explicitly here. The app reconciles its own launch-at-login
 ; from settings on startup, so no --enable-startup is needed. runasoriginaluser returns to the
-; invoking user since the installer runs elevated.
-Filename: "{app}\Swoosh.exe"; Flags: nowait runasoriginaluser; Check: WizardSilent
+; invoking user since the installer runs elevated; shellexec is required for the UIAccess
+; binary (see above).
+Filename: "{app}\Swoosh.exe"; Flags: nowait runasoriginaluser shellexec; Check: WizardSilent
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
