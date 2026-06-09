@@ -717,6 +717,14 @@
                             </Grid>
                         </Border>
 
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,8,0,0">
+                            <FontIcon Glyph="&#xE815;" FontSize="16" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                            <TextBlock Text="Five-finger gestures"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                        </StackPanel>
+
                         <Border Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
