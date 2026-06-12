@@ -21,7 +21,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260508005" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260529003" />
   </ItemGroup>
 
   <!-- Copy the app icon next to the exe so the window can set its title-bar/taskbar
