@@ -6,11 +6,11 @@ the [README](../README.md).
 
 ## Gestures in detail
 
-All gestures begin with the cursor over a window's titlebar. A translucent
-preview (or, if you turn on live preview, the real window) shows where the
-window will land. Lift your fingers to commit, or press Esc to cancel. Resting
-your fingers still for the cancel timeout (0.8 seconds by default) drops the
-window into the current zone.
+All touchpad gestures begin with the cursor over a window's titlebar. A
+translucent preview (or, if you turn on live preview, the real window) shows
+where the window will land. Lift your fingers to commit, or press Esc to cancel.
+Resting your fingers still for the cancel timeout (0.8 seconds by default) drops
+the window into the current zone.
 
 ### Two-finger snap
 
@@ -63,6 +63,20 @@ neighbors. Only directions that have a real monitor are drawn, and the one you
 are aiming at lights up. The window keeps its relative position and size, so a
 left-half window stays a left-half window and a maximized window stays
 maximized.
+
+### Mouse button HUD
+
+If you are using a mouse instead of the touchpad, Settings > Snapping has an
+optional Mouse button HUD. Choose Middle button or Right click, then hold that
+button over a titlebar, move toward a snap direction, and release to commit.
+Right click is only intercepted after the cursor is confirmed to be over a
+manageable titlebar, so normal context menus keep working elsewhere.
+
+The mouse path shares the same snap mapping, HUD theme, per-gesture enable
+settings, minimize/close chooser, and focus behavior as touchpad gestures. A
+still press-and-hold enters the same hold HUD path as the touchpad: move left or
+right to target virtual desktops or the optional app switcher, or hold the
+configured Move to display modifier to show the physical monitor map.
 
 ### Five-finger free move
 

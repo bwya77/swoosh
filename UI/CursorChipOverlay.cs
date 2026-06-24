@@ -595,7 +595,7 @@ public sealed class CursorChipOverlay
     /// options emerging beneath it. Choose mode shows both circles and highlights the leaned-toward
     /// one; Close mode shows a single red close circle. Selection brightens the chosen circle (accent
     /// fill + white glyph for minimize, full-opacity red for close) and dims the other.</summary>
-    public void ShowDownChooser(bool chooseMode, bool closePicked)
+    public void ShowDownChooser(bool chooseMode, bool closePicked, (int x, int y)? fixedCursor = null)
     {
         SyncSystemTheme();
         SyncAccentColor();
@@ -633,7 +633,7 @@ public sealed class CursorChipOverlay
             }
             _lastKey = key;
         }
-        Place(_chooserDesignW, _chooserDesignH, _chooserBasePx());
+        Place(_chooserDesignW, _chooserDesignH, _chooserBasePx(), fixedCursor);
 
         // The circles "emerge" downward out of the greyed HUD square the first time the chooser
         // appears in a gesture; subsequent updates (lean changes) keep them steady.
@@ -1134,6 +1134,16 @@ public sealed class CursorChipOverlay
     // -------------------------------------------------------------------------
     public void ShowSnap(SnapZone zone, double progress)
     {
+        ShowSnapCore(zone, progress, null);
+    }
+
+    public void ShowSnapAt(SnapZone zone, double progress, Win32.POINT cursor)
+    {
+        ShowSnapCore(zone, progress, (cursor.X, cursor.Y));
+    }
+
+    private void ShowSnapCore(SnapZone zone, double progress, (int x, int y)? fixedCursor)
+    {
         SyncSystemTheme();
         SyncAccentColor();
         EnsureWindow();
@@ -1147,7 +1157,7 @@ public sealed class CursorChipOverlay
             UpdateSingleFill(zone);
             _lastKey = key;
         }
-        Place(SingleCanvasW, CanvasH);
+        Place(SingleCanvasW, CanvasH, fixedCursor: fixedCursor);
     }
 
     private void UpdateSingleFill(SnapZone zone) => UpdateSingleFillFrac(ZoneFraction(zone), zone == SnapZone.Center);
@@ -1155,6 +1165,16 @@ public sealed class CursorChipOverlay
     /// <summary>Show the chip highlighting an arbitrary fractional rect of the screen
     /// (used for the pinch-in restore preview, whose target isn't a fixed snap zone).</summary>
     public void ShowFraction(double x0, double y0, double x1, double y1, double progress)
+    {
+        ShowFractionCore(x0, y0, x1, y1, progress, null);
+    }
+
+    public void ShowFractionAt(double x0, double y0, double x1, double y1, double progress, Win32.POINT cursor)
+    {
+        ShowFractionCore(x0, y0, x1, y1, progress, (cursor.X, cursor.Y));
+    }
+
+    private void ShowFractionCore(double x0, double y0, double x1, double y1, double progress, (int x, int y)? fixedCursor)
     {
         EnsureWindow();
         if (_win == null) return;
@@ -1167,7 +1187,7 @@ public sealed class CursorChipOverlay
             UpdateSingleFillFrac((x0, y0, x1, y1), rounded: true);
             _lastKey = key;
         }
-        Place(SingleCanvasW, CanvasH);
+        Place(SingleCanvasW, CanvasH, fixedCursor: fixedCursor);
     }
 
     private void UpdateSingleFillFrac((double, double, double, double)? frac, bool rounded)

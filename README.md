@@ -11,8 +11,8 @@
 [![Sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-db61a2?logo=githubsponsors)](https://github.com/sponsors/bwya77)
 
 Swoosh brings macOS Swish style window management to Windows. Hover your cursor
-over a window's titlebar, then use simple Precision Touchpad gestures to snap,
-move, and resize it. Inspired by the macOS app
+over a window's titlebar, then use simple Precision Touchpad gestures or the
+optional mouse-button HUD to snap, move, and resize it. Inspired by the macOS app
 [Swish](https://highlyopinionated.co/swish/).
 
 ## See it in action
@@ -68,6 +68,11 @@ Two-finger swipe:
 
 A few more:
 
+- Mouse-only mode: in Settings > Snapping, turn on Mouse button HUD and choose
+  Middle button or Right click. Hold that button over a titlebar, move toward a
+  snap direction, and release to drop the window. Hold still first to show the
+  virtual desktop/app-switcher HUD, or hold the move-to-display modifier to show
+  the physical monitor map.
 - Pinch out to go fullscreen, pinch in to restore.
 - Hold Shift (configurable) while swiping to snap to a 3x3 grid of thirds.
 - Hold two fingers, then swipe to move the window to another monitor or virtual
@@ -101,6 +106,8 @@ Open Settings from the tray icon. You can:
 - Adjust touch sensitivity, grid spacing, and the cancel timeout.
 - Turn on live preview, where the real window moves as you swipe instead of a
   translucent overlay.
+- Turn on Mouse button HUD for mouse-only snapping, with Middle button or Right
+  click as the trigger.
 - Switch apps instead of desktops, so the hold-then-swipe gesture flips through
   your open apps and focuses the one you pick.
 - Pick the overlay color or follow your Windows accent color.

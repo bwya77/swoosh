@@ -16,6 +16,7 @@ public sealed class SwooshController : IDisposable
     private readonly GestureEngine _gestures = new();
     private readonly WindowSnapper _snapper = new();
     private readonly HotkeyListener _hotkeys;
+    private readonly MouseGestureListener _mouse;
     private readonly PreviewOverlay _preview = new();
     private readonly CursorChipOverlay _chip = new();
     private readonly DemoOverlay _demo = new();
@@ -91,6 +92,26 @@ public sealed class SwooshController : IDisposable
     private bool _moveCursor;
     private double _curFracX, _curFracY;
     private bool _haveCurFrac;
+
+    // Mouse middle-button HUD: press over a titlebar, drag to aim a snap direction, release to commit.
+    private bool _mouseHudActive;
+    private Win32.POINT _mouseStart;
+    private Win32.POINT _mouseHudAnchor;
+    private SwipeDirection _mouseDir = SwipeDirection.None;
+    private readonly System.Windows.Threading.DispatcherTimer _mouseHoldTimer = new();
+    private MouseHoldMode _mouseHoldMode = MouseHoldMode.None;
+    private int _mouseHoldAim;
+    private MonitorDirection? _mouseMonitorDir;
+    private double _mouseHoldDelayMs = 300;
+    private const double MouseGesturePixels = 120.0;
+    private const double MouseDeadPixels = 14.0;
+
+    private enum MouseHoldMode
+    {
+        None,
+        Desktop,
+        Monitor,
+    }
 
     // Preview destination desktop: when on, the virtual-desktop strip HUD highlights the
     // neighbour you are leaning toward (where the window will land) instead of the current
@@ -194,6 +215,9 @@ public sealed class SwooshController : IDisposable
         _touchpad.PhantomRejection = s.PhantomRejection;
         _livePreview = s.LivePreview;
         _moveCursor = s.MoveCursor;
+        _mouse.Enabled = s.MouseMiddleButtonHudEnabled;
+        _mouse.Button = s.MouseHudTriggerButton;
+        if (!s.MouseMiddleButtonHudEnabled && _mouseHudActive) CancelMouseHud();
         _previewDeskDest = s.PreviewDesktopDestination;
         _createDesktopOverflow = s.CreateDesktopOnOverflow;
         _appSwitch = s.AppSwitchOnHold;
@@ -201,6 +225,7 @@ public sealed class SwooshController : IDisposable
         // force commit-on-release whenever app mode is on; otherwise follow the desktop preview pref.
         _gestures.DesktopMoveOnRelease = s.AppSwitchOnHold || s.PreviewDesktopDestination;
         _gestures.HoldDelayMs = (long)Math.Round(Math.Clamp(s.DesktopHoldDelaySeconds, 0.1, 1.0) * 1000);
+        _mouseHoldDelayMs = _gestures.HoldDelayMs;
     }
 
     /// <summary>Resolve a swipe to a zone, honoring the thirds modifier if held.</summary>
@@ -227,6 +252,302 @@ public sealed class SwooshController : IDisposable
     // Latest raw swipe vector (signed, pad-normalized; Y grows downward), tracked so
     // thirds targets can be chosen by magnitude at both preview and commit time.
     private double _lastVecX, _lastVecY;
+
+    private bool OnMouseMiddleDown(Win32.POINT pt)
+    {
+        if (_armed || _free || _axisResize || _mouseHudActive) return false;
+
+        _target = _snapper.ArmTarget(out string diag);
+        if (_target == IntPtr.Zero)
+        {
+            Log.Write($"MouseHud not-armed {diag}");
+            return false;
+        }
+
+        _mouseStart = pt;
+        _mouseHudAnchor = pt;
+        _mouseDir = SwipeDirection.None;
+        _mouseHoldMode = MouseHoldMode.None;
+        _mouseHoldAim = 0;
+        _mouseMonitorDir = null;
+        _mouseHudActive = true;
+        _armed = true;
+        _targetWasMax = WindowSnapper.IsMaximized(_target);
+        _maxRestored = false;
+        _liveMoved = false;
+        _liveZone = SnapZone.None;
+        _downLatched = false;
+        _downEngaged = false;
+        _downPickClose = false;
+        _downMaxY = 0;
+        _lastVecX = _lastVecY = 0;
+        CaptureCursorFraction();
+
+        _preview.Hide();
+        ShowMouseSnap(SnapZone.None, 0);
+        _mouseHoldTimer.Stop();
+        _mouseHoldTimer.Interval = TimeSpan.FromMilliseconds(_mouseHoldDelayMs);
+        _mouseHoldTimer.Start();
+        Log.Write($"MouseHud began hwnd=0x{_target.ToInt64():X} {diag}");
+        return true;
+    }
+
+    private void OnMouseMoved(Win32.POINT pt)
+    {
+        if (!_mouseHudActive || !_armed) return;
+        if (Win32.IsKeyDown(Win32.VK_ESCAPE))
+        {
+            CancelMouseHud();
+            return;
+        }
+
+        double dxPx = pt.X - _mouseStart.X;
+        double dyPx = pt.Y - _mouseStart.Y;
+        double dist = Math.Sqrt(dxPx * dxPx + dyPx * dyPx);
+        _lastVecX = dxPx / MouseGesturePixels;
+        _lastVecY = dyPx / MouseGesturePixels;
+        _downMaxY = Math.Max(_downMaxY, _lastVecY);
+
+        if (_mouseHoldMode != MouseHoldMode.None)
+        {
+            UpdateMouseHold(dxPx, dyPx);
+            return;
+        }
+
+        if (dist < MouseDeadPixels)
+        {
+            _mouseDir = SwipeDirection.None;
+            _preview.Hide();
+            ShowMouseSnap(SnapZone.None, 0);
+            return;
+        }
+        _mouseHoldTimer.Stop();
+
+        _mouseDir = GestureEngine.Classify(_lastVecX, _lastVecY);
+        double progress = Math.Clamp(dist / MouseGesturePixels, 0, 1);
+        var zone = MapZone(_mouseDir);
+
+        if (_minimizeEnabled && zone == SnapZone.Minimize && _downMaxY < _downThreshold)
+        {
+            _preview.Hide();
+            ShowMouseSnap(SnapZone.None, 0);
+            return;
+        }
+
+        bool downMode = _minimizeEnabled && _swipeDownMode != SwipeDownMode.Minimize;
+        if (downMode && (_downLatched || zone == SnapZone.Minimize))
+        {
+            HandleDownAction((_mouseHudAnchor.X, _mouseHudAnchor.Y));
+            return;
+        }
+
+        if (zone == SnapZone.None)
+        {
+            _preview.Hide();
+            ShowMouseSnap(SnapZone.None, 0);
+            return;
+        }
+
+        bool restoreInsteadOfMax = zone == SnapZone.Maximize && _targetWasMax;
+        bool showRestore = zone == SnapZone.Maximize && (_targetWasMax || _maxRestored);
+        _demo.SetCaption(showRestore ? "Restore" : ZoneCaption(zone));
+
+        var work = _snapper.WorkAreaFor(_target);
+        Win32.RECT rect = restoreInsteadOfMax && WindowSnapper.TryGetRestoreRect(_target, out var rr)
+            ? rr
+            : zone == SnapZone.Minimize ? MinimizeHint(work) : WindowSnapper.ZoneRect(work, zone);
+        _preview.ShowZone(rect, progress);
+        ShowMouseZoneOrRestoreChip(zone, progress, showRestore);
+    }
+
+    private void OnMouseMiddleUp(Win32.POINT pt)
+    {
+        if (!_mouseHudActive || !_armed) return;
+        _mouseHoldTimer.Stop();
+
+        if (_mouseHoldMode != MouseHoldMode.None)
+        {
+            double dxPx = pt.X - _mouseStart.X;
+            double dyPx = pt.Y - _mouseStart.Y;
+            UpdateMouseHold(dxPx, dyPx);
+            CommitMouseHold();
+            FinishMouseHud();
+            return;
+        }
+
+        OnMouseMoved(pt);
+        if (!_mouseHudActive || !_armed) return;
+
+        _preview.Hide();
+        _chip.Hide();
+
+        if (_downLatched)
+        {
+            CommitDownAction();
+            FinishMouseHud();
+            return;
+        }
+
+        var zone = _mouseDir == SwipeDirection.None ? SnapZone.None : MapZone(_mouseDir);
+        if (zone == SnapZone.Minimize && _minimizeEnabled && _downMaxY < _downThreshold)
+            zone = SnapZone.None;
+
+        if (zone != SnapZone.None)
+        {
+            if (zone == SnapZone.Maximize && _targetWasMax)
+            {
+                _snapper.RestoreFromMaximized(_target);
+                _demo.SetCaption("Restore");
+            }
+            else
+            {
+                _snapper.Apply(_target, zone);
+                _demo.SetCaption(ZoneCaption(zone));
+            }
+            _stats.Add();
+            if (zone != SnapZone.Minimize)
+            {
+                Win32.ForceForeground(_target);
+                MoveCursorToZone(zone);
+            }
+            else
+            {
+                FocusWindowUnderCursorAfterMinimize(_target);
+            }
+        }
+
+        FinishMouseHud();
+    }
+
+    private void OnMouseHoldTimer(object? sender, EventArgs e)
+    {
+        _mouseHoldTimer.Stop();
+        if (!_mouseHudActive || !_armed || _mouseDir != SwipeDirection.None) return;
+
+        _preview.Hide();
+        if (MonitorMoveActive)
+        {
+            _mouseHoldMode = MouseHoldMode.Monitor;
+            CacheMonitors();
+            ShowMonitorMapForTarget(null);
+            Log.Write("MouseHud hold -> monitor map");
+            return;
+        }
+
+        _mouseHoldMode = MouseHoldMode.Desktop;
+        OnHoldEngaged();
+        Log.Write("MouseHud hold -> desktop/app HUD");
+    }
+
+    private void UpdateMouseHold(double dxPx, double dyPx)
+    {
+        if (_mouseHoldMode == MouseHoldMode.Monitor)
+        {
+            double ax = Math.Abs(dxPx), ay = Math.Abs(dyPx);
+            if (Math.Max(ax, ay) < MouseDeadPixels)
+            {
+                _mouseMonitorDir = null;
+                OnMonitorMoveUpdated(null, 0);
+                return;
+            }
+
+            _mouseMonitorDir = ax >= ay
+                ? (dxPx >= 0 ? MonitorDirection.Right : MonitorDirection.Left)
+                : (dyPx >= 0 ? MonitorDirection.Down : MonitorDirection.Up);
+            double progress = Math.Clamp(Math.Max(ax, ay) / MouseGesturePixels, 0, 1);
+            OnMonitorMoveUpdated(_mouseMonitorDir, progress);
+            return;
+        }
+
+        if (_mouseHoldMode == MouseHoldMode.Desktop)
+        {
+            double progress = Math.Clamp(Math.Abs(dxPx) / MouseGesturePixels, 0, 1);
+            DesktopDirection? lean = null;
+            if (dxPx > MouseGesturePixels * 0.3) lean = DesktopDirection.Right;
+            else if (dxPx < -MouseGesturePixels * 0.3) lean = DesktopDirection.Left;
+            _mouseHoldAim = (int)Math.Round(dxPx / MouseGesturePixels, MidpointRounding.AwayFromZero);
+            OnHoldUpdated(lean, progress, _mouseHoldAim);
+        }
+    }
+
+    private void CommitMouseHold()
+    {
+        if (_mouseHoldMode == MouseHoldMode.Monitor)
+        {
+            if (_mouseMonitorDir is { } md) OnMonitorMove(md);
+            else OnGestureCancelled();
+            return;
+        }
+
+        if (_mouseHoldMode == MouseHoldMode.Desktop)
+        {
+            if (_mouseHoldAim != 0) OnDesktopHoldCommit(_mouseHoldAim);
+            else OnGestureCancelled();
+        }
+    }
+
+    private void CaptureCursorFraction()
+    {
+        _haveCurFrac = false;
+        if (!_moveCursor || _target == IntPtr.Zero ||
+            !Win32.GetCursorPos(out var cp) || !Win32.GetWindowRect(_target, out var wr) ||
+            wr.Width <= 0 || wr.Height <= 0)
+            return;
+
+        _curFracX = Math.Clamp((cp.X - wr.Left) / (double)wr.Width, 0, 1);
+        _curFracY = Math.Clamp((cp.Y - wr.Top) / (double)wr.Height, 0, 1);
+        _haveCurFrac = true;
+    }
+
+    private void ShowMouseSnap(SnapZone zone, double progress)
+    {
+        _chip.ShowSnapAt(zone, progress, _mouseHudAnchor);
+    }
+
+    private void ShowMouseZoneOrRestoreChip(SnapZone zone, double progress, bool restore)
+    {
+        if (restore && WindowSnapper.TryGetRestoreRect(_target, out var rr))
+        {
+            var work = _snapper.WorkAreaFor(_target);
+            double w = Math.Max(1, work.Width), h = Math.Max(1, work.Height);
+            double x0 = Math.Clamp((rr.Left - work.Left) / w, 0, 1);
+            double y0 = Math.Clamp((rr.Top - work.Top) / h, 0, 1);
+            double x1 = Math.Clamp((rr.Right - work.Left) / w, 0, 1);
+            double y1 = Math.Clamp((rr.Bottom - work.Top) / h, 0, 1);
+            _chip.ShowFractionAt(x0, y0, x1, y1, progress, _mouseHudAnchor);
+        }
+        else
+        {
+            ShowMouseSnap(zone, progress);
+        }
+    }
+
+    private void CancelMouseHud()
+    {
+        _mouseHoldTimer.Stop();
+        _preview.Hide();
+        _chip.Hide();
+        _demo.SetCaption(null);
+        FinishMouseHud();
+    }
+
+    private void FinishMouseHud()
+    {
+        _mouseHoldTimer.Stop();
+        _preview.Hide();
+        _chip.Hide();
+        _mouseHudActive = false;
+        _armed = false;
+        _liveMoved = false;
+        _downLatched = false;
+        _downEngaged = false;
+        _downRetracting = false;
+        _mouseDir = SwipeDirection.None;
+        _mouseHoldMode = MouseHoldMode.None;
+        _mouseHoldAim = 0;
+        _mouseMonitorDir = null;
+        _haveCurFrac = false;
+    }
 
     // Thirds magnitude bands: below Center -> centered third; below Big -> two-thirds
     // to that side; beyond -> one-third pinned to that edge.
@@ -276,7 +597,9 @@ public sealed class SwooshController : IDisposable
         _window = new MessageWindow("SwooshMsgWindow");
         _touchpad = new RawTouchpadListener(_window);
         _hotkeys = new HotkeyListener(_window);
+        _mouse = new MouseGestureListener();
         Log.Write($"Controller up. msgHwnd=0x{_window.Handle.ToInt64():X} hotkeys={_hotkeys.RegisteredCount}");
+        _mouseHoldTimer.Tick += OnMouseHoldTimer;
 
         _touchpad.FrameDecoded += OnFrame;
         _gestures.GestureBegan += OnGestureBegan;
@@ -300,6 +623,9 @@ public sealed class SwooshController : IDisposable
         _gestures.AxisResizeDelta += OnAxisResizeDelta;
         _gestures.AxisResizeEnded += OnAxisResizeEnded;
         _hotkeys.Triggered += OnHotkey;
+        _mouse.MiddleDown += OnMouseMiddleDown;
+        _mouse.Moved += OnMouseMoved;
+        _mouse.MiddleUp += OnMouseMiddleUp;
     }
 
     private void OnFrame(TouchFrame frame)
@@ -656,7 +982,7 @@ public sealed class SwooshController : IDisposable
     /// <summary>Drive the down-swipe chooser/close HUD (rendered by the snap HUD so it matches
     /// its look). Latches the gesture so a sideways lean (to pick Close) is not reclassified as a
     /// quarter snap, and tracks the current pick (Choose mode leans left=minimize, right=close).</summary>
-    private void HandleDownAction()
+    private void HandleDownAction((int x, int y)? fixedCursor = null)
     {
         _downLatched = true;
         _downEngaged = true;
@@ -669,13 +995,13 @@ public sealed class SwooshController : IDisposable
         if (_swipeDownMode == SwipeDownMode.Close)
         {
             _downPickClose = true;
-            _chip.ShowDownChooser(chooseMode: false, closePicked: true);
+            _chip.ShowDownChooser(chooseMode: false, closePicked: true, fixedCursor);
             _demo.SetCaption("Close");
         }
         else // Choose
         {
             _downPickClose = _lastVecX > ChooseBand;
-            _chip.ShowDownChooser(chooseMode: true, closePicked: _downPickClose);
+            _chip.ShowDownChooser(chooseMode: true, closePicked: _downPickClose, fixedCursor);
             _demo.SetCaption(_downPickClose ? "Close" : "Minimize");
         }
     }
@@ -694,6 +1020,7 @@ public sealed class SwooshController : IDisposable
         else
         {
             _snapper.Apply(_target, SnapZone.Minimize);
+            FocusWindowUnderCursorAfterMinimize(_target);
             Log.Write($"DownAction: minimize hwnd=0x{_target.ToInt64():X}");
         }
         _stats.Add();
@@ -798,9 +1125,23 @@ public sealed class SwooshController : IDisposable
             Win32.ForceForeground(_target);
             MoveCursorToZone(zone);
         }
+        else
+        {
+            FocusWindowUnderCursorAfterMinimize(_target);
+        }
         _armed = false;
         _liveMoved = false;
         _haveCurFrac = false;
+    }
+
+    private void FocusWindowUnderCursorAfterMinimize(IntPtr minimized)
+    {
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            IntPtr h = _snapper.WindowUnderCursor();
+            if (h != IntPtr.Zero && h != minimized && _snapper.IsManageable(h))
+                Win32.ForceForeground(h);
+        }), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     /// <summary>If the move-cursor setting is on, move the cursor to the same fraction of
@@ -1311,6 +1652,8 @@ public sealed class SwooshController : IDisposable
         if (zone != SnapZone.None) _stats.Add();
         if (zone != SnapZone.Minimize)
             Win32.ForceForeground(h);
+        else
+            FocusWindowUnderCursorAfterMinimize(h);
     }
 
     private static Win32.RECT MinimizeHint(Win32.RECT work)
@@ -1327,6 +1670,9 @@ public sealed class SwooshController : IDisposable
     {
         _touchpad.Dispose();
         _hotkeys.Dispose();
+        _mouse.Dispose();
+        _mouseHoldTimer.Stop();
+        _mouseHoldTimer.Tick -= OnMouseHoldTimer;
         _preview.Close();
         _chip.Close();
         _demo.Close();

@@ -368,6 +368,8 @@ public sealed partial class MainWindow : Window
         UpdateCancelTimeoutLabel(CancelTimeoutSlider.Value);
         LivePreviewToggle.IsOn = s.LivePreview;
         MoveCursorToggle.IsOn = s.MoveCursor;
+        MouseHudToggle.IsOn = s.MouseMiddleButtonHudEnabled;
+        MouseHudButtonCombo.SelectedIndex = s.MouseHudTriggerButton == MouseHudTriggerButton.Right ? 1 : 0;
         ResizeHorizontalToggle.IsOn = s.ResizeHorizontalEnabled;
         ResizeVerticalToggle.IsOn = s.ResizeVerticalEnabled;
         FiveFingerToggle.IsOn = s.FiveFingerEnabled;
@@ -431,6 +433,10 @@ public sealed partial class MainWindow : Window
         CancelTimeoutSeconds = CancelTimeoutSlider.Value,
         LivePreview = LivePreviewToggle.IsOn,
         MoveCursor = MoveCursorToggle.IsOn,
+        MouseMiddleButtonHudEnabled = MouseHudToggle.IsOn,
+        MouseHudTriggerButton = MouseHudButtonCombo.SelectedIndex == 1
+            ? MouseHudTriggerButton.Right
+            : MouseHudTriggerButton.Middle,
         ResizeHorizontalEnabled = ResizeHorizontalToggle.IsOn,
         ResizeVerticalEnabled = ResizeVerticalToggle.IsOn,
         FiveFingerEnabled = FiveFingerToggle.IsOn,
@@ -477,6 +483,8 @@ public sealed partial class MainWindow : Window
     private void OnHudBackgroundChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnHudSizeChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
+
+    private void OnMouseHudButtonChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnSensitivityChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 
@@ -1064,6 +1072,7 @@ public sealed partial class MainWindow : Window
             var card = new Button
             {
                 Width = 150,
+                MinHeight = 132,
                 Padding = new Thickness(12),
                 CornerRadius = new CornerRadius(8),
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
@@ -1082,7 +1091,7 @@ public sealed partial class MainWindow : Window
             Layout = new UniformGridLayout
             {
                 MinItemWidth = 150,
-                MinItemHeight = 118,
+                MinItemHeight = 132,
                 MinColumnSpacing = 10,
                 MinRowSpacing = 10,
                 ItemsJustification = UniformGridLayoutItemsJustification.Center,

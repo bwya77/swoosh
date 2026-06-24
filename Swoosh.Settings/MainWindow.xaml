@@ -89,6 +89,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <Image x:Name="GeneralLogo" Grid.Column="0" Width="64" Height="64"
                                    Stretch="Uniform" VerticalAlignment="Center" />
@@ -664,6 +665,35 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
                                 <ToggleSwitch x:Name="MoveCursorToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE962;" FontSize="18" Margin="0,0,16,0"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Mouse button HUD" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Mouse-only mode: hold the selected button over a titlebar, drag toward a snap direction, then release to apply it. Right-click is only taken over when the gesture starts on a titlebar."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12"
+                                            Margin="12,0,0,0" VerticalAlignment="Center">
+                                    <ComboBox x:Name="MouseHudButtonCombo" MinWidth="160"
+                                              VerticalAlignment="Center" SelectionChanged="OnMouseHudButtonChanged">
+                                        <ComboBoxItem Content="Middle button" />
+                                        <ComboBoxItem Content="Right click" />
+                                    </ComboBox>
+                                    <ToggleSwitch x:Name="MouseHudToggle" VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                                </StackPanel>
                             </Grid>
                         </Border>
 

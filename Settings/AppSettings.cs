@@ -34,6 +34,13 @@ public enum SwipeDownMode
     Choose,
 }
 
+/// <summary>Mouse button that can summon the mouse-only snap HUD.</summary>
+public enum MouseHudTriggerButton
+{
+    Middle,
+    Right,
+}
+
 /// <summary>User-facing, persisted application settings (serialized to JSON).</summary>
 public sealed class AppSettings
 {
@@ -151,6 +158,14 @@ public sealed class AppSettings
     /// spot it was grabbed at (for example the middle of the titlebar stays under the
     /// cursor in the window's new position). Off by default.</summary>
     public bool MoveCursor { get; set; } = false;
+
+    /// <summary>When true, pressing and holding the middle mouse button over a titlebar
+    /// shows the snap HUD and lets mouse movement aim the same snap gestures. This is
+    /// independent from touchpad gesture input and is off by default.</summary>
+    public bool MouseMiddleButtonHudEnabled { get; set; } = false;
+
+    /// <summary>Which mouse button triggers the mouse-only snap HUD.</summary>
+    public MouseHudTriggerButton MouseHudTriggerButton { get; set; } = MouseHudTriggerButton.Middle;
 
     /// <summary>When true, a virtual-desktop move (hold then swipe) previews the destination
     /// desktop: the strip HUD highlights the desktop the window will jump to as you aim across
