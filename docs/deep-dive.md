@@ -64,13 +64,12 @@ are aiming at lights up. The window keeps its relative position and size, so a
 left-half window stays a left-half window and a maximized window stays
 maximized.
 
-### Mouse button HUD
+### Mouse middle-button HUD
 
 If you are using a mouse instead of the touchpad, Settings > Snapping has an
-optional Mouse button HUD. Choose Middle button or Right click, then hold that
-button over a titlebar, move toward a snap direction, and release to commit.
-Right click is only intercepted after the cursor is confirmed to be over a
-manageable titlebar, so normal context menus keep working elsewhere.
+optional Mouse middle-button HUD. Hold the middle mouse button over a titlebar,
+move toward a snap direction, and release to commit. Swoosh observes the middle
+button without swallowing normal mouse clicks.
 
 The mouse path shares the same snap mapping, HUD theme, per-gesture enable
 settings, minimize/close chooser, and focus behavior as touchpad gestures. A

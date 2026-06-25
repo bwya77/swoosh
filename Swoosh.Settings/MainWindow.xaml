@@ -679,21 +679,14 @@
                                           VerticalAlignment="Center"
                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Mouse button HUD" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="Mouse-only mode: hold the selected button over a titlebar, drag toward a snap direction, then release to apply it. Right-click is only taken over when the gesture starts on a titlebar."
+                                    <TextBlock Text="Mouse middle-button HUD" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Mouse-only mode: hold the middle button over a titlebar, drag toward a snap direction, then release to apply it. Swoosh observes the button but does not capture normal mouse clicks."
                                                TextWrapping="Wrap"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12"
-                                            Margin="12,0,0,0" VerticalAlignment="Center">
-                                    <ComboBox x:Name="MouseHudButtonCombo" MinWidth="160"
-                                              VerticalAlignment="Center" SelectionChanged="OnMouseHudButtonChanged">
-                                        <ComboBoxItem Content="Middle button" />
-                                        <ComboBoxItem Content="Right click" />
-                                    </ComboBox>
-                                    <ToggleSwitch x:Name="MouseHudToggle" VerticalAlignment="Center" Toggled="OnSettingToggled" />
-                                </StackPanel>
+                                <ToggleSwitch x:Name="MouseHudToggle" Grid.Column="2" Margin="12,0,0,0"
+                                              VerticalAlignment="Center" Toggled="OnSettingToggled" />
                             </Grid>
                         </Border>
 

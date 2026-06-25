@@ -68,11 +68,11 @@ Two-finger swipe:
 
 A few more:
 
-- Mouse-only mode: in Settings > Snapping, turn on Mouse button HUD and choose
-  Middle button or Right click. Hold that button over a titlebar, move toward a
-  snap direction, and release to drop the window. Hold still first to show the
-  virtual desktop/app-switcher HUD, or hold the move-to-display modifier to show
-  the physical monitor map.
+- Mouse-only mode: in Settings > Snapping, turn on Mouse middle-button HUD.
+  Hold the middle button over a titlebar, move toward a snap direction, and
+  release to drop the window. Hold still first to show the virtual
+  desktop/app-switcher HUD, or hold the move-to-display modifier to show the
+  physical monitor map.
 - Pinch out to go fullscreen, pinch in to restore.
 - Hold Shift (configurable) while swiping to snap to a 3x3 grid of thirds.
 - Hold two fingers, then swipe to move the window to another monitor or virtual
@@ -106,8 +106,7 @@ Open Settings from the tray icon. You can:
 - Adjust touch sensitivity, grid spacing, and the cancel timeout.
 - Turn on live preview, where the real window moves as you swipe instead of a
   translucent overlay.
-- Turn on Mouse button HUD for mouse-only snapping, with Middle button or Right
-  click as the trigger.
+- Turn on Mouse middle-button HUD for mouse-only snapping.
 - Switch apps instead of desktops, so the hold-then-swipe gesture flips through
   your open apps and focuses the one you pick.
 - Pick the overlay color or follow your Windows accent color.

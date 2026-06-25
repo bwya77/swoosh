@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Swoosh.Native;
-using Swoosh.Settings;
 
 namespace Swoosh.Input;
 
@@ -13,10 +12,10 @@ public sealed class MouseGestureListener : IDisposable
     private readonly Win32.LowLevelMouseProc _proc;
     private IntPtr _hook;
     private bool _tracking;
-    private MouseHudTriggerButton _trackingButton;
+    private long _trackingStartedMs;
+    private const long ButtonStateGraceMs = 150;
 
     public bool Enabled { get; set; }
-    public MouseHudTriggerButton Button { get; set; } = MouseHudTriggerButton.Middle;
 
     public event Func<Win32.POINT, bool>? MiddleDown;
     public event Action<Win32.POINT>? Moved;
@@ -41,7 +40,15 @@ public sealed class MouseGestureListener : IDisposable
         int msg = wParam.ToInt32();
         var data = Marshal.PtrToStructure<Win32.MSLLHOOKSTRUCT>(lParam);
 
-        if (msg == DownMessage(Button))
+        if (_tracking && msg != Win32.WM_MBUTTONUP &&
+            Environment.TickCount64 - _trackingStartedMs > ButtonStateGraceMs &&
+            !Win32.IsKeyDown(Win32.VK_MBUTTON))
+        {
+            _tracking = false;
+            MiddleUp?.Invoke(data.pt);
+        }
+
+        if (msg == Win32.WM_MBUTTONDOWN)
         {
             if (!Enabled || (data.flags & Win32.LLMHF_INJECTED) != 0)
                 return Win32.CallNextHookEx(_hook, nCode, wParam, lParam);
@@ -49,8 +56,7 @@ public sealed class MouseGestureListener : IDisposable
             if (MiddleDown?.Invoke(data.pt) == true)
             {
                 _tracking = true;
-                _trackingButton = Button;
-                return new IntPtr(1);
+                _trackingStartedMs = Environment.TickCount64;
             }
         }
         else if (_tracking && msg == Win32.WM_MOUSEMOVE)
@@ -58,27 +64,14 @@ public sealed class MouseGestureListener : IDisposable
             Moved?.Invoke(data.pt);
             return Win32.CallNextHookEx(_hook, nCode, wParam, lParam);
         }
-        else if (_tracking && msg == UpMessage(_trackingButton))
+        else if (_tracking && msg == Win32.WM_MBUTTONUP)
         {
             _tracking = false;
             MiddleUp?.Invoke(data.pt);
-            return new IntPtr(1);
         }
 
         return Win32.CallNextHookEx(_hook, nCode, wParam, lParam);
     }
-
-    private static int DownMessage(MouseHudTriggerButton button) => button switch
-    {
-        MouseHudTriggerButton.Right => Win32.WM_RBUTTONDOWN,
-        _ => Win32.WM_MBUTTONDOWN,
-    };
-
-    private static int UpMessage(MouseHudTriggerButton button) => button switch
-    {
-        MouseHudTriggerButton.Right => Win32.WM_RBUTTONUP,
-        _ => Win32.WM_MBUTTONUP,
-    };
 
     public void Dispose()
     {

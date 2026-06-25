@@ -219,7 +219,6 @@ public sealed class SwooshController : IDisposable
         _livePreview = s.LivePreview;
         _moveCursor = s.MoveCursor;
         _mouse.Enabled = s.MouseMiddleButtonHudEnabled;
-        _mouse.Button = s.MouseHudTriggerButton;
         if (!s.MouseMiddleButtonHudEnabled && _mouseHudActive) CancelMouseHud();
         _previewDeskDest = s.PreviewDesktopDestination;
         _createDesktopOverflow = s.CreateDesktopOnOverflow;

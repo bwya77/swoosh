@@ -369,7 +369,6 @@ public sealed partial class MainWindow : Window
         LivePreviewToggle.IsOn = s.LivePreview;
         MoveCursorToggle.IsOn = s.MoveCursor;
         MouseHudToggle.IsOn = s.MouseMiddleButtonHudEnabled;
-        MouseHudButtonCombo.SelectedIndex = s.MouseHudTriggerButton == MouseHudTriggerButton.Right ? 1 : 0;
         ResizeHorizontalToggle.IsOn = s.ResizeHorizontalEnabled;
         ResizeVerticalToggle.IsOn = s.ResizeVerticalEnabled;
         FiveFingerToggle.IsOn = s.FiveFingerEnabled;
@@ -434,9 +433,6 @@ public sealed partial class MainWindow : Window
         LivePreview = LivePreviewToggle.IsOn,
         MoveCursor = MoveCursorToggle.IsOn,
         MouseMiddleButtonHudEnabled = MouseHudToggle.IsOn,
-        MouseHudTriggerButton = MouseHudButtonCombo.SelectedIndex == 1
-            ? MouseHudTriggerButton.Right
-            : MouseHudTriggerButton.Middle,
         ResizeHorizontalEnabled = ResizeHorizontalToggle.IsOn,
         ResizeVerticalEnabled = ResizeVerticalToggle.IsOn,
         FiveFingerEnabled = FiveFingerToggle.IsOn,
@@ -483,8 +479,6 @@ public sealed partial class MainWindow : Window
     private void OnHudBackgroundChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnHudSizeChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
-
-    private void OnMouseHudButtonChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnSensitivityChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 
