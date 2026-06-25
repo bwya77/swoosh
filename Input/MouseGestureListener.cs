@@ -88,4 +88,9 @@ public sealed class MouseGestureListener : IDisposable
             _hook = IntPtr.Zero;
         }
     }
+
+    public void CancelTracking()
+    {
+        _tracking = false;
+    }
 }

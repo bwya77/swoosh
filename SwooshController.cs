@@ -99,10 +99,13 @@ public sealed class SwooshController : IDisposable
     private Win32.POINT _mouseHudAnchor;
     private SwipeDirection _mouseDir = SwipeDirection.None;
     private readonly System.Windows.Threading.DispatcherTimer _mouseHoldTimer = new();
+    private readonly System.Windows.Threading.DispatcherTimer _mouseFailSafeTimer = new();
     private MouseHoldMode _mouseHoldMode = MouseHoldMode.None;
     private int _mouseHoldAim;
+    private DesktopDirection? _mouseDesktopLean;
     private MonitorDirection? _mouseMonitorDir;
     private double _mouseHoldDelayMs = 300;
+    private const double MouseFailSafeSeconds = 8.0;
     private const double MouseGesturePixels = 120.0;
     private const double MouseDeadPixels = 14.0;
 
@@ -269,6 +272,7 @@ public sealed class SwooshController : IDisposable
         _mouseDir = SwipeDirection.None;
         _mouseHoldMode = MouseHoldMode.None;
         _mouseHoldAim = 0;
+        _mouseDesktopLean = null;
         _mouseMonitorDir = null;
         _mouseHudActive = true;
         _armed = true;
@@ -288,6 +292,8 @@ public sealed class SwooshController : IDisposable
         _mouseHoldTimer.Stop();
         _mouseHoldTimer.Interval = TimeSpan.FromMilliseconds(_mouseHoldDelayMs);
         _mouseHoldTimer.Start();
+        _mouseFailSafeTimer.Stop();
+        _mouseFailSafeTimer.Start();
         Log.Write($"MouseHud began hwnd=0x{_target.ToInt64():X} {diag}");
         return true;
     }
@@ -361,6 +367,13 @@ public sealed class SwooshController : IDisposable
     }
 
     private void OnMouseMiddleUp(Win32.POINT pt)
+    {
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
+            new Action(() => CompleteMouseMiddleUp(pt)),
+            System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void CompleteMouseMiddleUp(Win32.POINT pt)
     {
         if (!_mouseHudActive || !_armed) return;
         _mouseHoldTimer.Stop();
@@ -439,6 +452,16 @@ public sealed class SwooshController : IDisposable
         Log.Write("MouseHud hold -> desktop/app HUD");
     }
 
+    private void OnMouseFailSafeTimer(object? sender, EventArgs e)
+    {
+        _mouseFailSafeTimer.Stop();
+        if (!_mouseHudActive) return;
+
+        Log.Write("MouseHud failsafe reset");
+        _mouse.CancelTracking();
+        CancelMouseHud();
+    }
+
     private void UpdateMouseHold(double dxPx, double dyPx)
     {
         if (_mouseHoldMode == MouseHoldMode.Monitor)
@@ -465,7 +488,10 @@ public sealed class SwooshController : IDisposable
             DesktopDirection? lean = null;
             if (dxPx > MouseGesturePixels * 0.3) lean = DesktopDirection.Right;
             else if (dxPx < -MouseGesturePixels * 0.3) lean = DesktopDirection.Left;
+            _mouseDesktopLean = lean;
             _mouseHoldAim = (int)Math.Round(dxPx / MouseGesturePixels, MidpointRounding.AwayFromZero);
+            if (_mouseHoldAim == 0 && lean is { } leaned)
+                _mouseHoldAim = leaned == DesktopDirection.Right ? 1 : -1;
             OnHoldUpdated(lean, progress, _mouseHoldAim);
         }
     }
@@ -525,6 +551,7 @@ public sealed class SwooshController : IDisposable
     private void CancelMouseHud()
     {
         _mouseHoldTimer.Stop();
+        _mouseFailSafeTimer.Stop();
         _preview.Hide();
         _chip.Hide();
         _demo.SetCaption(null);
@@ -534,6 +561,7 @@ public sealed class SwooshController : IDisposable
     private void FinishMouseHud()
     {
         _mouseHoldTimer.Stop();
+        _mouseFailSafeTimer.Stop();
         _preview.Hide();
         _chip.Hide();
         _mouseHudActive = false;
@@ -545,6 +573,7 @@ public sealed class SwooshController : IDisposable
         _mouseDir = SwipeDirection.None;
         _mouseHoldMode = MouseHoldMode.None;
         _mouseHoldAim = 0;
+        _mouseDesktopLean = null;
         _mouseMonitorDir = null;
         _haveCurFrac = false;
     }
@@ -600,6 +629,8 @@ public sealed class SwooshController : IDisposable
         _mouse = new MouseGestureListener();
         Log.Write($"Controller up. msgHwnd=0x{_window.Handle.ToInt64():X} hotkeys={_hotkeys.RegisteredCount}");
         _mouseHoldTimer.Tick += OnMouseHoldTimer;
+        _mouseFailSafeTimer.Interval = TimeSpan.FromSeconds(MouseFailSafeSeconds);
+        _mouseFailSafeTimer.Tick += OnMouseFailSafeTimer;
 
         _touchpad.FrameDecoded += OnFrame;
         _gestures.GestureBegan += OnGestureBegan;
@@ -1673,6 +1704,8 @@ public sealed class SwooshController : IDisposable
         _mouse.Dispose();
         _mouseHoldTimer.Stop();
         _mouseHoldTimer.Tick -= OnMouseHoldTimer;
+        _mouseFailSafeTimer.Stop();
+        _mouseFailSafeTimer.Tick -= OnMouseFailSafeTimer;
         _preview.Close();
         _chip.Close();
         _demo.Close();
