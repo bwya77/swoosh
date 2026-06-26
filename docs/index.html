@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Swoosh - Touchpad and mouse window snapping for Windows</title>
-<meta name="description" content="Swoosh brings macOS Swish-style window snapping to Windows. Hover a titlebar and use Precision Touchpad gestures or the optional mouse-button HUD to snap, move, and resize windows." />
-<meta property="og:title" content="Swoosh - Touchpad and mouse window snapping for Windows" />
-<meta property="og:description" content="Snap, move, and resize windows with Precision Touchpad gestures or a mouse-button HUD. Free and open source." />
+<title>Swoosh - Arrange your desktop with a simple swipe</title>
+<meta name="description" content="Swoosh helps Windows users arrange every window with a simple touchpad swipe or mouse HUD, so they can stop dragging windows and stay focused." />
+<meta property="og:title" content="Swoosh - Arrange your desktop with a simple swipe" />
+<meta property="og:description" content="Stop dragging windows around. Swoosh lets you snap, move, resize, and switch windows with simple gestures on Windows." />
 <meta property="og:image" content="https://bwya77.github.io/swoosh/media/swoosh-256.png" />
 <meta property="og:type" content="website" />
 <link rel="icon" type="image/png" href="media/swoosh-256.png" />
@@ -74,6 +74,7 @@
   }
   .hero img.logo { width: 96px; height: 96px; filter: drop-shadow(0 10px 30px rgba(10,132,255,0.35)); }
   .hero h1 { font-size: clamp(38px, 6vw, 64px); margin: 18px 0 8px; letter-spacing: -0.02em; }
+  .hero .eyebrow { color: var(--accent-2); font-size: 13px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin: 0; }
   .hero p.tag { font-size: clamp(16px, 2.4vw, 21px); color: var(--muted); max-width: 640px; margin: 0 auto 12px; }
   .hero .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
   .pill { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); margin-top: 18px; }
@@ -85,6 +86,20 @@
   section { padding: 72px 0; }
   section h2 { font-size: clamp(26px, 4vw, 36px); text-align: center; margin: 0 0 6px; letter-spacing: -0.01em; }
   section .sub { text-align: center; color: var(--muted); max-width: 620px; margin: 0 auto 40px; }
+
+  /* Story blocks */
+  .story-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .story-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+  .story-card .step { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: rgba(10,132,255,0.16); color: var(--accent-2); font-weight: 800; margin-bottom: 12px; }
+  .story-card h3 { margin: 0 0 6px; font-size: 17px; }
+  .story-card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .callout {
+    max-width: 820px; margin: 0 auto; padding: 30px; border-radius: calc(var(--radius) + 4px);
+    background: linear-gradient(135deg, rgba(10,132,255,0.18), rgba(90,200,250,0.08));
+    border: 1px solid var(--border-strong); text-align: center;
+  }
+  .callout h2 { margin-bottom: 10px; }
+  .callout p { color: var(--muted); margin: 0 auto 22px; max-width: 620px; }
 
   /* Gesture grid */
   .gestures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
@@ -125,6 +140,7 @@
   .center { text-align: center; }
   @media (max-width: 760px) {
     .features { grid-template-columns: 1fr; }
+    .story-grid { grid-template-columns: 1fr; }
     .gestures { grid-template-columns: 1fr; }
     .gcard.wide { grid-column: auto; }
     .install-cards { grid-template-columns: 1fr; }
@@ -153,7 +169,8 @@
   <div class="wrap nav">
     <span class="brand"><img src="media/swoosh-256.png" alt="Swoosh logo" /> Swoosh <a class="beta-badge" href="https://github.com/bwya77/swoosh/releases/latest" title="Swoosh is in open beta">Beta</a></span>
     <span class="spacer"></span>
-    <a class="navlink" href="#gestures">Gestures</a>
+    <a class="navlink" href="#problem">Why Swoosh</a>
+    <a class="navlink" href="#plan">How it works</a>
     <a class="navlink" href="#features">Features</a>
     <a class="navlink" href="#install">Install</a>
     <a class="navlink" href="https://github.com/bwya77/swoosh">GitHub</a>
@@ -164,11 +181,12 @@
 <section class="hero">
   <div class="wrap">
     <img class="logo" src="media/swoosh-1024.png" alt="Swoosh" />
-    <h1>Window snapping, by touch or mouse.</h1>
-    <p class="tag">Swoosh brings macOS Swish-style window management to Windows. Hover a titlebar, then snap, move, and resize windows with simple Precision Touchpad gestures or the optional mouse-button HUD.</p>
+    <p class="eyebrow">Window management for Windows</p>
+    <h1>Arrange your desktop with a simple swipe.</h1>
+    <p class="tag">Swoosh helps you stop dragging windows around and stay in flow. Hover a titlebar, swipe on your Precision Touchpad, and your window lands exactly where you want it.</p>
     <div class="ctas">
-      <a class="btn primary" id="hero-download" href="https://github.com/bwya77/swoosh/releases/latest">Download for Windows</a>
-      <a class="btn" href="https://github.com/bwya77/swoosh">View on GitHub</a>
+      <a class="btn primary" id="hero-download" href="https://github.com/bwya77/swoosh/releases/latest">Download Swoosh</a>
+      <a class="btn" href="#gestures">See how it works</a>
     </div>
     <div class="pill" id="version-pill">Free and open source &middot; Windows 10 and 11 &middot; x64 and ARM64</div>
     <div class="badges">
@@ -179,9 +197,57 @@
   </div>
 </section>
 
+<section id="problem">
+  <div class="wrap">
+    <h2>Your windows should not slow you down</h2>
+    <p class="sub">Dragging, resizing, and hunting through open apps breaks focus. Swoosh gives you a faster path: one gesture to put the right window in the right place.</p>
+    <div class="story-grid">
+      <div class="story-card">
+        <div class="step">1</div>
+        <h3>Stop wrestling with layouts</h3>
+        <p>Skip the tiny titlebar grabs, edge dragging, and repeated resize adjustments.</p>
+      </div>
+      <div class="story-card">
+        <div class="step">2</div>
+        <h3>Keep your hands in flow</h3>
+        <p>Use natural touchpad gestures, or the mouse HUD when you are not on a touchpad.</p>
+      </div>
+      <div class="story-card">
+        <div class="step">3</div>
+        <h3>Get back to the work</h3>
+        <p>Arrange, switch, and move windows without losing your train of thought.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="plan" style="background: linear-gradient(180deg, var(--bg), var(--bg-2));">
+  <div class="wrap">
+    <h2>Three steps to a desktop that stays organized</h2>
+    <p class="sub">Swoosh is designed to feel obvious the first time you use it.</p>
+    <div class="story-grid">
+      <div class="story-card">
+        <div class="step">1</div>
+        <h3>Download Swoosh</h3>
+        <p>Install the signed Windows build, or run the portable version.</p>
+      </div>
+      <div class="story-card">
+        <div class="step">2</div>
+        <h3>Hover a titlebar</h3>
+        <p>Point at the window you want to arrange. Swoosh stays out of the way until then.</p>
+      </div>
+      <div class="story-card">
+        <div class="step">3</div>
+        <h3>Swipe into place</h3>
+        <p>Snap, maximize, resize, or move the window across desktops and monitors.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="gestures">
   <div class="wrap">
-    <h2>See it in action</h2>
+    <h2>See your workspace fall into place</h2>
     <p class="sub">Two fingers on your touchpad, or a held mouse button with the optional HUD, and the window goes where you aim. These are the live animations from the in-app tutorial.</p>
     <div class="gestures">
       <div class="gcard">
@@ -212,9 +278,9 @@
   </div>
 </section>
 
-<section id="features" style="background: linear-gradient(180deg, var(--bg), var(--bg-2));">
+<section id="features">
   <div class="wrap">
-    <h2>Built for the trackpad, ready for the mouse</h2>
+    <h2>Everything you need to stay in flow</h2>
     <p class="sub">Fast, native, and quietly out of the way until you need it.</p>
     <div class="features">
       <div class="fcard"><div class="ic">&#x1F446;</div><h3>Raw touchpad input</h3><p>Reads multi-finger contacts straight from the Precision Touchpad for precise, low-latency gestures.</p></div>
@@ -231,7 +297,7 @@
 
 <section id="install">
   <div class="wrap">
-    <h2>Get Swoosh</h2>
+    <h2>Start swooshing in minutes</h2>
     <p class="sub">No .NET needed. The runtime is bundled. Everything is code signed.</p>
     <div class="install-cards">
       <div class="icard">
@@ -250,6 +316,16 @@
           <a class="btn" id="dl-zip-arm64" href="https://github.com/bwya77/swoosh/releases/latest">Portable zip for ARM64</a>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="callout">
+      <h2>Stop dragging. Start swooshing.</h2>
+      <p>Download Swoosh and turn everyday window management into a quick, natural gesture.</p>
+      <a class="btn primary" id="final-download" href="https://github.com/bwya77/swoosh/releases/latest">Download Swoosh</a>
     </div>
   </div>
 </section>
@@ -289,7 +365,7 @@
         function applyPrimary(isArm) {
           var setup = find(isArm ? /SwooshSetup-.*-win-arm64\.exe$/ : /SwooshSetup-.*-win-x64\.exe$/)
             || find(/SwooshSetup-.*-win-x64\.exe$/);
-          ["hero-download", "nav-download"].forEach(function (id) {
+          ["hero-download", "nav-download", "final-download"].forEach(function (id) {
             var el = document.getElementById(id); if (el && setup) el.href = setup;
           });
           var hero = document.getElementById("hero-download");
