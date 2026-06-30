@@ -1,11 +1,12 @@
 using System.Drawing.Imaging;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Swoosh.Settings;
 
 namespace Swoosh.SettingsApp;
 
-public sealed record InstalledAppEntry(string DisplayName, string ProcessName, string IconPath);
+public sealed record InstalledAppEntry(string DisplayName, string ProcessName, string IconPath, string Source);
 
 public static class InstalledAppCatalog
 {
@@ -32,7 +33,47 @@ public static class InstalledAppCatalog
             if (entries.ContainsKey(key)) continue;
 
             string iconPath = ExtractIcon(target, processName);
-            entries[key] = new InstalledAppEntry(displayName, processName, iconPath);
+            entries[key] = new InstalledAppEntry(displayName, processName, iconPath, "Installed");
+        }
+
+        return entries.Values
+            .OrderBy(static app => app.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(static app => app.ProcessName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public static IReadOnlyList<InstalledAppEntry> LoadRunning()
+    {
+        Directory.CreateDirectory(IconCacheDir);
+
+        var entries = new Dictionary<string, InstalledAppEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                if (process.MainWindowHandle == IntPtr.Zero)
+                    continue;
+
+                string processName = AppCompatibility.NormalizeProcessName(process.ProcessName);
+                if (processName.Length == 0 || entries.ContainsKey(processName))
+                    continue;
+
+                string displayName = process.MainWindowTitle.Trim();
+                if (displayName.Length == 0)
+                    displayName = process.ProcessName;
+
+                string iconPath = "";
+                try
+                {
+                    string? exePath = process.MainModule?.FileName;
+                    if (!string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath))
+                        iconPath = ExtractIcon(exePath, processName);
+                }
+                catch (InvalidOperationException) { }
+                catch (System.ComponentModel.Win32Exception) { }
+
+                entries[processName] = new InstalledAppEntry(displayName, processName, iconPath, "Running");
+            }
         }
 
         return entries.Values

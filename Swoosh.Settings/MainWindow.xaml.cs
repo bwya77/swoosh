@@ -48,6 +48,12 @@ public sealed partial class MainWindow : Window
     private const double SvW = 220, SvH = 140, HueW = 220, HueH = 16, ThumbSize = 14;
 
     // ---- Per-gesture enable tiles (Swish-style) ----------------------------
+    private enum AppPickerSource
+    {
+        Installed,
+        Running,
+    }
+
     private sealed record GestureDef(string Key, string Name, string Gesture,
         double X0, double Y0, double X1, double Y1, bool Grid = false);
 
@@ -64,7 +70,9 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, bool> _gestureEnabled = new();
     private readonly List<(string Key, Button Card)> _gestureCards = new();
     private readonly List<InstalledAppEntry> _installedApps = new();
+    private readonly List<InstalledAppEntry> _runningApps = new();
     private readonly HashSet<string> _selectedCompatibilityApps = new(StringComparer.OrdinalIgnoreCase);
+    private AppPickerSource _appPickerSource = AppPickerSource.Installed;
     private bool _syncingAdditionalApps;
     private TextBlock? _minimizeCardTitle; // the "Swipe down" card's title, retitled per SwipeDownAction
 
@@ -82,7 +90,7 @@ public sealed partial class MainWindow : Window
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
-        ResizeForDpi(1060, 840);
+        ResizeForDpi(1120, 940);
         EnforceMinimumSize(600, 480);
         TrySetWindowIcon();
 
@@ -97,7 +105,11 @@ public sealed partial class MainWindow : Window
         // Adaptive header: hide the Home status chips when the window is too narrow to
         // show them without crowding the title, mirroring how Settings reflows. Done in
         // code because AdaptiveTrigger is unreliable for content nested in a NavigationView.
-        RootGrid.SizeChanged += (_, e) => UpdateHeaderAdaptive(e.NewSize.Width);
+        RootGrid.SizeChanged += (_, e) =>
+        {
+            UpdateHeaderAdaptive(e.NewSize.Width);
+            UpdateAppsListHeight();
+        };
 
         VersionText.Text = $"v{_updates.CurrentVersion}";
         HeroVersion.Text = $"v{_updates.CurrentVersion}";
@@ -127,9 +139,11 @@ public sealed partial class MainWindow : Window
             HighlightSwatch(_overlayColor);
             RefreshSecondaryTexts();
             UpdateHeaderAdaptive(RootGrid.ActualWidth);
+            UpdateAppsListHeight();
 
             await RunUpdateCheck();
             await LoadInstalledApps();
+            await LoadRunningApps();
         };
     }
 
@@ -152,6 +166,17 @@ public sealed partial class MainWindow : Window
     {
         if (HeaderStats != null)
             HeaderStats.Visibility = width >= 820 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateAppsListHeight()
+    {
+        if (AppsPane == null || MainScrollViewer == null) return;
+
+        double viewport = MainScrollViewer.ViewportHeight;
+        if (viewport <= 0) viewport = RootGrid?.ActualHeight - 40 ?? 0;
+        if (viewport <= 0) return;
+
+        AppsPane.Height = Math.Max(620, viewport - 40);
     }
 
     /// <summary>Theme-aware "secondary" text colour for code-created TextBlocks.
@@ -507,12 +532,29 @@ public sealed partial class MainWindow : Window
     private void OnAppCompatibilityAppsChanged(object sender, TextChangedEventArgs e)
     {
         if (_syncingAdditionalApps) return;
+        SyncSelectedAppsFromAdditionalText();
+        RefreshSelectedAppsSummary();
+        RefreshInstalledAppsList();
         SaveIfReady();
     }
 
     private void OnInstalledAppsSearchChanged(object sender, TextChangedEventArgs e) => RefreshInstalledAppsList();
 
-    private async void OnRefreshInstalledApps(object sender, RoutedEventArgs e) => await LoadInstalledApps();
+    private async void OnRefreshInstalledApps(object sender, RoutedEventArgs e)
+    {
+        _appPickerSource = AppPickerSource.Installed;
+        await LoadInstalledApps();
+        RefreshInstalledAppsList();
+    }
+
+    private async void OnRefreshRunningApps(object sender, RoutedEventArgs e)
+    {
+        _appPickerSource = AppPickerSource.Running;
+        await LoadRunningApps();
+        RefreshInstalledAppsList();
+    }
+
+    private void OnAdditionalAppsSizeChanged(object sender, SizeChangedEventArgs e) => UpdateAppsListHeight();
 
     private void OnHudBackgroundChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
@@ -659,10 +701,10 @@ public sealed partial class MainWindow : Window
 
     private IEnumerable<string> AdditionalCompatibilityApps()
     {
-        var installed = _installedApps
+        var visiblePickerApps = _installedApps.Concat(_runningApps)
             .Select(static app => app.ProcessName)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return _selectedCompatibilityApps.Where(name => !installed.Contains(name));
+        return _selectedCompatibilityApps.Where(name => !visiblePickerApps.Contains(name));
     }
 
     private void SyncAdditionalAppsBox()
@@ -678,6 +720,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SyncSelectedAppsFromAdditionalText()
+    {
+        var pickerProcesses = _installedApps.Concat(_runningApps)
+            .Select(static app => app.ProcessName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var pickerSelections = _selectedCompatibilityApps
+            .Where(pickerProcesses.Contains)
+            .ToArray();
+
+        _selectedCompatibilityApps.Clear();
+        foreach (string processName in pickerSelections)
+            _selectedCompatibilityApps.Add(processName);
+        foreach (string processName in AppCompatibility.ParseProcessList(AppCompatibilityAppsBox.Text))
+            _selectedCompatibilityApps.Add(processName);
+    }
+
     private void SetCompatibilityAppSelected(string processName, bool selected)
     {
         processName = AppCompatibility.NormalizeProcessName(processName);
@@ -687,6 +745,9 @@ public sealed partial class MainWindow : Window
             _selectedCompatibilityApps.Add(processName);
         else
             _selectedCompatibilityApps.Remove(processName);
+
+        SyncAdditionalAppsBox();
+        RefreshSelectedAppsSummary();
     }
 
     private async Task LoadInstalledApps()
@@ -702,6 +763,7 @@ public sealed partial class MainWindow : Window
             _installedApps.Clear();
             _installedApps.AddRange(apps);
             SyncAdditionalAppsBox();
+            RefreshSelectedAppsSummary();
             RefreshInstalledAppsList();
         }
         catch
@@ -714,12 +776,39 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async Task LoadRunningApps()
+    {
+        if (InstalledAppsStatus == null) return;
+
+        InstalledAppsStatus.Text = "Loading running apps...";
+        RefreshRunningAppsButton.IsEnabled = false;
+
+        try
+        {
+            var apps = await Task.Run(InstalledAppCatalog.LoadRunning);
+            _runningApps.Clear();
+            _runningApps.AddRange(apps);
+            SyncAdditionalAppsBox();
+            RefreshSelectedAppsSummary();
+            RefreshInstalledAppsList();
+        }
+        catch
+        {
+            InstalledAppsStatus.Text = "Running apps could not be loaded.";
+        }
+        finally
+        {
+            RefreshRunningAppsButton.IsEnabled = true;
+        }
+    }
+
     private void RefreshInstalledAppsList()
     {
         if (InstalledAppsList == null || InstalledAppsStatus == null) return;
 
         string query = InstalledAppsSearchBox?.Text?.Trim() ?? "";
-        var filtered = _installedApps
+        var allApps = CurrentPickerApps();
+        var filtered = allApps
             .Where(app => query.Length == 0 ||
                           app.DisplayName.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
                           app.ProcessName.Contains(query, StringComparison.OrdinalIgnoreCase))
@@ -730,11 +819,118 @@ public sealed partial class MainWindow : Window
         foreach (var app in filtered)
             InstalledAppsList.Items.Add(BuildInstalledAppRow(app));
 
-        InstalledAppsStatus.Text = _installedApps.Count == 0
-            ? "No installed apps found yet."
+        string sourceLabel = _appPickerSource == AppPickerSource.Running ? "running" : "installed";
+        InstalledAppsStatus.Text = allApps.Count == 0
+            ? EmptyPickerMessage()
             : filtered.Length == 0
-                ? "No apps match your search."
-                : $"Showing {filtered.Length:N0} of {_installedApps.Count:N0} installed apps.";
+                ? $"No {sourceLabel} apps match your search. If this is a portable app, run it and click Running, or add its process name under Additional apps."
+                : $"Showing {filtered.Length:N0} of {allApps.Count:N0} {sourceLabel} apps ({_selectedCompatibilityApps.Count:N0} selected).";
+    }
+
+    private IReadOnlyList<InstalledAppEntry> CurrentPickerApps() =>
+        (_appPickerSource == AppPickerSource.Running ? _runningApps : _installedApps)
+            .OrderBy(static app => app.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(static app => app.ProcessName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private string EmptyPickerMessage() => _appPickerSource == AppPickerSource.Running
+        ? "No running apps found yet. Start the portable app and click Running again, or add its process name under Additional apps."
+        : "No installed apps found yet. Portable apps may not have Start Menu shortcuts; run the app and click Running, or add its process name under Additional apps.";
+
+    private IReadOnlyList<InstalledAppEntry> CombinedPickerApps()
+    {
+        var byProcess = new Dictionary<string, InstalledAppEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var app in _installedApps)
+            byProcess.TryAdd(app.ProcessName, app);
+        foreach (var app in _runningApps)
+        {
+            if (!byProcess.TryGetValue(app.ProcessName, out var existing))
+            {
+                byProcess[app.ProcessName] = app;
+            }
+            else if (!existing.Source.Contains("Running", StringComparison.OrdinalIgnoreCase))
+            {
+                byProcess[app.ProcessName] = existing with { Source = $"{existing.Source} + Running" };
+            }
+        }
+
+        return byProcess.Values
+            .OrderBy(static app => app.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(static app => app.ProcessName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private void RefreshSelectedAppsSummary()
+    {
+        if (SelectedAppsSummary == null || SelectedAppsPillPanel == null) return;
+
+        var selected = _selectedCompatibilityApps
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        SelectedAppsSummary.Text = selected.Length == 0
+            ? "No apps selected"
+            : $"{selected.Length:N0} app{(selected.Length == 1 ? "" : "s")} selected";
+
+        SelectedAppsPillPanel.Children.Clear();
+        if (selected.Length == 0)
+        {
+            SelectedAppsPillPanel.Children.Add(new TextBlock
+            {
+                Text = "Select apps below, or add a portable app under Additional apps.",
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = SecondaryTextBrush(),
+            });
+            return;
+        }
+
+        foreach (string processName in selected.Take(12))
+            SelectedAppsPillPanel.Children.Add(BuildSelectedAppPill(processName));
+
+        if (selected.Length > 12)
+        {
+            SelectedAppsPillPanel.Children.Add(new TextBlock
+            {
+                Text = $"+{selected.Length - 12:N0} more",
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = SecondaryTextBrush(),
+            });
+        }
+    }
+
+    private FrameworkElement BuildSelectedAppPill(string processName)
+    {
+        var label = DisplayNameForProcess(processName);
+        var button = new Button
+        {
+            MinWidth = 0,
+            Padding = new Thickness(10, 4, 8, 4),
+            CornerRadius = new CornerRadius(16),
+            Content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                Children =
+                {
+                    new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center },
+                    new FontIcon { Glyph = "\uE711", FontSize = 10, VerticalAlignment = VerticalAlignment.Center },
+                }
+            },
+        };
+        ToolTipService.SetToolTip(button, $"Remove {processName}");
+        button.Click += (_, _) =>
+        {
+            SetCompatibilityAppSelected(processName, false);
+            RefreshInstalledAppsList();
+            SaveIfReady();
+        };
+        return button;
+    }
+
+    private string DisplayNameForProcess(string processName)
+    {
+        var app = CombinedPickerApps().FirstOrDefault(a => a.ProcessName.Equals(processName, StringComparison.OrdinalIgnoreCase));
+        return app?.DisplayName ?? processName;
     }
 
     private FrameworkElement BuildInstalledAppRow(InstalledAppEntry app)
@@ -767,7 +963,7 @@ public sealed partial class MainWindow : Window
         });
         text.Children.Add(new TextBlock
         {
-            Text = app.ProcessName,
+            Text = $"{app.ProcessName} · {app.Source}",
             FontSize = 12,
             TextTrimming = TextTrimming.CharacterEllipsis,
             Foreground = SecondaryTextBrush(),
@@ -1442,6 +1638,9 @@ public sealed partial class MainWindow : Window
         AppearancePane.Visibility = tag == "appearance" ? Visibility.Visible : Visibility.Collapsed;
         UpdatesPane.Visibility = tag == "updates" ? Visibility.Visible : Visibility.Collapsed;
         AboutPane.Visibility = tag == "about" ? Visibility.Visible : Visibility.Collapsed;
+        MainScrollViewer.VerticalScrollBarVisibility = tag == "apps"
+            ? ScrollBarVisibility.Disabled
+            : ScrollBarVisibility.Auto;
 
         FrameworkElement active = tag switch
         {
@@ -1452,6 +1651,7 @@ public sealed partial class MainWindow : Window
             "about" => AboutPane,
             _ => GeneralPane,
         };
+        UpdateAppsListHeight();
         AnimatePaneIn(active);
     }
 

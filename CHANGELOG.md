@@ -4,6 +4,7 @@ What's new in Swoosh. Newest changes are at the top.
 
 ## June 2026
 
+- Polished the Apps compatibility page: selected apps now show a count and removable pill row, Installed and Running are separate picker views, currently running apps can be selected for portable apps without Start Menu shortcuts, the Additional apps helper explains manual process names, and the app list stays anchored to the bottom of the page as the Settings window grows.
 - New Apps page in Settings for app compatibility rules. If an app uses its titlebar for its own gestures, such as a browser with scrollable tabs, you can search installed apps with icons and enable compatibility for that app. Listed apps can either ignore Swoosh completely or require a selected modifier key before Swoosh arms over their titlebars. If that modifier overlaps another enabled Swoosh modifier, Settings gently warns you without blocking the choice.
 - The Mouse HUD is now middle-button only and non-capturing. Settings now shows a single Mouse middle-button HUD toggle, and Swoosh observes the middle button without swallowing normal mouse clicks.
 - Fixed follow-up issues in the new Mouse middle-button HUD: a fail-safe clears the mouse HUD if Windows ever misses a release event, and virtual-desktop/app-switch commits are now deferred out of the low-level mouse hook so Windows accepts the COM call. This makes mouse press-and-hold virtual desktop moves behave like the touchpad hold gesture.

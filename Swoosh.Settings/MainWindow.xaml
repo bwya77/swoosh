@@ -82,7 +82,7 @@
                 </StackPanel>
             </muxc:NavigationView.PaneFooter>
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer x:Name="MainScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <Grid Margin="28,12,28,28">
                     <!-- GENERAL -->
                     <StackPanel x:Name="GeneralPane" Spacing="14">
@@ -912,10 +912,17 @@
                     </StackPanel>
 
                     <!-- APPS -->
-                    <StackPanel x:Name="AppsPane" Spacing="12" Visibility="Collapsed">
-                        <TextBlock Text="Apps" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+                    <Grid x:Name="AppsPane" RowSpacing="12" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
 
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,2,0,0">
+                        <TextBlock Grid.Row="0" Text="Apps" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="2,2,0,0">
                             <FontIcon Glyph="&#xE71E;" FontSize="16" VerticalAlignment="Center"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                             <TextBlock Text="Compatibility"
@@ -923,7 +930,7 @@
                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                         </StackPanel>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border Grid.Row="2" Style="{StaticResource Card}">
                             <StackPanel Spacing="12">
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="How listed apps behave" Style="{StaticResource BodyStrongTextBlockStyle}" />
@@ -991,47 +998,79 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
-                            <StackPanel Spacing="12">
-                                <StackPanel Spacing="2">
+                        <Border Grid.Row="3" Style="{StaticResource Card}" VerticalAlignment="Stretch">
+                            <Grid RowSpacing="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Grid.Row="0" Spacing="2">
                                     <TextBlock Text="Apps" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="Turn compatibility on for apps where titlebar gestures should not be mistaken for Swoosh gestures."
+                                    <TextBlock Text="Search installed apps or currently running apps, then select where titlebar gestures should not be mistaken for Swoosh gestures."
                                                TextWrapping="Wrap"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
 
-                                <Grid ColumnSpacing="12">
+                                <StackPanel Grid.Row="1" Spacing="8">
+                                    <TextBlock x:Name="SelectedAppsSummary"
+                                               Text="No apps selected"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                  HorizontalScrollMode="Enabled"
+                                                  VerticalScrollBarVisibility="Disabled">
+                                        <StackPanel x:Name="SelectedAppsPillPanel"
+                                                    Orientation="Horizontal"
+                                                    Spacing="8" />
+                                    </ScrollViewer>
+                                </StackPanel>
+
+                                <Grid Grid.Row="2" ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBox x:Name="InstalledAppsSearchBox" Grid.Column="0"
-                                             PlaceholderText="Search installed apps"
+                                             PlaceholderText="Search installed and running apps"
                                              TextChanged="OnInstalledAppsSearchChanged" />
                                     <Button x:Name="RefreshInstalledAppsButton" Grid.Column="1"
                                             Click="OnRefreshInstalledApps"
                                             VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                                            <TextBlock Text="Refresh" VerticalAlignment="Center" />
+                                            <TextBlock Text="Installed" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button x:Name="RefreshRunningAppsButton" Grid.Column="2"
+                                            Click="OnRefreshRunningApps"
+                                            VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE768;" FontSize="14" />
+                                            <TextBlock Text="Running" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </Button>
                                 </Grid>
 
                                 <TextBlock x:Name="InstalledAppsStatus"
+                                           Grid.Row="3"
                                            Text="Loading installed apps..."
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                                <ListView x:Name="InstalledAppsList"
-                                          MaxHeight="320"
-                                          SelectionMode="None" />
-
-                                <Expander Header="Additional apps">
+                                <Expander x:Name="AdditionalAppsExpander"
+                                          Grid.Row="4"
+                                          Header="Additional apps"
+                                          SizeChanged="OnAdditionalAppsSizeChanged">
                                     <StackPanel Spacing="8">
-                                        <TextBlock Text="Add other process names, one per line."
+                                        <TextBlock Text="Portable apps and apps without Start Menu shortcuts may not appear below. If you do not see an app, run it and click Running, or add its process name here, one per line."
                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                   TextWrapping="Wrap"
                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <TextBox x:Name="AppCompatibilityAppsBox"
                                                  MinHeight="72"
@@ -1041,9 +1080,14 @@
                                                  TextChanged="OnAppCompatibilityAppsChanged" />
                                     </StackPanel>
                                 </Expander>
-                            </StackPanel>
+
+                                <ListView x:Name="InstalledAppsList"
+                                          Grid.Row="5"
+                                          VerticalAlignment="Stretch"
+                                          SelectionMode="None" />
+                            </Grid>
                         </Border>
-                    </StackPanel>
+                    </Grid>
 
                     <!-- APPEARANCE -->
                     <StackPanel x:Name="AppearancePane" Spacing="12" Visibility="Collapsed">
