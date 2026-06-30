@@ -45,6 +45,11 @@
                         <FontIcon Glyph="&#xE744;" />
                     </muxc:NavigationViewItem.Icon>
                 </muxc:NavigationViewItem>
+                <muxc:NavigationViewItem Content="Apps" Tag="apps">
+                    <muxc:NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE71E;" />
+                    </muxc:NavigationViewItem.Icon>
+                </muxc:NavigationViewItem>
                 <muxc:NavigationViewItem Content="Appearance" Tag="appearance">
                     <muxc:NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE790;" />
@@ -902,6 +907,140 @@
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- APPS -->
+                    <StackPanel x:Name="AppsPane" Spacing="12" Visibility="Collapsed">
+                        <TextBlock Text="Apps" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,2,0,0">
+                            <FontIcon Glyph="&#xE71E;" FontSize="16" VerticalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                            <TextBlock Text="Compatibility"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                        </StackPanel>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="12">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="How listed apps behave" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Use this for apps that put interactive controls in the titlebar, like browsers with scrollable tabs."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xE71E;" FontSize="18" Margin="0,0,16,0"
+                                              VerticalAlignment="Center"
+                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Compatibility mode" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Text="Ignore Swoosh in listed apps, or require a modifier before gestures arm there."
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ComboBox x:Name="AppCompatibilityModeCombo" Grid.Column="2" MinWidth="170"
+                                              VerticalAlignment="Center"
+                                              SelectionChanged="OnAppCompatibilityChanged">
+                                        <ComboBoxItem Content="Ignore Swoosh" />
+                                        <ComboBoxItem Content="Require modifier" />
+                                    </ComboBox>
+                                </Grid>
+
+                                <Grid x:Name="AppCompatibilityModifierRow">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Grid.Column="0" Glyph="&#xE765;" FontSize="18" Margin="0,0,16,0"
+                                              VerticalAlignment="Center"
+                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Required modifier" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Text="Hold this key to let Swoosh work in enabled compatibility apps."
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <ComboBox x:Name="AppCompatibilityModifierCombo" Grid.Column="2" MinWidth="120"
+                                              VerticalAlignment="Center"
+                                              SelectionChanged="OnAppCompatibilityChanged">
+                                        <ComboBoxItem Content="Shift" />
+                                        <ComboBoxItem Content="Ctrl" />
+                                        <ComboBoxItem Content="Alt" />
+                                    </ComboBox>
+                                </Grid>
+
+                                <muxc:InfoBar x:Name="AppCompatibilityWarning"
+                                              IsOpen="False"
+                                              Severity="Informational"
+                                              IsClosable="False"
+                                              Title="Modifier overlap"
+                                              Message="This modifier is already used by another Swoosh gesture." />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel Spacing="12">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Apps" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Turn compatibility on for apps where titlebar gestures should not be mistaken for Swoosh gestures."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="InstalledAppsSearchBox" Grid.Column="0"
+                                             PlaceholderText="Search installed apps"
+                                             TextChanged="OnInstalledAppsSearchChanged" />
+                                    <Button x:Name="RefreshInstalledAppsButton" Grid.Column="1"
+                                            Click="OnRefreshInstalledApps"
+                                            VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                            <TextBlock Text="Refresh" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <TextBlock x:Name="InstalledAppsStatus"
+                                           Text="Loading installed apps..."
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                                <ListView x:Name="InstalledAppsList"
+                                          MaxHeight="320"
+                                          SelectionMode="None" />
+
+                                <Expander Header="Additional apps">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="Add other process names, one per line."
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBox x:Name="AppCompatibilityAppsBox"
+                                                 MinHeight="72"
+                                                 AcceptsReturn="True"
+                                                 TextWrapping="NoWrap"
+                                                 PlaceholderText="example.exe"
+                                                 TextChanged="OnAppCompatibilityAppsChanged" />
+                                    </StackPanel>
+                                </Expander>
                             </StackPanel>
                         </Border>
                     </StackPanel>

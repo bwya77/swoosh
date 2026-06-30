@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace Swoosh.Settings;
 
 /// <summary>Which keyboard modifier switches snapping into Swish-style thirds.</summary>
@@ -6,6 +8,42 @@ public enum GridModifier
     Shift,
     Ctrl,
     Alt,
+}
+
+/// <summary>How Swoosh behaves over apps listed in <see cref="AppSettings.AppCompatibilityProcessNames"/>.</summary>
+public enum AppCompatibilityMode
+{
+    /// <summary>Never arm gestures over listed apps.</summary>
+    Exclude,
+    /// <summary>Only arm gestures over listed apps while the chosen compatibility modifier is held.</summary>
+    RequireModifier,
+}
+
+public static class AppCompatibility
+{
+    public static readonly string[] DefaultProcessNames = Array.Empty<string>();
+
+    public static IReadOnlyList<string> ParseProcessList(string text) =>
+        text.Split(new[] { '\r', '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(NormalizeProcessName)
+            .Where(static name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    public static string NormalizeProcessName(string processName)
+    {
+        string name = Path.GetFileName(processName.Trim().Trim('"')).Trim();
+        if (name.Length == 0) return string.Empty;
+        if (!name.Contains('.')) name += ".exe";
+        return name.ToLowerInvariant();
+    }
+
+    public static string FormatProcessList(IEnumerable<string> processNames) =>
+        string.Join(Environment.NewLine, processNames
+            .Select(NormalizeProcessName)
+            .Where(static name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase));
 }
 
 /// <summary>Backdrop theme for the gesture HUD (snap chip, desktop strip, monitor map).</summary>
@@ -112,6 +150,18 @@ public sealed class AppSettings
     /// <summary>Which modifier key engages move-to-display (Swish defaults to Alt).</summary>
     public GridModifier MonitorMoveModifier { get; set; } = GridModifier.Alt;
 
+    /// <summary>Process names where Swoosh should avoid interfering with app-native titlebar
+    /// gestures, such as scrollable browser tabs. Names are normalized as executable names.</summary>
+    public List<string> AppCompatibilityProcessNames { get; set; } =
+        AppCompatibility.DefaultProcessNames.ToList();
+
+    /// <summary>Whether listed apps are excluded entirely or require a modifier to arm Swoosh.</summary>
+    public AppCompatibilityMode AppCompatibilityMode { get; set; } = AppCompatibilityMode.Exclude;
+
+    /// <summary>Modifier that allows Swoosh to arm over listed apps when compatibility mode is
+    /// <see cref="AppCompatibilityMode.RequireModifier"/>.</summary>
+    public GridModifier AppCompatibilityModifier { get; set; } = GridModifier.Ctrl;
+
     /// <summary>How readily a slightly diagonal swipe lands a corner cell, 0 (forgiving)
     /// to 1 (twitchy). Lower values make sideways swipes ignore vertical drift.</summary>
     public double Sensitivity { get; set; } = 0.10;
@@ -180,5 +230,10 @@ public sealed class AppSettings
     /// Higher values make the HUD linger and fade more slowly. Range about 0.1 to 1.5s.</summary>
     public double HudFadeOutSeconds { get; set; } = 0.36;
 
-    public AppSettings Clone() => (AppSettings)MemberwiseClone();
+    public AppSettings Clone()
+    {
+        var clone = (AppSettings)MemberwiseClone();
+        clone.AppCompatibilityProcessNames = AppCompatibilityProcessNames.ToList();
+        return clone;
+    }
 }

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows.Threading;
 using Swoosh.Native;
+using Swoosh.Settings;
 
 namespace Swoosh.Snapping;
 
@@ -9,6 +10,21 @@ public sealed class WindowSnapper
 {
     /// <summary>Logical-pixel band below the top of a window treated as the titlebar.</summary>
     public int TitlebarHeight { get; set; } = 44;
+
+    private readonly HashSet<string> _appCompatibilityProcessNames = new(StringComparer.OrdinalIgnoreCase);
+    private AppCompatibilityMode _appCompatibilityMode = AppCompatibilityMode.Exclude;
+    private int _appCompatibilityModifierVk = Win32.VK_CONTROL;
+
+    public void ApplyAppCompatibility(IEnumerable<string> processNames, AppCompatibilityMode mode, int modifierVk)
+    {
+        _appCompatibilityProcessNames.Clear();
+        foreach (string name in processNames.Select(AppCompatibility.NormalizeProcessName))
+            if (name.Length > 0)
+                _appCompatibilityProcessNames.Add(name);
+
+        _appCompatibilityMode = mode;
+        _appCompatibilityModifierVk = modifierVk;
+    }
 
     public IntPtr WindowUnderCursor()
     {
@@ -33,6 +49,8 @@ public sealed class WindowSnapper
             diag = $"not-manageable hwnd=0x{h.ToInt64():X} class='{Win32.GetWindowClass(h)}'";
             return IntPtr.Zero;
         }
+        if (CompatibilityBlocks(h, out diag))
+            return IntPtr.Zero;
 
         int top = WindowTop(h);
         if (!Win32.GetWindowRect(h, out var r)) { diag = "no-rect"; return IntPtr.Zero; }
@@ -78,6 +96,50 @@ public sealed class WindowSnapper
             return false;
         long style = Win32.GetWindowLong(hwnd, Win32.GWL_STYLE);
         return (style & Win32.WS_CAPTION) != 0; // has a titlebar
+    }
+
+    private bool CompatibilityBlocks(IntPtr hwnd, out string diag)
+    {
+        diag = "";
+        if (_appCompatibilityProcessNames.Count == 0)
+            return false;
+
+        string processName = ProcessNameFor(hwnd);
+        if (processName.Length == 0 || !_appCompatibilityProcessNames.Contains(processName))
+            return false;
+
+        if (_appCompatibilityMode == AppCompatibilityMode.RequireModifier &&
+            Win32.IsKeyDown(_appCompatibilityModifierVk))
+        {
+            diag = $"app-compat allowed process='{processName}' modifier-held";
+            return false;
+        }
+
+        string reason = _appCompatibilityMode == AppCompatibilityMode.RequireModifier
+            ? "requires-modifier"
+            : "excluded";
+        diag = $"app-compat blocked process='{processName}' mode={reason}";
+        return true;
+    }
+
+    private static string ProcessNameFor(IntPtr hwnd)
+    {
+        Win32.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == 0) return string.Empty;
+
+        try
+        {
+            using var process = Process.GetProcessById((int)pid);
+            return AppCompatibility.NormalizeProcessName(process.ProcessName);
+        }
+        catch (ArgumentException)
+        {
+            return string.Empty;
+        }
+        catch (InvalidOperationException)
+        {
+            return string.Empty;
+        }
     }
 
     public Win32.RECT WorkAreaFor(IntPtr hwnd)

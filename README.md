@@ -107,6 +107,9 @@ Open Settings from the tray icon. You can:
 - Turn on live preview, where the real window moves as you swipe instead of a
   translucent overlay.
 - Turn on Mouse middle-button HUD for mouse-only snapping.
+- Use the Apps page to search installed apps and add compatibility rules for
+  titlebar-heavy apps. Listed apps can either ignore Swoosh gestures or require
+  a modifier key before Swoosh arms over their titlebars.
 - Switch apps instead of desktops, so the hold-then-swipe gesture flips through
   your open apps and focuses the one you pick.
 - Pick the overlay color or follow your Windows accent color.

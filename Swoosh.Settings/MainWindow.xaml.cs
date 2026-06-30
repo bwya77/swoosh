@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
 using Swoosh.Settings;
@@ -62,6 +63,9 @@ public sealed partial class MainWindow : Window
 
     private readonly Dictionary<string, bool> _gestureEnabled = new();
     private readonly List<(string Key, Button Card)> _gestureCards = new();
+    private readonly List<InstalledAppEntry> _installedApps = new();
+    private readonly HashSet<string> _selectedCompatibilityApps = new(StringComparer.OrdinalIgnoreCase);
+    private bool _syncingAdditionalApps;
     private TextBlock? _minimizeCardTitle; // the "Swipe down" card's title, retitled per SwipeDownAction
 
     // Code-created TextBlocks that should use the theme-aware "secondary" text
@@ -125,6 +129,7 @@ public sealed partial class MainWindow : Window
             UpdateHeaderAdaptive(RootGrid.ActualWidth);
 
             await RunUpdateCheck();
+            await LoadInstalledApps();
         };
     }
 
@@ -347,6 +352,10 @@ public sealed partial class MainWindow : Window
             GridModifier.Alt => 3,
             _ => 1,
         };
+        AppCompatibilityModeCombo.SelectedIndex = s.AppCompatibilityMode == AppCompatibilityMode.RequireModifier ? 1 : 0;
+        AppCompatibilityModifierCombo.SelectedIndex = ModifierIndex(s.AppCompatibilityModifier);
+        LoadCompatibilityApps(s.AppCompatibilityProcessNames);
+        UpdateAppCompatibilityControls();
         OverlayAccentToggle.IsOn = s.OverlayUseAccent;
         HudBackgroundCombo.SelectedIndex = s.HudBackground switch
         {
@@ -418,6 +427,11 @@ public sealed partial class MainWindow : Window
             3 => GridModifier.Alt,
             _ => GridModifier.Shift,
         },
+        AppCompatibilityMode = AppCompatibilityModeCombo.SelectedIndex == 1
+            ? AppCompatibilityMode.RequireModifier
+            : AppCompatibilityMode.Exclude,
+        AppCompatibilityModifier = ModifierFromIndex(AppCompatibilityModifierCombo.SelectedIndex),
+        AppCompatibilityProcessNames = CollectCompatibilityApps().ToList(),
         OverlayUseAccent = OverlayAccentToggle.IsOn,
         HudBackground = HudBackgroundCombo.SelectedIndex switch
         {
@@ -452,7 +466,11 @@ public sealed partial class MainWindow : Window
 
     private void OnSettingToggled(object sender, RoutedEventArgs e) => SaveIfReady();
 
-    private void OnModifierChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
+    private void OnModifierChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateAppCompatibilityControls();
+        SaveIfReady();
+    }
     private void OnSwipeDownChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateMinimizeCardTitle();
@@ -474,7 +492,27 @@ public sealed partial class MainWindow : Window
 
     private void OnSwipeDownThresholdChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 
-    private void OnMonitorMoveChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
+    private void OnMonitorMoveChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateAppCompatibilityControls();
+        SaveIfReady();
+    }
+
+    private void OnAppCompatibilityChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateAppCompatibilityControls();
+        SaveIfReady();
+    }
+
+    private void OnAppCompatibilityAppsChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_syncingAdditionalApps) return;
+        SaveIfReady();
+    }
+
+    private void OnInstalledAppsSearchChanged(object sender, TextChangedEventArgs e) => RefreshInstalledAppsList();
+
+    private async void OnRefreshInstalledApps(object sender, RoutedEventArgs e) => await LoadInstalledApps();
 
     private void OnHudBackgroundChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
@@ -566,6 +604,216 @@ public sealed partial class MainWindow : Window
     {
         if (HudFadeValue != null) HudFadeValue.Text = $"{fadeSeconds:0.00} s";
     }
+
+    private void UpdateAppCompatibilityControls()
+    {
+        if (AppCompatibilityModifierRow == null || AppCompatibilityWarning == null) return;
+
+        bool requireModifier = AppCompatibilityModeCombo.SelectedIndex == 1;
+        AppCompatibilityModifierRow.Visibility = requireModifier ? Visibility.Visible : Visibility.Collapsed;
+
+        if (!requireModifier)
+        {
+            AppCompatibilityWarning.IsOpen = false;
+            return;
+        }
+
+        var modifier = ModifierFromIndex(AppCompatibilityModifierCombo.SelectedIndex);
+        var conflicts = new List<string>();
+        if (GestureOn("thirds") && ModifierFromIndex(ModifierCombo.SelectedIndex) == modifier)
+            conflicts.Add("thirds snapping");
+        if (MonitorMoveCombo.SelectedIndex > 0 && ModifierFromMonitorIndex(MonitorMoveCombo.SelectedIndex) == modifier)
+            conflicts.Add("move to display");
+
+        AppCompatibilityWarning.IsOpen = conflicts.Count > 0;
+        if (conflicts.Count > 0)
+        {
+            AppCompatibilityWarning.Message =
+                $"{ModifierLabel(modifier)} is also used for {string.Join(" and ", conflicts)}. It will still save, but those gestures may take precedence while the key is held.";
+        }
+    }
+
+    private void LoadCompatibilityApps(IEnumerable<string> processNames)
+    {
+        var selected = AppCompatibility.ParseProcessList(string.Join(Environment.NewLine, processNames))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        _selectedCompatibilityApps.Clear();
+        foreach (string name in selected)
+            _selectedCompatibilityApps.Add(name);
+
+        SyncAdditionalAppsBox();
+        RefreshInstalledAppsList();
+    }
+
+    private IReadOnlyList<string> CollectCompatibilityApps()
+    {
+        var names = new List<string>(_selectedCompatibilityApps);
+        names.AddRange(AppCompatibility.ParseProcessList(AppCompatibilityAppsBox.Text));
+        return names
+            .Select(AppCompatibility.NormalizeProcessName)
+            .Where(static name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private IEnumerable<string> AdditionalCompatibilityApps()
+    {
+        var installed = _installedApps
+            .Select(static app => app.ProcessName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return _selectedCompatibilityApps.Where(name => !installed.Contains(name));
+    }
+
+    private void SyncAdditionalAppsBox()
+    {
+        _syncingAdditionalApps = true;
+        try
+        {
+            AppCompatibilityAppsBox.Text = AppCompatibility.FormatProcessList(AdditionalCompatibilityApps());
+        }
+        finally
+        {
+            _syncingAdditionalApps = false;
+        }
+    }
+
+    private void SetCompatibilityAppSelected(string processName, bool selected)
+    {
+        processName = AppCompatibility.NormalizeProcessName(processName);
+        if (processName.Length == 0) return;
+
+        if (selected)
+            _selectedCompatibilityApps.Add(processName);
+        else
+            _selectedCompatibilityApps.Remove(processName);
+    }
+
+    private async Task LoadInstalledApps()
+    {
+        if (InstalledAppsStatus == null) return;
+
+        InstalledAppsStatus.Text = "Loading installed apps...";
+        RefreshInstalledAppsButton.IsEnabled = false;
+
+        try
+        {
+            var apps = await Task.Run(InstalledAppCatalog.Load);
+            _installedApps.Clear();
+            _installedApps.AddRange(apps);
+            SyncAdditionalAppsBox();
+            RefreshInstalledAppsList();
+        }
+        catch
+        {
+            InstalledAppsStatus.Text = "Installed apps could not be loaded.";
+        }
+        finally
+        {
+            RefreshInstalledAppsButton.IsEnabled = true;
+        }
+    }
+
+    private void RefreshInstalledAppsList()
+    {
+        if (InstalledAppsList == null || InstalledAppsStatus == null) return;
+
+        string query = InstalledAppsSearchBox?.Text?.Trim() ?? "";
+        var filtered = _installedApps
+            .Where(app => query.Length == 0 ||
+                          app.DisplayName.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+                          app.ProcessName.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Take(100)
+            .ToArray();
+
+        InstalledAppsList.Items.Clear();
+        foreach (var app in filtered)
+            InstalledAppsList.Items.Add(BuildInstalledAppRow(app));
+
+        InstalledAppsStatus.Text = _installedApps.Count == 0
+            ? "No installed apps found yet."
+            : filtered.Length == 0
+                ? "No apps match your search."
+                : $"Showing {filtered.Length:N0} of {_installedApps.Count:N0} installed apps.";
+    }
+
+    private FrameworkElement BuildInstalledAppRow(InstalledAppEntry app)
+    {
+        var check = new CheckBox
+        {
+            IsChecked = _selectedCompatibilityApps.Contains(app.ProcessName),
+            VerticalAlignment = VerticalAlignment.Center,
+            MinWidth = 0,
+            Padding = new Thickness(0),
+        };
+        check.Checked += (_, _) => { SetCompatibilityAppSelected(app.ProcessName, true); SaveIfReady(); };
+        check.Unchecked += (_, _) => { SetCompatibilityAppSelected(app.ProcessName, false); SaveIfReady(); };
+
+        var icon = new Image
+        {
+            Width = 24,
+            Height = 24,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 12, 0),
+        };
+        if (app.IconPath.Length > 0 && File.Exists(app.IconPath))
+            icon.Source = new BitmapImage(new Uri(app.IconPath));
+
+        var text = new StackPanel { Spacing = 1 };
+        text.Children.Add(new TextBlock
+        {
+            Text = app.DisplayName,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        text.Children.Add(new TextBlock
+        {
+            Text = app.ProcessName,
+            FontSize = 12,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = SecondaryTextBrush(),
+        });
+
+        var row = new Grid { Padding = new Thickness(4, 6, 4, 6) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        Grid.SetColumn(check, 0);
+        Grid.SetColumn(icon, 1);
+        Grid.SetColumn(text, 2);
+        row.Children.Add(check);
+        row.Children.Add(icon);
+        row.Children.Add(text);
+        return row;
+    }
+
+    private static GridModifier ModifierFromIndex(int index) => index switch
+    {
+        1 => GridModifier.Ctrl,
+        2 => GridModifier.Alt,
+        _ => GridModifier.Shift,
+    };
+
+    private static int ModifierIndex(GridModifier modifier) => modifier switch
+    {
+        GridModifier.Ctrl => 1,
+        GridModifier.Alt => 2,
+        _ => 0,
+    };
+
+    private static GridModifier ModifierFromMonitorIndex(int index) => index switch
+    {
+        2 => GridModifier.Ctrl,
+        3 => GridModifier.Alt,
+        _ => GridModifier.Shift,
+    };
+
+    private static string ModifierLabel(GridModifier modifier) => modifier switch
+    {
+        GridModifier.Ctrl => "Ctrl",
+        GridModifier.Alt => "Alt",
+        _ => "Shift",
+    };
 
     private void OnAccentToggled(object sender, RoutedEventArgs e)
     {
@@ -1161,6 +1409,7 @@ public sealed partial class MainWindow : Window
         _gestureEnabled[key] = !GestureOn(key);
         ApplyGestureVisual(key);
         if (key == "thirds") ModifierCombo.IsEnabled = GestureOn("thirds");
+        UpdateAppCompatibilityControls();
         SaveIfReady();
     }
 
@@ -1189,6 +1438,7 @@ public sealed partial class MainWindow : Window
 
         GeneralPane.Visibility = tag == "general" ? Visibility.Visible : Visibility.Collapsed;
         SnappingPane.Visibility = tag == "snapping" ? Visibility.Visible : Visibility.Collapsed;
+        AppsPane.Visibility = tag == "apps" ? Visibility.Visible : Visibility.Collapsed;
         AppearancePane.Visibility = tag == "appearance" ? Visibility.Visible : Visibility.Collapsed;
         UpdatesPane.Visibility = tag == "updates" ? Visibility.Visible : Visibility.Collapsed;
         AboutPane.Visibility = tag == "about" ? Visibility.Visible : Visibility.Collapsed;
@@ -1196,6 +1446,7 @@ public sealed partial class MainWindow : Window
         FrameworkElement active = tag switch
         {
             "snapping" => SnappingPane,
+            "apps" => AppsPane,
             "appearance" => AppearancePane,
             "updates" => UpdatesPane,
             "about" => AboutPane,

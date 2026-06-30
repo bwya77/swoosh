@@ -19,6 +19,9 @@ public class AppSettingsTests
         Assert.False(s.LivePreview);
         Assert.False(s.LaunchAtLogin);
         Assert.Equal("#0A84FF", s.OverlayColor);
+        Assert.Equal(AppCompatibilityMode.Exclude, s.AppCompatibilityMode);
+        Assert.Equal(GridModifier.Ctrl, s.AppCompatibilityModifier);
+        Assert.Empty(s.AppCompatibilityProcessNames);
     }
 
     [Fact]
@@ -36,6 +39,9 @@ public class AppSettingsTests
             OverlayColor = "#FF2D55",
             GridModifier = GridModifier.Ctrl,
             MonitorMoveModifier = GridModifier.Shift,
+            AppCompatibilityMode = AppCompatibilityMode.RequireModifier,
+            AppCompatibilityModifier = GridModifier.Alt,
+            AppCompatibilityProcessNames = ["firefox.exe", "brave.exe"],
         };
 
         var json = JsonSerializer.Serialize(original);
@@ -51,16 +57,30 @@ public class AppSettingsTests
         Assert.Equal("#FF2D55", copy.OverlayColor);
         Assert.Equal(GridModifier.Ctrl, copy.GridModifier);
         Assert.Equal(GridModifier.Shift, copy.MonitorMoveModifier);
+        Assert.Equal(AppCompatibilityMode.RequireModifier, copy.AppCompatibilityMode);
+        Assert.Equal(GridModifier.Alt, copy.AppCompatibilityModifier);
+        Assert.Equal(new[] { "firefox.exe", "brave.exe" }, copy.AppCompatibilityProcessNames);
     }
 
     [Fact]
     public void Clone_Is_Independent()
     {
-        var s = new AppSettings { GridSpacing = 3 };
+        var s = new AppSettings { GridSpacing = 3, AppCompatibilityProcessNames = ["firefox.exe"] };
         var c = s.Clone();
         c.GridSpacing = 9;
+        c.AppCompatibilityProcessNames.Add("brave.exe");
         Assert.Equal(3, s.GridSpacing);   // mutating the clone doesn't touch the original
         Assert.Equal(9, c.GridSpacing);
+        Assert.Equal(new[] { "firefox.exe" }, s.AppCompatibilityProcessNames);
+        Assert.Equal(new[] { "firefox.exe", "brave.exe" }, c.AppCompatibilityProcessNames);
+    }
+
+    [Fact]
+    public void AppCompatibility_Process_List_Normalizes_User_Input()
+    {
+        var parsed = AppCompatibility.ParseProcessList(" Firefox ; brave.exe\r\n\"C:\\Apps\\Vivaldi.exe\"\nfirefox.exe ");
+
+        Assert.Equal(new[] { "firefox.exe", "brave.exe", "vivaldi.exe" }, parsed);
     }
 }
 

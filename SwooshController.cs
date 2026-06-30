@@ -197,20 +197,14 @@ public sealed class SwooshController : IDisposable
             ? (long)Math.Round(Math.Clamp(s.CancelTimeoutSeconds, 0, 10) * 1000)
             : 0;
         _gridModifierEnabled = s.GridModifierEnabled;
-        _gridModifierVk = s.GridModifier switch
-        {
-            GridModifier.Ctrl => Win32.VK_CONTROL,
-            GridModifier.Alt => Win32.VK_MENU,
-            _ => Win32.VK_SHIFT,
-        };
+        _gridModifierVk = ModifierVk(s.GridModifier);
         _thirdsDiagRatio = 0.9 - 0.5 * Math.Clamp(s.Sensitivity, 0, 1);
         _monitorModifierEnabled = s.MonitorMoveEnabled;
-        _monitorModifierVk = s.MonitorMoveModifier switch
-        {
-            GridModifier.Ctrl => Win32.VK_CONTROL,
-            GridModifier.Shift => Win32.VK_SHIFT,
-            _ => Win32.VK_MENU,
-        };
+        _monitorModifierVk = ModifierVk(s.MonitorMoveModifier);
+        _snapper.ApplyAppCompatibility(
+            s.AppCompatibilityProcessNames,
+            s.AppCompatibilityMode,
+            ModifierVk(s.AppCompatibilityModifier));
         _chip.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor, s.HudBackground, s.HudSize, s.HudFadeOutSeconds, snapMs);
         _preview.ApplyAppearance(s.AnimateSnaps, s.OverlayUseAccent, s.OverlayColor, snapMs);
         _demo.SetAccent(AccentColors.Resolve(s.OverlayUseAccent, s.OverlayColor));
@@ -229,6 +223,13 @@ public sealed class SwooshController : IDisposable
         _gestures.HoldDelayMs = (long)Math.Round(Math.Clamp(s.DesktopHoldDelaySeconds, 0.1, 1.0) * 1000);
         _mouseHoldDelayMs = _gestures.HoldDelayMs;
     }
+
+    private static int ModifierVk(GridModifier modifier) => modifier switch
+    {
+        GridModifier.Ctrl => Win32.VK_CONTROL,
+        GridModifier.Alt => Win32.VK_MENU,
+        _ => Win32.VK_SHIFT,
+    };
 
     /// <summary>Resolve a swipe to a zone, honoring the thirds modifier if held.</summary>
     private SnapZone MapZone(SwipeDirection dir) =>
