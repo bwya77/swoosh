@@ -20,8 +20,9 @@ jobs:
     name: Scorecard analysis
     runs-on: ubuntu-latest
     permissions:
-      security-events: write   # upload SARIF results to code scanning
-      id-token: write          # publish results to the public scorecard API
+      contents: read             # read repo contents for analysis
+      security-events: write     # upload SARIF results to code scanning
+      id-token: write            # publish results to the public scorecard API
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
