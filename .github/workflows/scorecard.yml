@@ -34,11 +34,12 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          # The default GITHUB_TOKEN can't read branch-protection rules, so the
-          # Branch-Protection check is inconclusive. Add a fine-grained PAT with
-          # "Administration: read" (+ repo metadata) as the SCORECARD_TOKEN secret to
-          # let it score; falls back to the default token until then.
-          repo_token: ${{ secrets.SCORECARD_TOKEN || github.token }}
+          # Use the default GITHUB_TOKEN for repo access. To also score the
+          # Branch-Protection check, add a fine-grained PAT with
+          # "Administration: read" as the SCORECARD_TOKEN repo secret and
+          # uncomment the line below:
+          # repo_token: ${{ secrets.SCORECARD_TOKEN }}
+          repo_token: ${{ github.token }}
           publish_results: true
 
       - name: Upload to code scanning
