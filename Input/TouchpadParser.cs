@@ -19,9 +19,23 @@ public sealed class TouchpadParser
         public int LogicalMinX, LogicalMinY;
         public bool HasContactCount;
         public ushort ContactCountCollection;
+        public bool HasContactId;
+        public bool IsSerialMode => FingerCollections.Count == 1 && HasContactId;
     }
 
     private readonly Dictionary<IntPtr, DeviceLayout?> _devices = new();
+
+    private sealed class SerialSlot
+    {
+        public int Id;
+        public double Nx;
+        public double Ny;
+        public uint RawX;
+        public uint RawY;
+        public long LastSeenMs;
+    }
+    private readonly Dictionary<int, SerialSlot> _serialActive = new();
+    private int _serialLastReportedCount;
 
     /// <summary>When true (the default), apply the firmware phantom-contact rejection
     /// heuristics. This is a diagnostic kill-switch: if a particular touchpad's gestures behave
@@ -140,6 +154,7 @@ public sealed class TouchpadParser
             else if (vc.UsagePage == Hid.UP_DIGITIZER && usage == Hid.USAGE_CONTACT_ID)
             {
                 hasContactId.Add(vc.LinkCollection);
+                layout.HasContactId = true;
             }
             else if (vc.UsagePage == Hid.UP_DIGITIZER && usage == Hid.USAGE_CONTACT_COUNT)
             {
@@ -153,7 +168,7 @@ public sealed class TouchpadParser
                 layout.FingerCollections.Add(col);
 
         layout.FingerCollections.Sort();
-        Swoosh.Log.Write($"layout: reportLen={layout.InputReportLength} fingerCols=[{string.Join(",", layout.FingerCollections)}] hasContactCount={layout.HasContactCount} ccCol={layout.ContactCountCollection} xRange={layout.LogicalMinX}..{layout.LogicalMaxX} yRange={layout.LogicalMinY}..{layout.LogicalMaxY}");
+        Swoosh.Log.Write($"layout: reportLen={layout.InputReportLength} fingerCols=[{string.Join(",", layout.FingerCollections)}] hasContactCount={layout.HasContactCount} ccCol={layout.ContactCountCollection} xRange={layout.LogicalMinX}..{layout.LogicalMaxX} yRange={layout.LogicalMinY}..{layout.LogicalMaxY} isSerial={layout.IsSerialMode}");
         if (layout.FingerCollections.Count == 0)
         {
             Marshal.FreeHGlobal(preparsed);
@@ -177,6 +192,9 @@ public sealed class TouchpadParser
         double spanX = Math.Max(1, layout.LogicalMaxX - layout.LogicalMinX);
         double spanY = Math.Max(1, layout.LogicalMaxY - layout.LogicalMinY);
         ushort[] usageBuf = _usageBuf;
+
+        if (layout.IsSerialMode)
+            return ParseSerial(layout, basePtr, sizeHid, reportCount, spanX, spanY, usageBuf);
 
         for (int r = 0; r < reportCount; r++)
         {
@@ -407,6 +425,119 @@ public sealed class TouchpadParser
 
                 frames.Add(frame);
             }
+        return frames;
+    }
+
+    private List<TouchFrame> ParseSerial(DeviceLayout layout, IntPtr basePtr, int sizeHid, int reportCount, double spanX, double spanY, ushort[] usageBuf)
+    {
+        var frames = new List<TouchFrame>();
+        ushort col = layout.FingerCollections[0];
+        long now = Environment.TickCount64;
+        bool anyChange = false;
+
+        for (int r = 0; r < reportCount; r++)
+        {
+            IntPtr report = basePtr + r * sizeHid;
+            byte reportId = Marshal.ReadByte(report);
+
+            uint ccVal = 0;
+            bool ccOk = layout.HasContactCount &&
+                Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_DIGITIZER,
+                    layout.ContactCountCollection, Hid.USAGE_CONTACT_COUNT,
+                    out ccVal, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS;
+
+            // Tip switch
+            uint usageLen = (uint)usageBuf.Length;
+            bool tip = false;
+            if (Hid.HidP_GetUsages(Hid.HidP_Input, Hid.UP_DIGITIZER, col, usageBuf,
+                    ref usageLen, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS)
+            {
+                for (int i = 0; i < usageLen; i++)
+                {
+                    if (usageBuf[i] == Hid.USAGE_TIP_SWITCH)
+                    {
+                        tip = true;
+                        break;
+                    }
+                }
+            }
+
+            int id = 0;
+            bool idOk = Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_DIGITIZER, col, Hid.USAGE_CONTACT_ID,
+                    out uint rawId, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS;
+            if (idOk) id = (int)rawId;
+
+            uint rawX = 0, rawY = 0;
+            bool xOk = Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_GENERIC, col, Hid.USAGE_X,
+                    out rawX, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS;
+            bool yOk = Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_GENERIC, col, Hid.USAGE_Y,
+                    out rawY, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS;
+
+            if (Swoosh.Log.Verbose)
+            {
+                Swoosh.Log.Write($"  [Rep] rid={reportId} ccOk={ccOk} cc={ccVal} tip={tip} id={id} x={rawX} y={rawY}");
+            }
+
+            if (!tip)
+            {
+                if (idOk && _serialActive.Remove(id))
+                {
+                    anyChange = true;
+                }
+            }
+            else if (xOk && yOk)
+            {
+                double nx = Math.Clamp((rawX - layout.LogicalMinX) / spanX, 0, 1);
+                double ny = Math.Clamp((rawY - layout.LogicalMinY) / spanY, 0, 1);
+
+                _serialActive[id] = new SerialSlot
+                {
+                    Id = id,
+                    Nx = nx,
+                    Ny = ny,
+                    RawX = rawX,
+                    RawY = rawY,
+                    LastSeenMs = now
+                };
+                anyChange = true;
+            }
+        }
+
+        // 超时清理（超过 150ms 未更新的 contact 自动移除）
+        if (_serialActive.Count > 0)
+        {
+            var staleKeys = new List<int>();
+            foreach (var kv in _serialActive)
+            {
+                if (now - kv.Value.LastSeenMs > 150)
+                    staleKeys.Add(kv.Key);
+            }
+            foreach (var k in staleKeys)
+            {
+                _serialActive.Remove(k);
+                anyChange = true;
+            }
+        }
+
+        // 产生输出帧
+        if (anyChange || _serialActive.Count > 0 || _serialLastReportedCount > 0)
+        {
+            var frame = new TouchFrame { TimestampMs = now };
+            foreach (var slot in _serialActive.Values)
+            {
+                frame.Contacts.Add(new Contact(slot.Id, slot.Nx, slot.Ny, true));
+            }
+            frames.Add(frame);
+            _serialLastReportedCount = _serialActive.Count;
+
+            if (Swoosh.Log.Verbose)
+            {
+                string rawDetail = string.Join(" ", _serialActive.Values.Select(c =>
+                    $"id{c.Id}@{c.RawX},{c.RawY}({c.Nx:F2},{c.Ny:F2})"));
+                Swoosh.Log.Write($"[SerialFrame] n={_serialActive.Count} [{rawDetail}]");
+            }
+        }
+
         return frames;
     }
 }
