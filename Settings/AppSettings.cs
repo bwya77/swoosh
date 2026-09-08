@@ -230,6 +230,12 @@ public sealed class AppSettings
     /// Higher values make the HUD linger and fade more slowly. Range about 0.1 to 1.5s.</summary>
     public double HudFadeOutSeconds { get; set; } = 0.36;
 
+    /// <summary>When true, snapping a window into a half/quarter/third zone shows a Windows
+    /// 11-style "Snap Assist" overlay over the remaining empty space listing your other open
+    /// windows, so one click fills it — just like the built-in Snap layouts overlay. Off by
+    /// default.</summary>
+    public bool SnapAssistEnabled { get; set; } = false;
+
     public AppSettings Clone()
     {
         var clone = (AppSettings)MemberwiseClone();

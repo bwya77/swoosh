@@ -192,7 +192,13 @@ public sealed class WindowSnapper
     private static Win32.RECT R(int x, int y, int cw, int ch) =>
         new() { Left = x, Top = y, Right = x + cw, Bottom = y + ch };
 
-    public void Apply(IntPtr hwnd, SnapZone zone)
+    /// <summary>Snap <paramref name="hwnd"/> into <paramref name="zone"/>. By default the target
+    /// monitor's work area is resolved from <paramref name="hwnd"/>'s own current position
+    /// (<see cref="WorkAreaFor"/>). Pass <paramref name="workOverride"/> to snap into a specific
+    /// monitor's work area regardless of where the window currently sits - needed for Snap
+    /// Assist, where the picked candidate may currently be sitting on an entirely different
+    /// monitor than the one whose empty zone the user actually clicked.</summary>
+    public void Apply(IntPtr hwnd, SnapZone zone, Win32.RECT? workOverride = null)
     {
         if (zone == SnapZone.None || !IsManageable(hwnd)) return;
 
@@ -210,6 +216,7 @@ public sealed class WindowSnapper
 
         // Restore first so SetWindowPos geometry takes effect.
         long style = Win32.GetWindowLong(hwnd, Win32.GWL_STYLE);
+        bool wasMinimized = (style & Win32.WS_MINIMIZE) != 0;
         if ((style & (Win32.WS_MAXIMIZE | Win32.WS_MINIMIZE)) != 0)
             Win32.ShowWindow(hwnd, Win32.SW_RESTORE);
 
@@ -220,7 +227,15 @@ public sealed class WindowSnapper
             return;
         }
 
-        var work = WorkAreaFor(hwnd);
+        // A window minimized *while maximized* restores (above) back to maximized, not to a
+        // normal windowed rect - SW_RESTORE only clears one "not-normal" state per call. If it's
+        // still reporting itself as maximized here, a plain SetWindowPos below would be ignored
+        // by the window manager (the window just stays full-screen), so restore it a second time
+        // to actually force it into a normal windowed state we can reposition.
+        if ((Win32.GetWindowLong(hwnd, Win32.GWL_STYLE) & Win32.WS_MAXIMIZE) != 0)
+            Win32.ShowWindow(hwnd, Win32.SW_RESTORE);
+
+        var work = workOverride ?? WorkAreaFor(hwnd);
         var target = ZoneRect(work, zone);
 
         // Inset the target by the configured grid spacing so tiled windows have a
@@ -259,10 +274,47 @@ public sealed class WindowSnapper
         int pw = target.Width + ml + mr;
         int ph = target.Height + mt + mb;
 
-        if (AnimateSnaps && haveStart)
+        // A window that was minimized has a garbage (sentinel, e.g. -32000,-32000) GetWindowRect
+        // captured above, so animating a glide from it makes no sense - place it directly. Windows'
+        // own restore-from-taskbar animation can also race a SetWindowPos issued right after
+        // ShowWindow(SW_RESTORE) and silently snap the window back to wherever it was before it was
+        // minimized a moment later, so re-apply once more after that animation has had time to
+        // finish, so our placement is what actually sticks (e.g. picking a minimized window from
+        // Snap Assist otherwise looks like nothing happened but bringing it to the foreground).
+        if (AnimateSnaps && haveStart && !wasMinimized)
             AnimateTo(hwnd, startRect, px, py, pw, ph);
         else
             Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
+
+        if (wasMinimized)
+        {
+            var settleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            settleTimer.Tick += (_, _) =>
+            {
+                settleTimer.Stop();
+                if (Win32.IsWindow(hwnd))
+                    Win32.SetWindowPos(hwnd, IntPtr.Zero, px, py, pw, ph, MoveFlags);
+            };
+            settleTimer.Start();
+        }
+    }
+
+    /// <summary>Raised when a window is snapped into a zone as a genuine, final commit (not
+    /// live-preview's continuous re-targeting while the gesture is still in progress) - the
+    /// window, the zone it landed in, and the monitor work area it was snapped within. Drives
+    /// the Snap Assist overlay. Callers decide when a "drop" has actually happened and call
+    /// <see cref="NotifySnapped"/> explicitly; <see cref="Apply"/> itself never raises this,
+    /// since it's also used for every intermediate live-preview frame.</summary>
+    public event Action<IntPtr, SnapZone, Win32.RECT>? Snapped;
+
+    /// <summary>Tell Snap Assist a real commit happened for <paramref name="zone"/> on
+    /// <paramref name="hwnd"/>. Center/Maximize/Minimize/None never have a Snap Assist
+    /// complement, so they're filtered here rather than by every caller.</summary>
+    public void NotifySnapped(IntPtr hwnd, SnapZone zone)
+    {
+        if (zone is SnapZone.None or SnapZone.Center or SnapZone.Maximize or SnapZone.Minimize) return;
+        if (!IsManageable(hwnd)) return;
+        Snapped?.Invoke(hwnd, zone, WorkAreaFor(hwnd));
     }
 
     /// <summary>

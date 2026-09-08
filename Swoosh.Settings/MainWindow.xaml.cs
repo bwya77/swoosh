@@ -54,6 +54,8 @@ public sealed partial class MainWindow : Window
         Running,
     }
 
+    private sealed record SettingSearchItem(string Title, string Page, string Keywords, string? Target = null);
+
     private sealed record GestureDef(string Key, string Name, string Gesture,
         double X0, double Y0, double X1, double Y1, bool Grid = false);
 
@@ -73,6 +75,7 @@ public sealed partial class MainWindow : Window
     private readonly List<InstalledAppEntry> _runningApps = new();
     private readonly HashSet<string> _selectedCompatibilityApps = new(StringComparer.OrdinalIgnoreCase);
     private AppPickerSource _appPickerSource = AppPickerSource.Installed;
+    private readonly DispatcherTimer _appliedTimer = new();
     private bool _syncingAdditionalApps;
     private TextBlock? _minimizeCardTitle; // the "Swipe down" card's title, retitled per SwipeDownAction
 
@@ -81,6 +84,38 @@ public sealed partial class MainWindow : Window
     // from Application.Current.Resources returns a light-theme snapshot that
     // renders near-black in dark mode.
     private readonly List<TextBlock> _secondaryTexts = new();
+
+    private static readonly SettingSearchItem[] SettingSearchItems =
+    {
+        new("Gestures enabled", "general", "touchpad gestures master switch", "gestures"),
+        new("Start with Windows", "general", "startup launch login", "startup"),
+        new("Touchpad demo overlay", "general", "demo recording touchpad", "demo"),
+        new("Diagnostics", "general", "copy report problem troubleshooting", "diagnostics"),
+        new("Phantom contact filtering", "general", "touchpad firmware filtering", "phantom"),
+        new("Gesture tutorial", "general", "onboarding replay tutorial", "tutorial"),
+        new("Mouse middle-button HUD", "snapping", "mouse hud middle button", "mouse"),
+        new("Live window preview", "snapping", "preview real window live", "live-preview"),
+        new("Move cursor with window", "snapping", "cursor follow snap", "move-cursor"),
+        new("Swipe down", "snapping", "minimize close chooser", "swipe-down"),
+        new("Touch sensitivity", "snapping", "sensitivity diagonal drift", "sensitivity"),
+        new("Grid spacing", "snapping", "gap gutter spacing", "grid-spacing"),
+        new("Cancel timeout", "snapping", "escape rest cancel", "cancel-timeout"),
+        new("Two-finger resize", "snapping", "resize width height", "resize"),
+        new("Five-finger gestures", "snapping", "free move resize center", "five-finger"),
+        new("Switch apps instead of desktops", "snapping", "app switcher hold swipe", "app-switch"),
+        new("Move to display", "snapping", "monitor modifier display", "monitor"),
+        new("Desktop switch hold delay", "snapping", "virtual desktop delay", "hold-delay"),
+        new("App compatibility", "apps", "apps browser titlebar tabs ignore modifier exclusions", "app-compat"),
+        new("Installed apps", "apps", "start menu app picker", "installed-apps"),
+        new("Running apps", "apps", "portable apps running picker", "installed-apps"),
+        new("Additional apps", "apps", "manual process exe portable", "additional-apps"),
+        new("Overlay color", "appearance", "accent custom color", "overlay-color"),
+        new("HUD background", "appearance", "dark light system", "hud-background"),
+        new("HUD size", "appearance", "large normal", "hud-size"),
+        new("HUD fade-out", "appearance", "fade duration", "hud-fade"),
+        new("Updates", "updates", "check update release changelog", "updates"),
+        new("About Swoosh", "about", "version links support share"),
+    };
 
     public MainWindow()
     {
@@ -116,6 +151,7 @@ public sealed partial class MainWindow : Window
         TrySetAboutLogo();
         BuildSwatches();
         BuildGestureCards();
+        ConfigureAppliedStatus();
         LoadFrom(_store.Current);
 
         _store.Changed += OnStoreChanged;
@@ -177,6 +213,24 @@ public sealed partial class MainWindow : Window
         if (viewport <= 0) return;
 
         AppsPane.Height = Math.Max(620, viewport - 40);
+    }
+
+    private void ConfigureAppliedStatus()
+    {
+        _appliedTimer.Interval = TimeSpan.FromSeconds(1.3);
+        _appliedTimer.Tick += (_, _) =>
+        {
+            _appliedTimer.Stop();
+            if (AppliedStatusText != null) AppliedStatusText.Text = "";
+        };
+    }
+
+    private void ShowApplied()
+    {
+        if (AppliedStatusText == null) return;
+        AppliedStatusText.Text = "Applied";
+        _appliedTimer.Stop();
+        _appliedTimer.Start();
     }
 
     /// <summary>Theme-aware "secondary" text colour for code-created TextBlocks.
@@ -402,6 +456,7 @@ public sealed partial class MainWindow : Window
         UpdateCancelTimeoutLabel(CancelTimeoutSlider.Value);
         LivePreviewToggle.IsOn = s.LivePreview;
         MoveCursorToggle.IsOn = s.MoveCursor;
+        SnapAssistToggle.IsOn = s.SnapAssistEnabled;
         MouseHudToggle.IsOn = s.MouseMiddleButtonHudEnabled;
         ResizeHorizontalToggle.IsOn = s.ResizeHorizontalEnabled;
         ResizeVerticalToggle.IsOn = s.ResizeVerticalEnabled;
@@ -471,6 +526,7 @@ public sealed partial class MainWindow : Window
         CancelTimeoutSeconds = CancelTimeoutSlider.Value,
         LivePreview = LivePreviewToggle.IsOn,
         MoveCursor = MoveCursorToggle.IsOn,
+        SnapAssistEnabled = SnapAssistToggle.IsOn,
         MouseMiddleButtonHudEnabled = MouseHudToggle.IsOn,
         ResizeHorizontalEnabled = ResizeHorizontalToggle.IsOn,
         ResizeVerticalEnabled = ResizeVerticalToggle.IsOn,
@@ -485,9 +541,57 @@ public sealed partial class MainWindow : Window
     {
         if (_loading) return;
         _store.Save(Collect());
+        ShowApplied();
     }
 
     // ---- Control events ----------------------------------------------------
+
+    private void OnSettingsSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput) return;
+
+        string query = sender.Text.Trim();
+        sender.ItemsSource = query.Length == 0
+            ? Array.Empty<string>()
+            : SearchSettings(query).Take(8).Select(static item => item.Title).ToArray();
+    }
+
+    private void OnSettingsSearchSuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
+    {
+        if (args.SelectedItem is string title)
+        {
+            sender.Text = title;
+            if (SettingSearchItems.FirstOrDefault(item => item.Title == title) is { } match)
+                NavigateTo(match.Page, match.Target);
+        }
+    }
+
+    private void OnSettingsSearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        string query = args.ChosenSuggestion as string ?? args.QueryText;
+        var match = SearchSettings(query).FirstOrDefault();
+        if (match != null)
+            NavigateTo(match.Page, match.Target);
+    }
+
+    private static IEnumerable<SettingSearchItem> SearchSettings(string query)
+    {
+        var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (terms.Length == 0) return Array.Empty<SettingSearchItem>();
+
+        return SettingSearchItems
+            .Select(item => new
+            {
+                Item = item,
+                Score = terms.Sum(term =>
+                    item.Title.Contains(term, StringComparison.CurrentCultureIgnoreCase) ? 3 :
+                    item.Keywords.Contains(term, StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+            })
+            .Where(x => x.Score > 0)
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Item.Title, StringComparer.CurrentCultureIgnoreCase)
+            .Select(x => x.Item);
+    }
 
     private void OnSettingToggled(object sender, RoutedEventArgs e) => SaveIfReady();
 
@@ -1631,7 +1735,11 @@ public sealed partial class MainWindow : Window
     {
         var tag = (args.SelectedItem as MUXC.NavigationViewItem)?.Tag as string ?? "general";
         if (GeneralPane == null) return; // not yet loaded
+        ShowPage(tag);
+    }
 
+    private void ShowPage(string tag)
+    {
         GeneralPane.Visibility = tag == "general" ? Visibility.Visible : Visibility.Collapsed;
         SnappingPane.Visibility = tag == "snapping" ? Visibility.Visible : Visibility.Collapsed;
         AppsPane.Visibility = tag == "apps" ? Visibility.Visible : Visibility.Collapsed;
@@ -1653,6 +1761,80 @@ public sealed partial class MainWindow : Window
         };
         UpdateAppsListHeight();
         AnimatePaneIn(active);
+    }
+
+    private void NavigateTo(string tag, string? target = null)
+    {
+        if (FindNavItem(tag) is { } item)
+        {
+            Nav.SelectedItem = item;
+            ShowPage(tag);
+            if (target != null) _ = ScrollToSearchTarget(target);
+            return;
+        }
+
+        ShowPage(tag);
+        if (target != null) _ = ScrollToSearchTarget(target);
+        else MainScrollViewer.ChangeView(null, 0, null, disableAnimation: true);
+    }
+
+    private async Task ScrollToSearchTarget(string target)
+    {
+        await Task.Delay(500);
+        if (FindSearchTarget(target) is not FrameworkElement element) return;
+
+        if (MainScrollViewer.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled)
+        {
+            SettingsContentRoot.UpdateLayout();
+            MainScrollViewer.UpdateLayout();
+            element.UpdateLayout();
+
+            var point = element.TransformToVisual(SettingsContentRoot)
+                .TransformPoint(new Windows.Foundation.Point(0, 0));
+            double offset = Math.Clamp(point.Y, 0, Math.Max(0, MainScrollViewer.ScrollableHeight));
+            MainScrollViewer.ChangeView(null, offset, null, disableAnimation: true);
+            await Task.Delay(150);
+        }
+
+    }
+
+    private FrameworkElement? FindSearchTarget(string target) => target switch
+    {
+        "gestures" => GesturesEnabledSetting,
+        "startup" => StartWithWindowsSetting,
+        "demo" => DemoOverlaySetting,
+        "diagnostics" => DiagnosticsSetting,
+        "phantom" => PhantomFilteringSetting,
+        "tutorial" => TutorialSetting,
+        "mouse" => MouseHudSetting,
+        "live-preview" => LivePreviewSetting,
+        "move-cursor" => MoveCursorSetting,
+        "swipe-down" => SwipeDownSetting,
+        "sensitivity" => SensitivitySetting,
+        "grid-spacing" => GridSpacingSetting,
+        "cancel-timeout" => CancelTimeoutSetting,
+        "resize" => ResizeHorizontalSetting,
+        "five-finger" => FiveFingerSetting,
+        "app-switch" => AppSwitchSetting,
+        "monitor" => MonitorMoveSetting,
+        "hold-delay" => HoldDelaySetting,
+        "app-compat" => AppCompatibilitySetting,
+        "installed-apps" => InstalledAppsSetting,
+        "additional-apps" => AdditionalAppsExpander,
+        "overlay-color" => OverlayColorSetting,
+        "hud-background" => HudBackgroundSetting,
+        "hud-size" => HudSizeSetting,
+        "hud-fade" => HudFadeSetting,
+        "updates" => UpdatesSetting,
+        _ => null,
+    };
+
+    private MUXC.NavigationViewItem? FindNavItem(string tag)
+    {
+        foreach (var item in Nav.MenuItems.OfType<MUXC.NavigationViewItem>())
+            if ((item.Tag as string) == tag)
+                return item;
+        return null;
     }
 
     /// <summary>Windows 11 Settings-style page transition: the incoming pane slides up a few

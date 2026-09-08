@@ -82,10 +82,40 @@
                 </StackPanel>
             </muxc:NavigationView.PaneFooter>
 
-            <ScrollViewer x:Name="MainScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <Grid Margin="28,12,28,28">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid x:Name="SettingsSearchRoot"
+                      Grid.Row="0" Margin="28,12,28,4"
+                      MaxWidth="1040"
+                      HorizontalAlignment="Stretch">
+                    <AutoSuggestBox x:Name="SettingsSearchBox"
+                                    HorizontalAlignment="Stretch"
+                                    MinWidth="640"
+                                    PlaceholderText="Search settings"
+                                    TextChanged="OnSettingsSearchTextChanged"
+                                    QuerySubmitted="OnSettingsSearchSubmitted"
+                                    SuggestionChosen="OnSettingsSearchSuggestionChosen" />
+                    <TextBlock x:Name="AppliedStatusText"
+                               Text=""
+                               MinWidth="64"
+                               Margin="0,0,10,0"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               TextAlignment="Right"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+
+                <ScrollViewer x:Name="MainScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid x:Name="SettingsContentRoot" Margin="28,8,28,28"
+                      MaxWidth="1040"
+                      HorizontalAlignment="Center">
                     <!-- GENERAL -->
-                    <StackPanel x:Name="GeneralPane" Spacing="14">
+                    <StackPanel x:Name="GeneralPane" Spacing="10">
                         <TextBlock Text="Home" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
                         <!-- Windows-Home-style header: logo, name + link, status chips -->
@@ -145,7 +175,7 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
 
-                                <Grid Padding="0,12,0,12">
+                                <Grid x:Name="GesturesEnabledSetting" Padding="0,12,0,12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -167,7 +197,7 @@
                                 <Border Height="1" Margin="34,0,0,0"
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                                <Grid Padding="0,12,0,0">
+                                <Grid x:Name="AnimateSnapsSetting" Padding="0,12,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -189,7 +219,7 @@
                                 <Border Height="1" Margin="34,0,0,0"
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                                <StackPanel Spacing="6" Margin="34,12,0,0">
+                                <StackPanel x:Name="SnapSpeedSetting" Spacing="6" Margin="34,12,0,0">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -231,7 +261,7 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
 
-                                <Grid Padding="0,12,0,12">
+                                <Grid x:Name="StartWithWindowsSetting" Padding="0,12,0,12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -253,7 +283,7 @@
                                 <Border Height="1" Margin="34,0,0,0"
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                                <Grid Padding="0,12,0,0">
+                                <Grid x:Name="DemoOverlaySetting" Padding="0,12,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -275,7 +305,7 @@
                                 <Border Height="1" Margin="34,0,0,0"
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                                <Grid Padding="0,12,0,0">
+                                <Grid x:Name="DiagnosticsSetting" Padding="0,12,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -303,7 +333,7 @@
                                 <Border Height="1" Margin="34,0,0,0"
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                                <Grid Padding="0,12,0,0">
+                                <Grid x:Name="PhantomFilteringSetting" Padding="0,12,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -326,7 +356,7 @@
                                 <Border Height="1" Margin="34,0,0,0"
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                                <Grid Padding="0,12,0,0">
+                                <Grid x:Name="TutorialSetting" Padding="0,12,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -354,7 +384,7 @@
                                 <Border Height="1" Margin="34,0,0,0"
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                                <Grid Padding="0,12,0,0">
+                                <Grid x:Name="ReportProblemSetting" Padding="0,12,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -382,7 +412,7 @@
                                 <Border Height="1" Margin="34,0,0,0"
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                                <Grid Padding="0,12,0,0">
+                                <Grid x:Name="RestoreDefaultsSetting" Padding="0,12,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -411,7 +441,7 @@
                     </StackPanel>
 
                     <!-- SNAPPING -->
-                    <StackPanel x:Name="SnappingPane" Spacing="12" Visibility="Collapsed">
+                    <StackPanel x:Name="SnappingPane" Spacing="10" Visibility="Collapsed">
                         <TextBlock Text="Snapping" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,2,0,0">
@@ -469,7 +499,7 @@
                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                         </StackPanel>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="SwipeDownSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -528,7 +558,7 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="SensitivitySetting" Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -559,7 +589,7 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="GridSpacingSetting" Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -595,7 +625,7 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="CancelTimeoutSetting" Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -631,7 +661,7 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="LivePreviewSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -652,7 +682,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="MoveCursorSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -673,7 +703,28 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="SnapAssistSetting" Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Grid.Column="0" Glyph="&#xE8A9;" FontSize="18" Margin="0,0,16,0"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Snap Assist" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="After you snap a window into a half, quarter, or third, show your other open windows over the remaining space so one click fills it — like Windows 11's built-in Snap Assist."
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="SnapAssistToggle" Grid.Column="2" VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="MouseHudSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -703,7 +754,7 @@
                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                         </StackPanel>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="ResizeHorizontalSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -724,7 +775,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="ResizeVerticalSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -753,7 +804,7 @@
                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                         </StackPanel>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="FiveFingerSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -782,7 +833,7 @@
                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                         </StackPanel>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="AppSwitchSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -803,7 +854,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="MonitorMoveSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -831,7 +882,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="PreviewDesktopSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -852,7 +903,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="CreateDesktopSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -873,7 +924,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="HoldDelaySetting" Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -912,7 +963,7 @@
                     </StackPanel>
 
                     <!-- APPS -->
-                    <Grid x:Name="AppsPane" RowSpacing="12" Visibility="Collapsed">
+                    <Grid x:Name="AppsPane" RowSpacing="10" Visibility="Collapsed">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -930,8 +981,8 @@
                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                         </StackPanel>
 
-                        <Border Grid.Row="2" Style="{StaticResource Card}">
-                            <StackPanel Spacing="12">
+                        <Border x:Name="AppCompatibilitySetting" Grid.Row="2" Style="{StaticResource Card}">
+                            <StackPanel Spacing="10">
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="How listed apps behave" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <TextBlock Text="Use this for apps that put interactive controls in the titlebar, like browsers with scrollable tabs."
@@ -998,8 +1049,8 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Grid.Row="3" Style="{StaticResource Card}" VerticalAlignment="Stretch">
-                            <Grid RowSpacing="12">
+                        <Border x:Name="InstalledAppsSetting" Grid.Row="3" Style="{StaticResource Card}" VerticalAlignment="Stretch">
+                            <Grid RowSpacing="10">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -1090,7 +1141,7 @@
                     </Grid>
 
                     <!-- APPEARANCE -->
-                    <StackPanel x:Name="AppearancePane" Spacing="12" Visibility="Collapsed">
+                    <StackPanel x:Name="AppearancePane" Spacing="10" Visibility="Collapsed">
                         <TextBlock Text="Appearance" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,2,0,0">
@@ -1101,7 +1152,7 @@
                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                         </StackPanel>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="AccentColorSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -1122,7 +1173,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="OverlayColorSetting" Style="{StaticResource Card}">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="Overlay color" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                 <TextBlock Text="Pick a preset or choose your own. Used when not following the accent color."
@@ -1141,7 +1192,7 @@
                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                         </StackPanel>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="HudBackgroundSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -1168,7 +1219,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="HudSizeSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -1194,7 +1245,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="HudFadeSetting" Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -1233,10 +1284,10 @@
                     </StackPanel>
 
                     <!-- UPDATES -->
-                    <StackPanel x:Name="UpdatesPane" Spacing="12" Visibility="Collapsed">
+                    <StackPanel x:Name="UpdatesPane" Spacing="10" Visibility="Collapsed">
                         <TextBlock Text="Updates" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="UpdatesSetting" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -1292,7 +1343,7 @@
                     </StackPanel>
 
                     <!-- ABOUT -->
-                    <StackPanel x:Name="AboutPane" Spacing="12" Visibility="Collapsed">
+                    <StackPanel x:Name="AboutPane" Spacing="10" Visibility="Collapsed">
                         <TextBlock Text="About" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,4" />
                         <Border Style="{StaticResource Card}">
                             <StackPanel Spacing="6">
@@ -1390,6 +1441,7 @@
                     </StackPanel>
                 </Grid>
             </ScrollViewer>
+            </Grid>
         </muxc:NavigationView>
     </Grid>
 </Window>

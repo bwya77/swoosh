@@ -2,6 +2,10 @@
 
 What's new in Swoosh. Newest changes are at the top.
 
+## September 2026
+
+- New "Snap Assist" in Settings under Snapping, off by default. When you turn it on, snapping a window into a half, quarter, or third shows the remaining empty space tiled with your other open windows as live thumbnails (the same kind of preview behind Alt+Tab), so one click fills it — just like Windows 11's built-in Snap Assist. Each empty zone gets its own small overlay so filling one quarter doesn't dismiss the others; picking a window, pressing Esc, or clicking away all behave the way you'd expect, and the overlay's blur/tint follows your light or dark HUD theme. Correctly targets the right monitor even when the window you pick is currently sitting on a different one.
+
 ## June 2026
 
 - Polished the Apps compatibility page: selected apps now show a count and removable pill row, Installed and Running are separate picker views, currently running apps can be selected for portable apps without Start Menu shortcuts, the Additional apps helper explains manual process names, and the app list stays anchored to the bottom of the page as the Settings window grows.

@@ -21,6 +21,8 @@ public sealed class SwooshController : IDisposable
     private readonly CursorChipOverlay _chip = new();
     private readonly DemoOverlay _demo = new();
     private readonly SwooshStats _stats = new();
+    private readonly SnapAssistOverlay _snapAssist = new();
+    private bool _snapAssistEnabled = true;
 
     private IntPtr _target;
     private bool _armed;
@@ -222,6 +224,9 @@ public sealed class SwooshController : IDisposable
         _gestures.DesktopMoveOnRelease = s.AppSwitchOnHold || s.PreviewDesktopDestination;
         _gestures.HoldDelayMs = (long)Math.Round(Math.Clamp(s.DesktopHoldDelaySeconds, 0.1, 1.0) * 1000);
         _mouseHoldDelayMs = _gestures.HoldDelayMs;
+        _snapAssistEnabled = s.SnapAssistEnabled;
+        _snapAssist.ApplyAppearance(s.HudBackground);
+        if (!s.SnapAssistEnabled) _snapAssist.Hide();
     }
 
     private static int ModifierVk(GridModifier modifier) => modifier switch
@@ -415,6 +420,7 @@ public sealed class SwooshController : IDisposable
             else
             {
                 _snapper.Apply(_target, zone);
+                _snapper.NotifySnapped(_target, zone);
                 _demo.SetCaption(ZoneCaption(zone));
             }
             _stats.Add();
@@ -657,6 +663,42 @@ public sealed class SwooshController : IDisposable
         _mouse.MiddleDown += OnMouseMiddleDown;
         _mouse.Moved += OnMouseMoved;
         _mouse.MiddleUp += OnMouseMiddleUp;
+        _snapper.Snapped += OnWindowSnapped;
+    }
+
+    /// <summary>Snap Assist: after a window lands in a zone with a well-defined complement
+    /// (halves, quarters, third/two-third pairs), offer the user's other open windows to fill
+    /// the space that's left, same as Windows 11's built-in Snap Assist overlay.</summary>
+    private void OnWindowSnapped(IntPtr hwnd, SnapZone zone, Win32.RECT work)
+    {
+        if (!_snapAssistEnabled) return;
+
+        var complements = SnapAssistZones.ComplementOf(zone);
+        if (complements.Count == 0) return;
+
+        var candidates = Native.WindowList.GetSwitchableWindows()
+            .Where(w => w.Hwnd != hwnd)
+            .ToList();
+        if (candidates.Count == 0) return;
+
+        _snapAssist.Show(work, complements, candidates, (picked, targetZone) =>
+        {
+            // Deliberately doesn't call NotifySnapped: a Snap Assist pick is itself a
+            // "drop", but chaining into another Snap Assist immediately after picking one
+            // would be surprising, and the whole overlay (all remaining slots) is already
+            // dismissed as soon as any candidate is picked.
+            //
+            // Pass the captured monitor work area explicitly (not just the zone): Apply()
+            // otherwise resolves the target monitor from the picked window's *own current
+            // position*, which is very often a different monitor than the one whose empty zone
+            // the user actually clicked (that's exactly why it was offered as a Snap Assist
+            // candidate in the first place - it was sitting elsewhere). Without this override,
+            // picking a window shown as a candidate on monitor 2 could snap it on monitor 1
+            // instead, wherever that window happened to already be.
+            _snapper.Apply(picked, targetZone, work);
+            Win32.ForceForeground(picked);
+            _stats.Add();
+        });
     }
 
     private void OnFrame(TouchFrame frame)
@@ -1083,6 +1125,7 @@ public sealed class SwooshController : IDisposable
                 if (rz != SnapZone.None && rz != SnapZone.Minimize)
                 {
                     _snapper.Apply(_target, rz);
+                    _snapper.NotifySnapped(_target, rz);
                     Win32.ForceForeground(_target);
                 }
             }
@@ -1146,9 +1189,12 @@ public sealed class SwooshController : IDisposable
         // Re-applying here restarts the glide (or fires a redundant SetWindowPos to
         // the same spot), which makes the target app repaint at the moment of
         // commit. Skip it when the live window is already at this zone; any in-flight
-        // glide finishes at the target on its own.
+        // glide finishes at the target on its own. Snap Assist still needs telling that a
+        // real drop happened here, though - that never fires during live preview's own
+        // continuous re-targeting (see WindowSnapper.NotifySnapped).
         if (!(_livePreview && _liveMoved && _liveZone == zone))
             _snapper.Apply(_target, zone);
+        _snapper.NotifySnapped(_target, zone);
         _stats.Add();
         _demo.SetCaption(ZoneCaption(zone));
         if (zone != SnapZone.Minimize)
@@ -1680,6 +1726,7 @@ public sealed class SwooshController : IDisposable
         Log.Write($"OnHotkey zone={zone} hwnd=0x{h.ToInt64():X} manageable={man} title='{Win32.GetWindowTitle(h)}'");
         if (!man) return;
         _snapper.Apply(h, zone);
+        _snapper.NotifySnapped(h, zone);
         if (zone != SnapZone.None) _stats.Add();
         if (zone != SnapZone.Minimize)
             Win32.ForceForeground(h);
@@ -1706,9 +1753,11 @@ public sealed class SwooshController : IDisposable
         _mouseHoldTimer.Tick -= OnMouseHoldTimer;
         _mouseFailSafeTimer.Stop();
         _mouseFailSafeTimer.Tick -= OnMouseFailSafeTimer;
+        _snapper.Snapped -= OnWindowSnapped;
         _preview.Close();
         _chip.Close();
         _demo.Close();
+        _snapAssist.Close();
         _stats.Dispose();
         _window.Dispose();
     }

@@ -86,6 +86,41 @@ public static class Win32
     [DllImport("dwmapi.dll")]
     public static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
 
+    // DWM thumbnails: a live, GPU-composited preview of one window rendered into a rect on
+    // another window's client area (the same mechanism behind Alt+Tab and Snap Assist
+    // previews). See DWM_TNP_* flags below for which fields of DWM_THUMBNAIL_PROPERTIES apply.
+    public const int DWM_TNP_RECTDESTINATION = 0x00000001;
+    public const int DWM_TNP_RECTSOURCE = 0x00000002;
+    public const int DWM_TNP_OPACITY = 0x00000004;
+    public const int DWM_TNP_VISIBLE = 0x00000008;
+    public const int DWM_TNP_SOURCECLIENTAREAONLY = 0x00000010;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DWM_THUMBNAIL_PROPERTIES
+    {
+        public int dwFlags;
+        public RECT rcDestination;
+        public RECT rcSource;
+        public byte opacity;
+        [MarshalAs(UnmanagedType.Bool)] public bool fVisible;
+        [MarshalAs(UnmanagedType.Bool)] public bool fSourceClientAreaOnly;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SIZE { public int cx, cy; }
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmRegisterThumbnail(IntPtr hwndDestination, IntPtr hwndSource, out IntPtr thumb);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmUnregisterThumbnail(IntPtr thumb);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmUpdateThumbnailProperties(IntPtr thumb, ref DWM_THUMBNAIL_PROPERTIES props);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmQueryThumbnailSourceSize(IntPtr thumb, out SIZE size);
+
     /// <summary>Apply a translucent Acrylic backdrop + dark/light framing + rounded corners
     /// to a flyout-style window (e.g. the tray menu). No-op before Win11.</summary>
     public static void EnableAcrylicFlyout(IntPtr hwnd, bool dark)
@@ -99,6 +134,66 @@ public static class Win32
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int));
         var m = new MARGINS { Left = -1, Right = -1, Top = -1, Bottom = -1 };
         DwmExtendFrameIntoClientArea(hwnd, ref m);
+    }
+
+    // Blur-behind for per-pixel-transparent (AllowsTransparency=true) WPF windows. Unlike
+    // DWMWA_SYSTEMBACKDROP_TYPE (which needs a normal opaque window and blends through actual
+    // zero-alpha pixels), this undocumented composition attribute is the technique that works
+    // together with a layered/transparent window: it tells DWM to blur whatever is behind the
+    // window wherever the window itself is transparent or tinted, rather than requiring the
+    // window to render true holes.
+    private const int WCA_ACCENT_POLICY = 19;
+    private const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ACCENT_POLICY
+    {
+        public int AccentState;
+        public int AccentFlags;
+        public int GradientColor; // 0xAABBGGRR
+        public int AnimationId;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WINDOWCOMPOSITIONATTRIBDATA
+    {
+        public int Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WINDOWCOMPOSITIONATTRIBDATA data);
+
+    /// <summary>Blur whatever is behind this transparent window, tinted by the given ARGB color
+    /// (its alpha controls how strongly the tint reads over the blur). Needs the window to be
+    /// per-pixel transparent (WPF <c>AllowsTransparency = true</c>); does nothing useful on a
+    /// normal opaque window (use <see cref="EnableAcrylicFlyout"/> for those instead).</summary>
+    public static void EnableAcrylicBlurBehind(IntPtr hwnd, byte a, byte r, byte g, byte b)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        var accent = new ACCENT_POLICY
+        {
+            AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND,
+            GradientColor = (a << 24) | (b << 16) | (g << 8) | r,
+        };
+        int size = Marshal.SizeOf<ACCENT_POLICY>();
+        IntPtr accentPtr = Marshal.AllocHGlobal(size);
+        try
+        {
+            Marshal.StructureToPtr(accent, accentPtr, false);
+            var data = new WINDOWCOMPOSITIONATTRIBDATA
+            {
+                Attribute = WCA_ACCENT_POLICY,
+                Data = accentPtr,
+                SizeOfData = size,
+            };
+            SetWindowCompositionAttribute(hwnd, ref data);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(accentPtr);
+        }
     }
 
     /// <summary>Apply a Mica backdrop + dark titlebar to a Win11 window (no-op pre-Win11).</summary>
@@ -286,6 +381,18 @@ public static class Win32
     [DllImport("user32.dll")]
     public static extern bool BringWindowToTop(IntPtr hWnd);
 
+    // SPI_*FOREGROUNDLOCKTIMEOUT: Windows refuses SetForegroundWindow from a background process
+    // unless it recently received real user input, as an anti-annoyance heuristic - and repeated
+    // rapid calls (e.g. re-triggering Snap Assist several times quickly, or right after a system
+    // UI like Settings held focus) can make even the AttachThreadInput trick below get silently
+    // ignored. Zeroing this out for the duration of the call is the standard, documented way to
+    // make SetForegroundWindow unconditionally succeed regardless of that heuristic.
+    private const uint SPI_GETFOREGROUNDLOCKTIMEOUT = 0x2000;
+    private const uint SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref uint pvParam, uint fWinIni);
+
     /// <summary>Force a window to the foreground reliably, defeating the foreground-lock
     /// that makes a bare SetForegroundWindow fail when the caller isn't the active app.
     /// Also raises the window in the Z-order so it sits above other windows, not just
@@ -297,6 +404,13 @@ public static class Win32
         uint fgThread = GetWindowThreadProcessId(fg, IntPtr.Zero);
         uint thisThread = GetCurrentThreadId();
         bool attached = fgThread != thisThread && AttachThreadInput(fgThread, thisThread, true);
+
+        uint oldTimeout = 0;
+        SystemParametersInfo(SPI_GETFOREGROUNDLOCKTIMEOUT, 0, ref oldTimeout, 0);
+        uint zero = 0;
+        // No SPIF_SENDCHANGE/SPIF_UPDATEINIFILE flags: this is a transient, in-process-only
+        // change we restore in the finally block, not a persisted system setting.
+        SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, ref zero, 0);
         try
         {
             BringWindowToTop(hwnd);
@@ -305,6 +419,7 @@ public static class Win32
         }
         finally
         {
+            SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, ref oldTimeout, 0);
             if (attached) AttachThreadInput(fgThread, thisThread, false);
         }
     }
