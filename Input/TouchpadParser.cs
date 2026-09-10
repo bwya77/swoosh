@@ -21,21 +21,10 @@ public sealed class TouchpadParser
         public ushort ContactCountCollection;
         public bool HasContactId;
         public bool IsSerialMode => FingerCollections.Count == 1 && HasContactId;
+        public readonly SerialFrameAggregator SerialAggregator = new();
     }
 
     private readonly Dictionary<IntPtr, DeviceLayout?> _devices = new();
-
-    private sealed class SerialSlot
-    {
-        public int Id;
-        public double Nx;
-        public double Ny;
-        public uint RawX;
-        public uint RawY;
-        public long LastSeenMs;
-    }
-    private readonly Dictionary<int, SerialSlot> _serialActive = new();
-    private int _serialLastReportedCount;
 
     /// <summary>When true (the default), apply the firmware phantom-contact rejection
     /// heuristics. This is a diagnostic kill-switch: if a particular touchpad's gestures behave
@@ -428,12 +417,19 @@ public sealed class TouchpadParser
         return frames;
     }
 
+    internal SerialFrameAggregator? GetSerialAggregatorForTesting(IntPtr device) =>
+        _devices.TryGetValue(device, out var layout) ? layout?.SerialAggregator : null;
+
     private List<TouchFrame> ParseSerial(DeviceLayout layout, IntPtr basePtr, int sizeHid, int reportCount, double spanX, double spanY, ushort[] usageBuf)
     {
         var frames = new List<TouchFrame>();
         ushort col = layout.FingerCollections[0];
         long now = Environment.TickCount64;
-        bool anyChange = false;
+
+        // Prune stale contacts/pending frames if time has elapsed
+        var timeoutFrame = layout.SerialAggregator.PruneTimeouts(now);
+        if (timeoutFrame != null)
+            frames.Add(timeoutFrame);
 
         for (int r = 0; r < reportCount; r++)
         {
@@ -445,6 +441,10 @@ public sealed class TouchpadParser
                 Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_DIGITIZER,
                     layout.ContactCountCollection, Hid.USAGE_CONTACT_COUNT,
                     out ccVal, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS;
+
+            // Only reports that carry a Contact Count are touch frames. Skip mouse/button reports.
+            if (layout.HasContactCount && !ccOk)
+                continue;
 
             // Tip switch
             uint usageLen = (uint)usageBuf.Length;
@@ -478,64 +478,22 @@ public sealed class TouchpadParser
                 Swoosh.Log.Write($"  [Rep] rid={reportId} ccOk={ccOk} cc={ccVal} tip={tip} id={id} x={rawX} y={rawY}");
             }
 
-            if (!tip)
-            {
-                if (idOk && _serialActive.Remove(id))
-                {
-                    anyChange = true;
-                }
-            }
-            else if (xOk && yOk)
-            {
-                double nx = Math.Clamp((rawX - layout.LogicalMinX) / spanX, 0, 1);
-                double ny = Math.Clamp((rawY - layout.LogicalMinY) / spanY, 0, 1);
+            double nx = xOk ? Math.Clamp((rawX - layout.LogicalMinX) / spanX, 0, 1) : 0;
+            double ny = yOk ? Math.Clamp((rawY - layout.LogicalMinY) / spanY, 0, 1) : 0;
 
-                _serialActive[id] = new SerialSlot
-                {
-                    Id = id,
-                    Nx = nx,
-                    Ny = ny,
-                    RawX = rawX,
-                    RawY = rawY,
-                    LastSeenMs = now
-                };
-                anyChange = true;
-            }
-        }
+            var frame = layout.SerialAggregator.ProcessReport(
+                ccOk,
+                ccVal,
+                tip && xOk && yOk,
+                id,
+                nx,
+                ny,
+                now,
+                rawX,
+                rawY);
 
-        // 超时清理（超过 150ms 未更新的 contact 自动移除）
-        if (_serialActive.Count > 0)
-        {
-            var staleKeys = new List<int>();
-            foreach (var kv in _serialActive)
-            {
-                if (now - kv.Value.LastSeenMs > 150)
-                    staleKeys.Add(kv.Key);
-            }
-            foreach (var k in staleKeys)
-            {
-                _serialActive.Remove(k);
-                anyChange = true;
-            }
-        }
-
-        // 产生输出帧
-        if (anyChange || _serialActive.Count > 0 || _serialLastReportedCount > 0)
-        {
-            var frame = new TouchFrame { TimestampMs = now };
-            foreach (var slot in _serialActive.Values)
-            {
-                frame.Contacts.Add(new Contact(slot.Id, slot.Nx, slot.Ny, true));
-            }
-            frames.Add(frame);
-            _serialLastReportedCount = _serialActive.Count;
-
-            if (Swoosh.Log.Verbose)
-            {
-                string rawDetail = string.Join(" ", _serialActive.Values.Select(c =>
-                    $"id{c.Id}@{c.RawX},{c.RawY}({c.Nx:F2},{c.Ny:F2})"));
-                Swoosh.Log.Write($"[SerialFrame] n={_serialActive.Count} [{rawDetail}]");
-            }
+            if (frame != null)
+                frames.Add(frame);
         }
 
         return frames;
