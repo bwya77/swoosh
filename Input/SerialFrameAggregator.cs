@@ -34,14 +34,10 @@ public sealed class SerialFrameAggregator
         public uint RawX { get; init; }
         public uint RawY { get; init; }
         public bool TipDown { get; init; }
-        public long LastSeenMs { get; set; }
     }
 
     /// <summary>Timeout in ms to assemble a pending logical frame before discarding partial aggregation.</summary>
     public int PendingTimeoutMs { get; set; } = 100;
-
-    /// <summary>Timeout in ms after which an inactive contact is considered lifted and removed.</summary>
-    public int ContactTimeoutMs { get; set; } = 150;
 
     private readonly Dictionary<int, SerialContact> _activeContacts = new();
     private readonly Dictionary<int, SerialContact> _pendingContacts = new();
@@ -121,8 +117,7 @@ public sealed class SerialFrameAggregator
                 Ny = ny,
                 RawX = rawX,
                 RawY = rawY,
-                TipDown = tip,
-                LastSeenMs = timestampMs
+                TipDown = tip
             };
 
             // Have we collected the declared number of contacts?
@@ -149,47 +144,6 @@ public sealed class SerialFrameAggregator
             {
                 return EmitActiveFrame(timestampMs);
             }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Checks for and prunes stale active contacts or expired pending frames due to elapsed time.
-    /// Returns an updated frame (e.g. lift-off frame with DownCount = 0) if active contacts changed.
-    /// </summary>
-    public TouchFrame? PruneTimeouts(long timestampMs)
-    {
-        bool changed = false;
-
-        if (_isAggregating && timestampMs - _pendingStartMs > PendingTimeoutMs)
-        {
-            _isAggregating = false;
-            _pendingContacts.Clear();
-            _expectedCount = 0;
-        }
-
-        if (_activeContacts.Count > 0)
-        {
-            var staleKeys = new List<int>();
-            foreach (var kvp in _activeContacts)
-            {
-                if (timestampMs - kvp.Value.LastSeenMs > ContactTimeoutMs)
-                {
-                    staleKeys.Add(kvp.Key);
-                }
-            }
-
-            foreach (var key in staleKeys)
-            {
-                _activeContacts.Remove(key);
-                changed = true;
-            }
-        }
-
-        if (changed)
-        {
-            return EmitActiveFrame(timestampMs);
         }
 
         return null;

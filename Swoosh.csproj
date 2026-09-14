@@ -21,6 +21,10 @@
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Swoosh.Tests" />
+  </ItemGroup>
+
   <!-- The standalone WinUI 3 settings app lives in this subfolder of the repo root.
        Exclude it from the WPF app's default globbing so it builds as its own project. -->
   <ItemGroup>

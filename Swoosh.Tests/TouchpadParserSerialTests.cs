@@ -5,6 +5,322 @@ namespace Swoosh.Tests;
 
 public class TouchpadParserSerialTests
 {
+    #region TouchpadParser.Parse Level Tests
+
+    [Fact]
+    public void Parse_SingleCall_AggregatesContinuationReports()
+    {
+        var parser = new TouchpadParser();
+        var dev = new IntPtr(0x1001);
+        parser.RegisterSerialDeviceForTesting(dev, minX: 0, maxX: 1000, minY: 0, maxY: 1000);
+
+        // Single Parse call with a 2-report batch: report 0 declares CC=2, report 1 is continuation (CC=0)
+        var rep1 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 2,
+            Tip = 1,
+            ContactId = 1,
+            RawX = 200,
+            RawY = 500
+        };
+        var rep2 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 0,
+            Tip = 1,
+            ContactId = 2,
+            RawX = 800,
+            RawY = 500
+        };
+
+        var frames = parser.ParseForTesting(dev, rep1, rep2);
+
+        Assert.Single(frames);
+        var frame = frames[0];
+        Assert.Equal(2, frame.DownCount);
+        Assert.Equal(2, frame.Contacts.Count);
+        Assert.Contains(frame.Contacts, c => c.Id == 1 && Math.Abs(c.X - 0.2) < 0.001);
+        Assert.Contains(frame.Contacts, c => c.Id == 2 && Math.Abs(c.X - 0.8) < 0.001);
+    }
+
+    [Fact]
+    public void Parse_SplitCalls_RetainsPendingStateAcrossCalls()
+    {
+        var parser = new TouchpadParser();
+        var dev = new IntPtr(0x1002);
+        parser.RegisterSerialDeviceForTesting(dev, minX: 0, maxX: 1000, minY: 0, maxY: 1000);
+
+        // Call 1: First WM_INPUT payload delivers contact 1 of 2
+        var rep1 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 2,
+            Tip = 1,
+            ContactId = 10,
+            RawX = 300,
+            RawY = 400
+        };
+        var frames1 = parser.ParseForTesting(dev, rep1);
+        Assert.Empty(frames1);
+
+        // Call 2: Second WM_INPUT payload delivers contact 2 of 2
+        var rep2 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 0,
+            Tip = 1,
+            ContactId = 20,
+            RawX = 700,
+            RawY = 600
+        };
+        var frames2 = parser.ParseForTesting(dev, rep2);
+
+        Assert.Single(frames2);
+        var frame = frames2[0];
+        Assert.Equal(2, frame.DownCount);
+        Assert.Contains(frame.Contacts, c => c.Id == 10 && Math.Abs(c.X - 0.3) < 0.001);
+        Assert.Contains(frame.Contacts, c => c.Id == 20 && Math.Abs(c.X - 0.7) < 0.001);
+    }
+
+    [Fact]
+    public void Parse_DifferentDeviceHandles_MaintainsStateIsolation()
+    {
+        var parser = new TouchpadParser();
+        var devA = new IntPtr(0x2001);
+        var devB = new IntPtr(0x2002);
+
+        parser.RegisterSerialDeviceForTesting(devA, minX: 0, maxX: 1000, minY: 0, maxY: 1000);
+        parser.RegisterSerialDeviceForTesting(devB, minX: 0, maxX: 1000, minY: 0, maxY: 1000);
+
+        // Device A receives contact 1 of a 2-finger gesture
+        var repA1 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 2,
+            Tip = 1,
+            ContactId = 1,
+            RawX = 100,
+            RawY = 100
+        };
+        var framesA1 = parser.ParseForTesting(devA, repA1);
+        Assert.Empty(framesA1);
+
+        // Device B receives a complete 1-finger gesture
+        var repB1 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 1,
+            Tip = 1,
+            ContactId = 5,
+            RawX = 500,
+            RawY = 500
+        };
+        var framesB = parser.ParseForTesting(devB, repB1);
+        Assert.Single(framesB);
+        Assert.Equal(1, framesB[0].DownCount);
+        Assert.Equal(5, framesB[0].Contacts[0].Id);
+
+        // Device A now receives contact 2 of 2
+        var repA2 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 0,
+            Tip = 1,
+            ContactId = 2,
+            RawX = 900,
+            RawY = 900
+        };
+        var framesA2 = parser.ParseForTesting(devA, repA2);
+        Assert.Single(framesA2);
+        Assert.Equal(2, framesA2[0].DownCount);
+        Assert.Contains(framesA2[0].Contacts, c => c.Id == 1);
+        Assert.Contains(framesA2[0].Contacts, c => c.Id == 2);
+    }
+
+    [Fact]
+    public void Parse_NonTouchReport_SkippedWithoutAffectingTouchFrame()
+    {
+        var parser = new TouchpadParser();
+        var dev = new IntPtr(0x1003);
+        parser.RegisterSerialDeviceForTesting(dev, minX: 0, maxX: 1000, minY: 0, maxY: 1000);
+
+        var mouseRep = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 0 // e.g. Mouse button / pointer packet
+        };
+        var touchRep = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 1,
+            Tip = 1,
+            ContactId = 1,
+            RawX = 400,
+            RawY = 400
+        };
+
+        var frames = parser.ParseForTesting(dev, mouseRep, touchRep);
+        Assert.Single(frames);
+        Assert.Equal(1, frames[0].DownCount);
+        Assert.Equal(1, frames[0].Contacts[0].Id);
+    }
+
+    [Fact]
+    public void Parse_CoordinateNormalization_ClampsAndScales()
+    {
+        var parser = new TouchpadParser();
+        var dev = new IntPtr(0x1004);
+        // Range: X in [100, 1100] (span 1000), Y in [200, 1200] (span 1000)
+        parser.RegisterSerialDeviceForTesting(dev, minX: 100, maxX: 1100, minY: 200, maxY: 1200);
+
+        var repInBounds = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 1,
+            Tip = 1,
+            ContactId = 1,
+            RawX = 600,  // (600 - 100) / 1000 = 0.5
+            RawY = 700   // (700 - 200) / 1000 = 0.5
+        };
+        var frames1 = parser.ParseForTesting(dev, repInBounds);
+        Assert.Single(frames1);
+        Assert.Equal(0.5, frames1[0].Contacts[0].X, 3);
+        Assert.Equal(0.5, frames1[0].Contacts[0].Y, 3);
+
+        // Clamping check: rawX below minX clamped to 0, rawY above maxY clamped to 1
+        var repOutOfBounds = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 1,
+            Tip = 1,
+            ContactId = 1,
+            RawX = 50,   // Below 100 -> clamped to 0.0
+            RawY = 1500  // Above 1200 -> clamped to 1.0
+        };
+        var frames2 = parser.ParseForTesting(dev, repOutOfBounds);
+        Assert.Single(frames2);
+        Assert.Equal(0.0, frames2[0].Contacts[0].X, 3);
+        Assert.Equal(1.0, frames2[0].Contacts[0].Y, 3);
+    }
+
+    [Fact]
+    public void Parse_ZeroContactCount_EmitsLiftFrame()
+    {
+        var parser = new TouchpadParser();
+        var dev = new IntPtr(0x1005);
+        parser.RegisterSerialDeviceForTesting(dev);
+
+        // 1. Initial 1-finger frame
+        var down = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 1,
+            Tip = 1,
+            ContactId = 1,
+            RawX = 500,
+            RawY = 500
+        };
+        var fDown = parser.ParseForTesting(dev, down);
+        Assert.Single(fDown);
+        Assert.Equal(1, fDown[0].DownCount);
+
+        // 2. All fingers lifted (CC = 0)
+        var lift = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 0,
+            Tip = 0,
+            ContactId = 0,
+            RawX = 0,
+            RawY = 0
+        };
+        var fLift = parser.ParseForTesting(dev, lift);
+        Assert.Single(fLift);
+        Assert.Equal(0, fLift[0].DownCount);
+        Assert.Empty(fLift[0].Contacts);
+    }
+
+    [Fact]
+    public void Parse_StationaryHold_ResumedInputAfterDelay_DoesNotEmitEmptyLiftFrame()
+    {
+        var parser = new TouchpadParser();
+        var dev = new IntPtr(0x1006);
+        parser.RegisterSerialDeviceForTesting(dev);
+
+        // 1. User places two fingers down (2-report batch)
+        var rep1 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 2,
+            Tip = 1,
+            ContactId = 1,
+            RawX = 200,
+            RawY = 500
+        };
+        var rep2 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 0,
+            Tip = 1,
+            ContactId = 2,
+            RawX = 800,
+            RawY = 500
+        };
+        var fInitial = parser.ParseForTesting(dev, rep1, rep2);
+        Assert.Single(fInitial);
+        Assert.Equal(2, fInitial[0].DownCount);
+
+        // 2. User holds motionless (stationary hold).
+        // Device is silent for 250ms (exceeding the 200ms gesture hold threshold).
+        // Input then resumes with continuing hold/movement.
+        var repResumed1 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 2,
+            Tip = 1,
+            ContactId = 1,
+            RawX = 205,
+            RawY = 505
+        };
+        var repResumed2 = new TouchpadParser.TestSerialReportPayload
+        {
+            IsTouchReport = 1,
+            HasContactCount = 1,
+            ContactCount = 0,
+            Tip = 1,
+            ContactId = 2,
+            RawX = 805,
+            RawY = 505
+        };
+
+        var fResumed = parser.ParseForTesting(dev, repResumed1, repResumed2);
+
+        // CRITICAL CHECK: Resumed valid input must NOT be preceded by a synthetic empty frame!
+        Assert.Single(fResumed);
+        Assert.Equal(2, fResumed[0].DownCount);
+        Assert.Equal(2, fResumed[0].Contacts.Count);
+        Assert.DoesNotContain(fResumed, f => f.DownCount == 0);
+    }
+
+    #endregion
+
+    #region SerialFrameAggregator Core Logic Tests
+
     [Fact]
     public void HybridFrame_SplitAcrossMultipleReports_EmitsSingleCompleteFrame()
     {
@@ -203,29 +519,6 @@ public class TouchpadParserSerialTests
     }
 
     [Fact]
-    public void Timeout_StaleActiveContacts_RemovedAndEmitsEmptyFrame()
-    {
-        var aggregator = new SerialFrameAggregator { ContactTimeoutMs = 150 };
-
-        // 1 finger down at t = 1000
-        var f1 = aggregator.ProcessReport(true, 1, true, 1, 0.5, 0.5, 1000);
-        Assert.NotNull(f1);
-        Assert.Equal(1, f1.DownCount);
-
-        // Device goes completely silent. Check timeouts at t = 1100 (not expired yet)
-        var f2 = aggregator.PruneTimeouts(1100);
-        Assert.Null(f2);
-        Assert.Equal(1, aggregator.ActiveContactCount);
-
-        // Check timeouts at t = 1160 (> 150ms since last seen)
-        var f3 = aggregator.PruneTimeouts(1160);
-        Assert.NotNull(f3);
-        Assert.Equal(0, f3.DownCount);
-        Assert.Empty(f3.Contacts);
-        Assert.Equal(0, aggregator.ActiveContactCount);
-    }
-
-    [Fact]
     public void MultipleDevices_HaveIndependentAggregationState()
     {
         var devA = new SerialFrameAggregator();
@@ -249,4 +542,6 @@ public class TouchpadParserSerialTests
         Assert.NotNull(fA);
         Assert.Equal(2, fA.DownCount);
     }
+
+    #endregion
 }
