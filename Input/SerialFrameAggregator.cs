@@ -132,6 +132,11 @@ public sealed class SerialFrameAggregator
         // 4. Not currently aggregating (e.g. lift-off reports, tip-up outside frame, or CC=0)
         if (hasContactCount && contactCount == 0)
         {
+            // A tip-down zero-count report is a continuation. If there is no
+            // pending frame, it arrived too late and should be ignored.
+            if (tip)
+                return null;
+
             if (_activeContacts.Count > 0)
             {
                 _activeContacts.Clear();

@@ -317,6 +317,89 @@ public class TouchpadParserSerialTests
         Assert.DoesNotContain(fResumed, f => f.DownCount == 0);
     }
 
+    [Fact]
+    public void Parse_OrphanedContinuation_AfterPendingTimeout_PreservesActiveContacts()
+    {
+        var parser = new TouchpadParser();
+        var dev = new IntPtr(0x1007);
+        parser.RegisterSerialDeviceForTesting(dev, minX: 0, maxX: 1000, minY: 0, maxY: 1000);
+
+        // Set a short pending timeout for this test via the aggregator.
+        var agg = parser.GetSerialAggregatorForTesting(dev)!;
+        agg.PendingTimeoutMs = 50;
+
+        // Step 1: Establish an active two-contact frame at t=1000.
+        var frames1 = parser.ParseForTesting(dev,
+            new TouchpadParser.TestSerialReportPayload
+            {
+                IsTouchReport = 1, HasContactCount = 1, ContactCount = 2,
+                Tip = 1, ContactId = 1, RawX = 200, RawY = 500, TimestampMs = 1000
+            },
+            new TouchpadParser.TestSerialReportPayload
+            {
+                IsTouchReport = 1, HasContactCount = 1, ContactCount = 0,
+                Tip = 1, ContactId = 2, RawX = 800, RawY = 500, TimestampMs = 1002
+            });
+        Assert.Single(frames1);
+        Assert.Equal(2, frames1[0].DownCount);
+        Assert.Equal(2, agg.ActiveContactCount);
+
+        // Step 2: Start another two-contact frame at t=1100, but send only its first report.
+        var frames2 = parser.ParseForTesting(dev,
+            new TouchpadParser.TestSerialReportPayload
+            {
+                IsTouchReport = 1, HasContactCount = 1, ContactCount = 2,
+                Tip = 1, ContactId = 1, RawX = 210, RawY = 510, TimestampMs = 1100
+            });
+        Assert.Empty(frames2); // Aggregating, waiting for contact 2
+        Assert.True(agg.IsAggregating);
+
+        // Step 3+4: Time advances beyond PendingTimeoutMs (50ms). The delayed
+        // continuation arrives at t=1200 (100ms after the frame started) with
+        // CC=0 and Tip=true. The pending frame should have timed out, and this
+        // orphaned continuation must be silently ignored — it must NOT clear the
+        // active contacts or emit an empty lift frame.
+        var frames3 = parser.ParseForTesting(dev,
+            new TouchpadParser.TestSerialReportPayload
+            {
+                IsTouchReport = 1, HasContactCount = 1, ContactCount = 0,
+                Tip = 1, ContactId = 2, RawX = 810, RawY = 510, TimestampMs = 1200
+            });
+
+        // Step 5: Verify — no frame emitted, and both original active contacts preserved.
+        Assert.Empty(frames3);
+        Assert.Equal(2, agg.ActiveContactCount);
+
+        // Step 6: Send a new complete two-contact frame and verify normal parsing continues.
+        var frames4 = parser.ParseForTesting(dev,
+            new TouchpadParser.TestSerialReportPayload
+            {
+                IsTouchReport = 1, HasContactCount = 1, ContactCount = 2,
+                Tip = 1, ContactId = 1, RawX = 220, RawY = 520, TimestampMs = 1300
+            },
+            new TouchpadParser.TestSerialReportPayload
+            {
+                IsTouchReport = 1, HasContactCount = 1, ContactCount = 0,
+                Tip = 1, ContactId = 2, RawX = 820, RawY = 520, TimestampMs = 1302
+            });
+        Assert.Single(frames4);
+        Assert.Equal(2, frames4[0].DownCount);
+        Assert.Contains(frames4[0].Contacts, c => c.Id == 1);
+        Assert.Contains(frames4[0].Contacts, c => c.Id == 2);
+
+        // Step 7: Send CC=0 with Tip=false (real lift) and verify the lift still works.
+        var frames5 = parser.ParseForTesting(dev,
+            new TouchpadParser.TestSerialReportPayload
+            {
+                IsTouchReport = 1, HasContactCount = 1, ContactCount = 0,
+                Tip = 0, ContactId = 0, RawX = 0, RawY = 0, TimestampMs = 1400
+            });
+        Assert.Single(frames5);
+        Assert.Equal(0, frames5[0].DownCount);
+        Assert.Empty(frames5[0].Contacts);
+        Assert.Equal(0, agg.ActiveContactCount);
+    }
+
     #endregion
 
     #region SerialFrameAggregator Core Logic Tests

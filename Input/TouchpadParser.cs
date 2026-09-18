@@ -23,7 +23,8 @@ public sealed class TouchpadParser
             out bool tip,
             out int contactId,
             out uint rawX,
-            out uint rawY);
+            out uint rawY,
+            out long timestampMs);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -37,6 +38,7 @@ public sealed class TouchpadParser
         public int ContactId;
         public uint RawX;
         public uint RawY;
+        public long TimestampMs;
     }
 
     internal sealed class TestSerialReportDecoder : ISerialReportDecoder
@@ -52,7 +54,8 @@ public sealed class TouchpadParser
             out bool tip,
             out int contactId,
             out uint rawX,
-            out uint rawY)
+            out uint rawY,
+            out long timestampMs)
         {
             var p = Marshal.PtrToStructure<TestSerialReportPayload>(report);
             isTouchReport = p.IsTouchReport != 0;
@@ -62,6 +65,7 @@ public sealed class TouchpadParser
             contactId = p.ContactId;
             rawX = p.RawX;
             rawY = p.RawY;
+            timestampMs = p.TimestampMs;
             return true;
         }
     }
@@ -536,16 +540,21 @@ public sealed class TouchpadParser
             int contactId;
             uint rawX;
             uint rawY;
+            long reportTimestamp;
 
             if (layout.Decoder != null)
             {
                 if (!layout.Decoder.DecodeReport(layout, report, sizeHid, usageBuf,
                         out isTouchReport, out hasContactCount, out contactCount, out tip,
-                        out contactId, out rawX, out rawY))
+                        out contactId, out rawX, out rawY, out reportTimestamp))
                     continue;
 
                 if (!isTouchReport)
                     continue;
+
+                // Use per-report timestamp from decoder if provided; fall back to wall clock.
+                if (reportTimestamp <= 0)
+                    reportTimestamp = now;
             }
             else
             {
@@ -598,6 +607,8 @@ public sealed class TouchpadParser
                 {
                     Swoosh.Log.Write($"  [Rep] rid={reportId} ccOk={ccOk} cc={ccVal} tip={tip} id={contactId} x={rawX} y={rawY}");
                 }
+
+                reportTimestamp = now;
             }
 
             double nx = Math.Clamp((rawX - layout.LogicalMinX) / spanX, 0, 1);
@@ -610,7 +621,7 @@ public sealed class TouchpadParser
                 contactId,
                 nx,
                 ny,
-                now,
+                reportTimestamp,
                 rawX,
                 rawY);
 
