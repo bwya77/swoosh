@@ -10,7 +10,67 @@ namespace Swoosh.Input;
 /// </summary>
 public sealed class TouchpadParser
 {
-    private sealed class DeviceLayout
+    internal interface ISerialReportDecoder
+    {
+        bool DecodeReport(
+            DeviceLayout layout,
+            IntPtr report,
+            int sizeHid,
+            ushort[] usageBuf,
+            out bool isTouchReport,
+            out bool hasContactCount,
+            out uint contactCount,
+            out bool tip,
+            out int contactId,
+            out uint rawX,
+            out uint rawY,
+            out long timestampMs);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct TestSerialReportPayload
+    {
+        public byte IsTouchReport;
+        public byte HasContactCount;
+        public byte Tip;
+        public byte Reserved;
+        public uint ContactCount;
+        public int ContactId;
+        public uint RawX;
+        public uint RawY;
+        public long TimestampMs;
+    }
+
+    internal sealed class TestSerialReportDecoder : ISerialReportDecoder
+    {
+        public bool DecodeReport(
+            DeviceLayout layout,
+            IntPtr report,
+            int sizeHid,
+            ushort[] usageBuf,
+            out bool isTouchReport,
+            out bool hasContactCount,
+            out uint contactCount,
+            out bool tip,
+            out int contactId,
+            out uint rawX,
+            out uint rawY,
+            out long timestampMs)
+        {
+            var p = Marshal.PtrToStructure<TestSerialReportPayload>(report);
+            isTouchReport = p.IsTouchReport != 0;
+            hasContactCount = p.HasContactCount != 0;
+            contactCount = p.ContactCount;
+            tip = p.Tip != 0;
+            contactId = p.ContactId;
+            rawX = p.RawX;
+            rawY = p.RawY;
+            timestampMs = p.TimestampMs;
+            return true;
+        }
+    }
+
+    internal sealed class DeviceLayout
     {
         public IntPtr Preparsed;
         public int InputReportLength;
@@ -19,6 +79,10 @@ public sealed class TouchpadParser
         public int LogicalMinX, LogicalMinY;
         public bool HasContactCount;
         public ushort ContactCountCollection;
+        public bool HasContactId;
+        public bool IsSerialMode => FingerCollections.Count == 1 && HasContactId;
+        public readonly SerialFrameAggregator SerialAggregator = new();
+        public ISerialReportDecoder? Decoder;
     }
 
     private readonly Dictionary<IntPtr, DeviceLayout?> _devices = new();
@@ -140,6 +204,7 @@ public sealed class TouchpadParser
             else if (vc.UsagePage == Hid.UP_DIGITIZER && usage == Hid.USAGE_CONTACT_ID)
             {
                 hasContactId.Add(vc.LinkCollection);
+                layout.HasContactId = true;
             }
             else if (vc.UsagePage == Hid.UP_DIGITIZER && usage == Hid.USAGE_CONTACT_COUNT)
             {
@@ -153,7 +218,7 @@ public sealed class TouchpadParser
                 layout.FingerCollections.Add(col);
 
         layout.FingerCollections.Sort();
-        Swoosh.Log.Write($"layout: reportLen={layout.InputReportLength} fingerCols=[{string.Join(",", layout.FingerCollections)}] hasContactCount={layout.HasContactCount} ccCol={layout.ContactCountCollection} xRange={layout.LogicalMinX}..{layout.LogicalMaxX} yRange={layout.LogicalMinY}..{layout.LogicalMaxY}");
+        Swoosh.Log.Write($"layout: reportLen={layout.InputReportLength} fingerCols=[{string.Join(",", layout.FingerCollections)}] hasContactCount={layout.HasContactCount} ccCol={layout.ContactCountCollection} xRange={layout.LogicalMinX}..{layout.LogicalMaxX} yRange={layout.LogicalMinY}..{layout.LogicalMaxY} isSerial={layout.IsSerialMode}");
         if (layout.FingerCollections.Count == 0)
         {
             Marshal.FreeHGlobal(preparsed);
@@ -177,6 +242,9 @@ public sealed class TouchpadParser
         double spanX = Math.Max(1, layout.LogicalMaxX - layout.LogicalMinX);
         double spanY = Math.Max(1, layout.LogicalMaxY - layout.LogicalMinY);
         ushort[] usageBuf = _usageBuf;
+
+        if (layout.IsSerialMode)
+            return ParseSerial(layout, basePtr, sizeHid, reportCount, spanX, spanY, usageBuf);
 
         for (int r = 0; r < reportCount; r++)
         {
@@ -407,6 +475,160 @@ public sealed class TouchpadParser
 
                 frames.Add(frame);
             }
+        return frames;
+    }
+
+    internal SerialFrameAggregator? GetSerialAggregatorForTesting(IntPtr device) =>
+        _devices.TryGetValue(device, out var layout) ? layout?.SerialAggregator : null;
+
+    internal void RegisterSerialDeviceForTesting(
+        IntPtr device,
+        int minX = 0,
+        int maxX = 1000,
+        int minY = 0,
+        int maxY = 1000,
+        ISerialReportDecoder? decoder = null)
+    {
+        var layout = new DeviceLayout
+        {
+            LogicalMinX = minX,
+            LogicalMaxX = maxX,
+            LogicalMinY = minY,
+            LogicalMaxY = maxY,
+            HasContactId = true,
+            HasContactCount = true,
+            Decoder = decoder ?? new TestSerialReportDecoder()
+        };
+        layout.FingerCollections.Add(1);
+        _devices[device] = layout;
+    }
+
+    internal List<TouchFrame> ParseForTesting(IntPtr device, params TestSerialReportPayload[] reports)
+    {
+        if (reports == null || reports.Length == 0)
+            return Parse(device, IntPtr.Zero, 0, 0);
+
+        int size = Marshal.SizeOf<TestSerialReportPayload>();
+        IntPtr buffer = Marshal.AllocHGlobal(size * reports.Length);
+        try
+        {
+            for (int i = 0; i < reports.Length; i++)
+            {
+                Marshal.StructureToPtr(reports[i], buffer + i * size, false);
+            }
+            return Parse(device, buffer, size, reports.Length);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private List<TouchFrame> ParseSerial(DeviceLayout layout, IntPtr basePtr, int sizeHid, int reportCount, double spanX, double spanY, ushort[] usageBuf)
+    {
+        var frames = new List<TouchFrame>();
+        long now = Environment.TickCount64;
+
+        for (int r = 0; r < reportCount; r++)
+        {
+            IntPtr report = basePtr + r * sizeHid;
+
+            bool isTouchReport;
+            bool hasContactCount;
+            uint contactCount;
+            bool tip;
+            int contactId;
+            uint rawX;
+            uint rawY;
+            long reportTimestamp;
+
+            if (layout.Decoder != null)
+            {
+                if (!layout.Decoder.DecodeReport(layout, report, sizeHid, usageBuf,
+                        out isTouchReport, out hasContactCount, out contactCount, out tip,
+                        out contactId, out rawX, out rawY, out reportTimestamp))
+                    continue;
+
+                if (!isTouchReport)
+                    continue;
+
+                // Use per-report timestamp from decoder if provided; fall back to wall clock.
+                if (reportTimestamp <= 0)
+                    reportTimestamp = now;
+            }
+            else
+            {
+                byte reportId = Marshal.ReadByte(report);
+
+                uint ccVal = 0;
+                bool ccOk = layout.HasContactCount &&
+                    Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_DIGITIZER,
+                        layout.ContactCountCollection, Hid.USAGE_CONTACT_COUNT,
+                        out ccVal, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS;
+
+                // Only reports that carry a Contact Count are touch frames. Skip mouse/button reports.
+                if (layout.HasContactCount && !ccOk)
+                    continue;
+
+                hasContactCount = ccOk;
+                contactCount = ccVal;
+
+                ushort col = layout.FingerCollections[0];
+                uint usageLen = (uint)usageBuf.Length;
+                tip = false;
+                if (Hid.HidP_GetUsages(Hid.HidP_Input, Hid.UP_DIGITIZER, col, usageBuf,
+                        ref usageLen, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS)
+                {
+                    for (int i = 0; i < usageLen; i++)
+                    {
+                        if (usageBuf[i] == Hid.USAGE_TIP_SWITCH)
+                        {
+                            tip = true;
+                            break;
+                        }
+                    }
+                }
+
+                contactId = 0;
+                bool idOk = Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_DIGITIZER, col, Hid.USAGE_CONTACT_ID,
+                        out uint rawId, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS;
+                if (idOk) contactId = (int)rawId;
+
+                rawX = 0;
+                rawY = 0;
+                bool xOk = Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_GENERIC, col, Hid.USAGE_X,
+                        out rawX, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS;
+                bool yOk = Hid.HidP_GetUsageValue(Hid.HidP_Input, Hid.UP_GENERIC, col, Hid.USAGE_Y,
+                        out rawY, layout.Preparsed, report, (uint)sizeHid) == Hid.HIDP_STATUS_SUCCESS;
+
+                if (!xOk || !yOk) tip = false;
+
+                if (Swoosh.Log.Verbose)
+                {
+                    Swoosh.Log.Write($"  [Rep] rid={reportId} ccOk={ccOk} cc={ccVal} tip={tip} id={contactId} x={rawX} y={rawY}");
+                }
+
+                reportTimestamp = now;
+            }
+
+            double nx = Math.Clamp((rawX - layout.LogicalMinX) / spanX, 0, 1);
+            double ny = Math.Clamp((rawY - layout.LogicalMinY) / spanY, 0, 1);
+
+            var frame = layout.SerialAggregator.ProcessReport(
+                hasContactCount,
+                contactCount,
+                tip,
+                contactId,
+                nx,
+                ny,
+                reportTimestamp,
+                rawX,
+                rawY);
+
+            if (frame != null)
+                frames.Add(frame);
+        }
+
         return frames;
     }
 }
