@@ -70,20 +70,13 @@ public sealed class GestureEngine
     public event Action<SwipeDirection>? GestureCompleted;
     public event Action? GestureCancelled;
 
-    /// <summary>True while the thirds modifier is held: enables fine column/row third
-    /// snapping and uses a smaller dead-zone so small adjustments still register.</summary>
-    public bool ThirdsMode { get; set; }
-
     /// <summary>True while the move-to-display modifier is held: a two-finger swipe
     /// sends the window to the adjacent physical monitor instead of snapping.</summary>
     public bool MonitorMoveMode { get; set; }
 
-    /// <summary>Dead-zone used while <see cref="ThirdsMode"/> is active.</summary>
-    public double ThirdsDeadZone { get; set; } = 0.03;
-
     /// <summary>Raw signed centroid delta (dx, dy) from the swipe start, fired every
-    /// two-finger frame. Pad Y grows downward. Lets the controller pick a thirds target
-    /// by magnitude rather than just an 8-way direction.</summary>
+    /// two-finger frame. Pad Y grows downward. Used for gesture progress and the
+    /// minimize/close chooser.</summary>
     public event Action<double, double>? SwipeRaw;
 
     /// <summary>Fired once when two fingers have rested long enough (hold engaged).</summary>
@@ -525,7 +518,7 @@ public sealed class GestureEngine
                     }
                 }
             }
-            else if (dist >= (ThirdsMode ? ThirdsDeadZone : DeadZone))
+            else if (dist >= DeadZone)
             {
                 _currentDir = Stabilize(_currentDir, Classify(dx, dy));
                 double progress = Math.Clamp(dist / CommitDistance, 0, 1);

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Swoosh.Settings;
 using Swoosh.Snapping;
 using Xunit;
@@ -13,7 +14,6 @@ public class AppSettingsTests
         var s = new AppSettings();
         Assert.True(s.GesturesEnabled);
         Assert.True(s.AnimateSnaps);
-        Assert.Equal(0.10, s.Sensitivity, 5);
         Assert.Equal(0, s.GridSpacing);
         Assert.Equal(0.9, s.CancelTimeoutSeconds, 5);
         Assert.False(s.LivePreview);
@@ -30,14 +30,12 @@ public class AppSettingsTests
         var original = new AppSettings
         {
             GesturesEnabled = false,
-            Sensitivity = 0.45,
             GridSpacing = 7,
             CancelTimeoutSeconds = 1.5,
             LivePreview = true,
             LaunchAtLogin = true,
             OverlayUseAccent = false,
             OverlayColor = "#FF2D55",
-            GridModifier = GridModifier.Ctrl,
             MonitorMoveModifier = GridModifier.Shift,
             AppCompatibilityMode = AppCompatibilityMode.RequireModifier,
             AppCompatibilityModifier = GridModifier.Alt,
@@ -48,14 +46,12 @@ public class AppSettingsTests
         var copy = JsonSerializer.Deserialize<AppSettings>(json)!;
 
         Assert.False(copy.GesturesEnabled);
-        Assert.Equal(0.45, copy.Sensitivity, 5);
         Assert.Equal(7, copy.GridSpacing);
         Assert.Equal(1.5, copy.CancelTimeoutSeconds, 5);
         Assert.True(copy.LivePreview);
         Assert.True(copy.LaunchAtLogin);
         Assert.False(copy.OverlayUseAccent);
         Assert.Equal("#FF2D55", copy.OverlayColor);
-        Assert.Equal(GridModifier.Ctrl, copy.GridModifier);
         Assert.Equal(GridModifier.Shift, copy.MonitorMoveModifier);
         Assert.Equal(AppCompatibilityMode.RequireModifier, copy.AppCompatibilityMode);
         Assert.Equal(GridModifier.Alt, copy.AppCompatibilityModifier);
@@ -73,6 +69,63 @@ public class AppSettingsTests
         Assert.Equal(9, c.GridSpacing);
         Assert.Equal(new[] { "firefox.exe" }, s.AppCompatibilityProcessNames);
         Assert.Equal(new[] { "firefox.exe", "brave.exe" }, c.AppCompatibilityProcessNames);
+    }
+
+    [Theory]
+    [InlineData(GridModifier.Ctrl)]
+    [InlineData(GridModifier.Alt)]
+    [InlineData(GridModifier.Shift)]
+    [InlineData(null)]
+    public void Mouse_Hud_RoundTrip_Preserves_Selected_Activation(GridModifier? modifier)
+    {
+        var options = new JsonSerializerOptions { Converters = { new JsonStringEnumConverter() } };
+        var settings = new AppSettings
+        {
+            MouseMiddleButtonHudEnabled = true,
+            MouseHudModifier = modifier,
+        };
+
+        var copy = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(settings, options), options)!;
+
+        Assert.True(copy.MouseMiddleButtonHudEnabled);
+        Assert.Equal(modifier, copy.MouseHudModifier);
+    }
+
+    [Fact]
+    public void Existing_Mouse_Settings_Keep_Middle_Button_Without_Modifier()
+    {
+        var settings = JsonSerializer.Deserialize<AppSettings>("""{"MouseMiddleButtonHudEnabled":true}""")!;
+
+        Assert.True(settings.MouseMiddleButtonHudEnabled);
+        Assert.Null(settings.MouseHudModifier);
+    }
+
+    [Fact]
+    public void Legacy_Thirds_Settings_Are_Ignored_Without_Losing_Mouse_Activation()
+    {
+        const string json = """
+            {
+                "GridModifierEnabled": true,
+                "GridModifier": "Shift",
+                "Sensitivity": 0.8,
+                "MouseMiddleButtonHudEnabled": true,
+                "MouseHudModifier": "Ctrl",
+                "MonitorMoveModifier": "Alt",
+                "GridSpacing": 4
+            }
+            """;
+        var options = new JsonSerializerOptions { Converters = { new JsonStringEnumConverter() } };
+
+        var settings = JsonSerializer.Deserialize<AppSettings>(json, options)!;
+
+        Assert.True(settings.MouseMiddleButtonHudEnabled);
+        Assert.Equal(GridModifier.Ctrl, settings.MouseHudModifier);
+        Assert.Equal(GridModifier.Alt, settings.MonitorMoveModifier);
+        Assert.Equal(4, settings.GridSpacing);
+        var saved = JsonSerializer.Serialize(settings, options);
+        Assert.DoesNotContain("\"GridModifierEnabled\"", saved);
+        Assert.DoesNotContain("\"GridModifier\"", saved);
+        Assert.DoesNotContain("\"Sensitivity\"", saved);
     }
 
     [Fact]

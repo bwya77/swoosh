@@ -37,15 +37,6 @@ With two fingers over the titlebar, spread them apart (pinch-out) to go
 fullscreen, or draw them together (pinch-in) to restore. The centroid has to
 stay roughly fixed, so a sideways two-finger swipe is never read as a pinch.
 
-### Thirds and the 3x3 grid
-
-Hold a modifier key (Shift by default, configurable to Ctrl or Alt) while you
-swipe to snap to a 3x3 grid instead of halves and quarters. Moving left to right
-steps the preview through left third, left two-thirds, centered third, right
-two-thirds, then right third, and the same vertically. Diagonal swipes land the
-window in any of the four corner cells (one third by one third). Release the
-modifier to return to halves and quarters.
-
 ### Move across monitors and virtual desktops
 
 Press and hold two fingers on the titlebar, then swipe to send the window to
@@ -67,15 +58,27 @@ maximized.
 ### Mouse middle-button HUD
 
 If you are using a mouse instead of the touchpad, Settings > Snapping has an
-optional Mouse middle-button HUD. Hold the middle mouse button over a titlebar,
-move toward a snap direction, and release to commit. Swoosh observes the middle
-button without swallowing normal mouse clicks.
+existing Mouse middle-button HUD setting. Choose exactly one activation:
+Middle button, Shift + left button, Ctrl + left button, or Alt + left button.
+Selecting a modifier + left button disables middle-button activation. Every
+choice opens the same HUD and uses the same gesture path: hold over a titlebar,
+move right for a half or diagonally for a corner, and release the mouse button
+to commit. You can keep aiming while held and start another gesture after release.
+A left-click trigger requires its modifier only when starting the gesture and
+consumes the left click only if Swoosh successfully arms, preventing native window
+dragging. Its release is detected from the actual mouse-up event, not asynchronous
+button state (which may stay unset for a captured click). Middle-button mode keeps
+its original non-capturing behavior.
 
 The mouse path shares the same snap mapping, HUD theme, per-gesture enable
 settings, minimize/close chooser, and focus behavior as touchpad gestures. A
 still press-and-hold enters the same hold HUD path as the touchpad: move left or
 right to target virtual desktops or the optional app switcher, or hold the
 configured Move to display modifier to show the physical monitor map.
+When using the left-click shortcut, its activation modifier does not also trigger
+move-to-display; other modifiers work normally. Middle-button gestures
+keep their existing modifier behavior. The mouse HUD remains available when
+touchpad gestures are disabled.
 
 ### Five-finger free move
 

@@ -58,7 +58,7 @@ public sealed class OnboardingWindow : Window
             "Hold two fingers still for a moment, then swipe to move the window to another virtual desktop or display. A strip shows where it will land. Swipe farther to jump several at once.",
             Swipe.Right, true, Demo.Desktop, null),
         new("You're all set",
-            "Hold Shift while swiping for thirds. Open Settings any time from the Swoosh tray icon, where you can replay this tutorial from Show tutorial.",
+            "Open Settings any time from the Swoosh tray icon, where you can configure mouse-HUD activation or replay this tutorial from Show tutorial.",
             Swipe.None, false, Demo.None, null),
     };
 

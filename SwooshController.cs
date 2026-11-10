@@ -95,7 +95,7 @@ public sealed class SwooshController : IDisposable
     private double _curFracX, _curFracY;
     private bool _haveCurFrac;
 
-    // Mouse middle-button HUD: press over a titlebar, drag to aim a snap direction, release to commit.
+    // Mouse HUD: press over a titlebar, drag to aim a snap direction, release to commit.
     private bool _mouseHudActive;
     private Win32.POINT _mouseStart;
     private Win32.POINT _mouseHudAnchor;
@@ -156,12 +156,6 @@ public sealed class SwooshController : IDisposable
     // User-tunable so close/minimize only fire on a deliberate pull. Clamped in ApplySettings.
     private double _downThreshold = 0.15;
 
-    // Thirds: when enabled and the chosen modifier is held during a snap swipe,
-    // the target becomes a full-height column / full-width row third instead of
-    // the default halves and quarters.
-    private bool _gridModifierEnabled = true;
-    private int _gridModifierVk = Win32.VK_SHIFT;
-
     // Move-to-display: when enabled and the chosen modifier is held during a
     // two-finger swipe, the window is sent to the adjacent physical monitor
     // (with a live monitor-map HUD) instead of snapping. Default modifier is Alt.
@@ -171,11 +165,6 @@ public sealed class SwooshController : IDisposable
     // Monitor topology cached for the duration of a move-to-display gesture.
     private List<MonitorLayout.Mon>? _monAll;
     private MonitorLayout.Mon? _monCur;
-
-    // Minimum cross-axis / main-axis ratio for a swipe to count as a diagonal (corner
-    // cell) rather than a straight column/row. Driven by the sensitivity slider: higher
-    // sensitivity -> lower ratio -> diagonals trigger more readily.
-    private double _thirdsDiagRatio = 0.65;
 
     /// <summary>Apply persisted settings to the live engine (no restart needed).</summary>
     public void ApplySettings(AppSettings s)
@@ -198,9 +187,6 @@ public sealed class SwooshController : IDisposable
         _gestures.IdleCancelMs = s.CancelTimeoutSeconds > 0
             ? (long)Math.Round(Math.Clamp(s.CancelTimeoutSeconds, 0, 10) * 1000)
             : 0;
-        _gridModifierEnabled = s.GridModifierEnabled;
-        _gridModifierVk = ModifierVk(s.GridModifier);
-        _thirdsDiagRatio = 0.9 - 0.5 * Math.Clamp(s.Sensitivity, 0, 1);
         _monitorModifierEnabled = s.MonitorMoveEnabled;
         _monitorModifierVk = ModifierVk(s.MonitorMoveModifier);
         _snapper.ApplyAppCompatibility(
@@ -214,8 +200,15 @@ public sealed class SwooshController : IDisposable
         _touchpad.PhantomRejection = s.PhantomRejection;
         _livePreview = s.LivePreview;
         _moveCursor = s.MoveCursor;
+        int mouseModifierVk = s.MouseHudModifier is { } modifier ? ModifierVk(modifier) : 0;
+        if (_mouse.Enabled != s.MouseMiddleButtonHudEnabled ||
+            _mouse.ModifierVk != mouseModifierVk)
+        {
+            _mouse.CancelTracking();
+            if (_mouseHudActive) CancelMouseHud();
+        }
         _mouse.Enabled = s.MouseMiddleButtonHudEnabled;
-        if (!s.MouseMiddleButtonHudEnabled && _mouseHudActive) CancelMouseHud();
+        _mouse.ModifierVk = mouseModifierVk;
         _previewDeskDest = s.PreviewDesktopDestination;
         _createDesktopOverflow = s.CreateDesktopOnOverflow;
         _appSwitch = s.AppSwitchOnHold;
@@ -236,12 +229,10 @@ public sealed class SwooshController : IDisposable
         _ => Win32.VK_SHIFT,
     };
 
-    /// <summary>Resolve a swipe to a zone, honoring the thirds modifier if held.</summary>
-    private SnapZone MapZone(SwipeDirection dir) =>
-        ThirdsActive ? ThirdsZone(_lastVecX, _lastVecY) : Gate(SnapZoneMap.FromDirection(dir));
+    private SnapZone MapZone(SwipeDirection dir) => Gate(SnapZoneMap.FromDirection(dir));
 
     /// <summary>Nullify a base snap zone whose gesture has been disabled in settings, so
-    /// the preview shows nothing and the commit is a no-op. Thirds cells are unaffected.</summary>
+    /// the preview shows nothing and the commit is a no-op.</summary>
     private SnapZone Gate(SnapZone z) => z switch
     {
         SnapZone.Maximize => _maximizeEnabled ? z : SnapZone.None,
@@ -252,16 +243,16 @@ public sealed class SwooshController : IDisposable
         _ => z,
     };
 
-    private bool ThirdsActive => _gridModifierEnabled && Win32.IsKeyDown(_gridModifierVk);
-
     /// <summary>True while the move-to-display modifier is held.</summary>
-    private bool MonitorMoveActive => _monitorModifierEnabled && Win32.IsKeyDown(_monitorModifierVk);
+    private bool MonitorMoveActive => _monitorModifierEnabled &&
+        !MouseActivationUsesModifier(_monitorModifierVk) && Win32.IsKeyDown(_monitorModifierVk);
 
-    // Latest raw swipe vector (signed, pad-normalized; Y grows downward), tracked so
-    // thirds targets can be chosen by magnitude at both preview and commit time.
+    private bool MouseActivationUsesModifier(int vk) => _mouseHudActive && _mouse.ActiveModifierVk == vk;
+
+    // Latest raw swipe vector (signed, pad-normalized; Y grows downward).
     private double _lastVecX, _lastVecY;
 
-    private bool OnMouseMiddleDown(Win32.POINT pt)
+    private bool OnMousePressed(Win32.POINT pt)
     {
         if (_armed || _free || _axisResize || _mouseHudActive) return false;
 
@@ -371,16 +362,21 @@ public sealed class SwooshController : IDisposable
         ShowMouseZoneOrRestoreChip(zone, progress, showRestore);
     }
 
-    private void OnMouseMiddleUp(Win32.POINT pt)
+    private void OnMouseReleased(Win32.POINT pt)
     {
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(
-            new Action(() => CompleteMouseMiddleUp(pt)),
+            new Action(() => CompleteMouseRelease(pt)),
             System.Windows.Threading.DispatcherPriority.Background);
     }
 
-    private void CompleteMouseMiddleUp(Win32.POINT pt)
+    private void CompleteMouseRelease(Win32.POINT pt)
     {
         if (!_mouseHudActive || !_armed) return;
+        if (Win32.IsKeyDown(Win32.VK_ESCAPE))
+        {
+            CancelMouseHud();
+            return;
+        }
         _mouseHoldTimer.Stop();
 
         if (_mouseHoldMode != MouseHoldMode.None)
@@ -463,9 +459,10 @@ public sealed class SwooshController : IDisposable
         _mouseFailSafeTimer.Stop();
         if (!_mouseHudActive) return;
 
-        Log.Write("MouseHud failsafe reset");
-        _mouse.CancelTracking();
-        CancelMouseHud();
+        if (Win32.GetCursorPos(out var pt))
+            _mouse.RecoverMissedRelease(pt);
+        if (_mouseHudActive)
+            _mouseFailSafeTimer.Start();
     }
 
     private void UpdateMouseHold(double dxPx, double dyPx)
@@ -584,49 +581,6 @@ public sealed class SwooshController : IDisposable
         _haveCurFrac = false;
     }
 
-    // Thirds magnitude bands: below Center -> centered third; below Big -> two-thirds
-    // to that side; beyond -> one-third pinned to that edge.
-    private const double ThirdsCenterBand = 0.06;
-    private const double ThirdsBigBand = 0.13;
-
-    /// <summary>Pick a Swish-style third from the raw swipe vector. A genuine diagonal
-    /// lands a 1/3 x 1/3 corner cell; otherwise the dominant axis gives a full-height
-    /// column or full-width row, sized one-third / two-thirds / centered by magnitude.</summary>
-    private SnapZone ThirdsZone(double dx, double dy)
-    {
-        double ax = Math.Abs(dx), ay = Math.Abs(dy);
-        double mx = Math.Max(ax, ay);
-        if (mx < 0.03) return SnapZone.None;
-
-        // Diagonal: both axes meaningful and balanced enough (per the sensitivity
-        // slider) -> a corner cell. A lower sensitivity demands a more perfect diagonal,
-        // so a sideways swipe with a little vertical drift stays a column.
-        double mn = Math.Min(ax, ay);
-        if (mn >= ThirdsCenterBand && mn / mx >= _thirdsDiagRatio)
-        {
-            bool left = dx < 0, top = dy < 0;
-            return (left, top) switch
-            {
-                (true, true) => SnapZone.ThirdTopLeft,
-                (false, true) => SnapZone.ThirdTopRight,
-                (true, false) => SnapZone.ThirdBottomLeft,
-                _ => SnapZone.ThirdBottomRight,
-            };
-        }
-
-        if (ax >= ay) // horizontal swipe -> full-height column
-        {
-            if (ax < ThirdsCenterBand) return SnapZone.CenterThird;
-            if (dx < 0) return ax < ThirdsBigBand ? SnapZone.LeftTwoThird : SnapZone.LeftThird;
-            return ax < ThirdsBigBand ? SnapZone.RightTwoThird : SnapZone.RightThird;
-        }
-
-        // vertical swipe -> full-width row (pad Y grows downward, so dy<0 is up)
-        if (ay < ThirdsCenterBand) return SnapZone.CenterRowThird;
-        if (dy < 0) return ay < ThirdsBigBand ? SnapZone.TopTwoThird : SnapZone.TopThird;
-        return ay < ThirdsBigBand ? SnapZone.BottomTwoThird : SnapZone.BottomThird;
-    }
-
     public SwooshController()
     {
         _window = new MessageWindow("SwooshMsgWindow");
@@ -660,14 +614,14 @@ public sealed class SwooshController : IDisposable
         _gestures.AxisResizeDelta += OnAxisResizeDelta;
         _gestures.AxisResizeEnded += OnAxisResizeEnded;
         _hotkeys.Triggered += OnHotkey;
-        _mouse.MiddleDown += OnMouseMiddleDown;
+        _mouse.Pressed += OnMousePressed;
         _mouse.Moved += OnMouseMoved;
-        _mouse.MiddleUp += OnMouseMiddleUp;
+        _mouse.Released += OnMouseReleased;
         _snapper.Snapped += OnWindowSnapped;
     }
 
     /// <summary>Snap Assist: after a window lands in a zone with a well-defined complement
-    /// (halves, quarters, third/two-third pairs), offer the user's other open windows to fill
+    /// (halves and quarters), offer the user's other open windows to fill
     /// the space that's left, same as Windows 11's built-in Snap Assist overlay.</summary>
     private void OnWindowSnapped(IntPtr hwnd, SnapZone zone, Win32.RECT work)
     {
@@ -713,12 +667,7 @@ public sealed class SwooshController : IDisposable
             return;
         }
 
-        // Reflect the live modifier state so the engine uses the smaller thirds
-        // dead-zone the moment the key goes down (even mid-gesture). Move-to-display
-        // takes precedence over thirds when both modifiers are held.
-        bool mm = MonitorMoveActive;
-        _gestures.MonitorMoveMode = mm;
-        _gestures.ThirdsMode = !mm && ThirdsActive;
+        _gestures.MonitorMoveMode = MonitorMoveActive;
         _gestures.Process(frame);
     }
 
@@ -1262,20 +1211,6 @@ public sealed class SwooshController : IDisposable
         SnapZone.Maximize => "Maximize",
         SnapZone.Center => "Center",
         SnapZone.Minimize => "Minimize",
-        SnapZone.LeftThird => "Left third",
-        SnapZone.CenterThird => "Center third",
-        SnapZone.RightThird => "Right third",
-        SnapZone.LeftTwoThird => "Left two-thirds",
-        SnapZone.RightTwoThird => "Right two-thirds",
-        SnapZone.TopThird => "Top third",
-        SnapZone.CenterRowThird => "Center third",
-        SnapZone.BottomThird => "Bottom third",
-        SnapZone.TopTwoThird => "Top two-thirds",
-        SnapZone.BottomTwoThird => "Bottom two-thirds",
-        SnapZone.ThirdTopLeft => "Top-left third",
-        SnapZone.ThirdTopRight => "Top-right third",
-        SnapZone.ThirdBottomLeft => "Bottom-left third",
-        SnapZone.ThirdBottomRight => "Bottom-right third",
         _ => null,
     };
 

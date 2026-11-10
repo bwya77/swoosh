@@ -2,7 +2,7 @@ using System.IO;
 
 namespace Swoosh.Settings;
 
-/// <summary>Which keyboard modifier switches snapping into Swish-style thirds.</summary>
+/// <summary>Keyboard modifiers available for configurable shortcuts.</summary>
 public enum GridModifier
 {
     Shift,
@@ -137,12 +137,6 @@ public sealed class AppSettings
     /// HUD fill and preview ghost glides match this so they feel in sync. Clamped at apply time.</summary>
     public double SnapAnimationSeconds { get; set; } = 0.22;
 
-    /// <summary>When true, holding the modifier during a snap swipe targets a column/row third.</summary>
-    public bool GridModifierEnabled { get; set; } = true;
-
-    /// <summary>Which modifier key engages thirds snapping (Swish defaults to Shift).</summary>
-    public GridModifier GridModifier { get; set; } = GridModifier.Shift;
-
     /// <summary>When true, holding the move-to-display modifier during a two-finger swipe
     /// sends the window to the adjacent physical monitor instead of snapping.</summary>
     public bool MonitorMoveEnabled { get; set; } = true;
@@ -161,10 +155,6 @@ public sealed class AppSettings
     /// <summary>Modifier that allows Swoosh to arm over listed apps when compatibility mode is
     /// <see cref="AppCompatibilityMode.RequireModifier"/>.</summary>
     public GridModifier AppCompatibilityModifier { get; set; } = GridModifier.Ctrl;
-
-    /// <summary>How readily a slightly diagonal swipe lands a corner cell, 0 (forgiving)
-    /// to 1 (twitchy). Lower values make sideways swipes ignore vertical drift.</summary>
-    public double Sensitivity { get; set; } = 0.10;
 
     /// <summary>Use the current Windows accent color for the snap overlay highlight.</summary>
     public bool OverlayUseAccent { get; set; } = true;
@@ -202,10 +192,13 @@ public sealed class AppSettings
     /// cursor in the window's new position). Off by default.</summary>
     public bool MoveCursor { get; set; } = false;
 
-    /// <summary>When true, pressing and holding the middle mouse button over a titlebar
-    /// shows the snap HUD and lets mouse movement aim the same snap gestures. This is
-    /// independent from touchpad gesture input and is off by default.</summary>
+    /// <summary>Enable the mouse HUD independently of touchpad input. The persisted name is
+    /// retained for compatibility with the original middle-button trigger.</summary>
     public bool MouseMiddleButtonHudEnabled { get; set; } = false;
+
+    /// <summary>Mouse HUD activation: null selects the middle button; a modifier selects
+    /// that modifier + left button instead. Only the selected trigger is enabled.</summary>
+    public GridModifier? MouseHudModifier { get; set; }
 
     /// <summary>When true, a virtual-desktop move (hold then swipe) previews the destination
     /// desktop: the strip HUD highlights the desktop the window will jump to as you aim across
@@ -230,7 +223,7 @@ public sealed class AppSettings
     /// Higher values make the HUD linger and fade more slowly. Range about 0.1 to 1.5s.</summary>
     public double HudFadeOutSeconds { get; set; } = 0.36;
 
-    /// <summary>When true, snapping a window into a half/quarter/third zone shows a Windows
+    /// <summary>When true, snapping a window into a half/quarter zone shows a Windows
     /// 11-style "Snap Assist" overlay over the remaining empty space listing your other open
     /// windows, so one click fills it — just like the built-in Snap layouts overlay. Off by
     /// default.</summary>
