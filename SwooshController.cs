@@ -459,6 +459,13 @@ public sealed class SwooshController : IDisposable
         _mouseFailSafeTimer.Stop();
         if (!_mouseHudActive) return;
 
+        if (!_armed)
+        {
+            _mouse.CancelTracking();
+            CancelMouseHud();
+            return;
+        }
+
         if (Win32.GetCursorPos(out var pt))
             _mouse.RecoverMissedRelease(pt);
         if (_mouseHudActive)
