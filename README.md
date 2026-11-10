@@ -69,12 +69,12 @@ Two-finger swipe:
 A few more:
 
 - Mouse-only mode: in Settings > Snapping, turn on Mouse middle-button HUD.
-  Hold the middle button over a titlebar, move toward a snap direction, and
+  Select Middle button or a shortcut such as Ctrl + left button (only one is active).
+  Hold the selected trigger over a titlebar, move toward a snap direction, and
   release to drop the window. Hold still first to show the virtual
   desktop/app-switcher HUD, or hold the move-to-display modifier to show the
   physical monitor map.
 - Pinch out to go fullscreen, pinch in to restore.
-- Hold Shift (configurable) while swiping to snap to a 3x3 grid of thirds.
 - Hold two fingers, then swipe to move the window to another monitor or virtual
   desktop.
 - Optionally, switch apps instead of desktops: enable it in Settings and the
@@ -103,10 +103,10 @@ Open Settings from the tray icon. You can:
 
 - Turn gestures on or off, including each snap gesture individually.
 - Turn on Start with Windows.
-- Adjust touch sensitivity, grid spacing, and the cancel timeout.
+- Adjust grid spacing and the cancel timeout.
 - Turn on live preview, where the real window moves as you swipe instead of a
   translucent overlay.
-- Turn on Mouse middle-button HUD for mouse-only snapping.
+- Turn on Mouse middle-button HUD for mouse-only snapping, choosing Middle button or modifier + left button.
 - Use the Apps page to search installed apps and add compatibility rules for
   titlebar-heavy apps. You can pick installed apps, running portable apps, or
   enter a process name manually; listed apps can either ignore Swoosh gestures

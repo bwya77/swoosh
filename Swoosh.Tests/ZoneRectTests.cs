@@ -69,31 +69,10 @@ public class ZoneRectTests
     }
 
     [Theory]
-    [InlineData(1920, 1080)]
-    [InlineData(1366, 768)]   // not divisible by 3: remainder must be absorbed on the right
-    public void Thirds_Columns_Tile_Without_Gaps(int w, int h)
-    {
-        var work = Work(w, h);
-        var l = Zone(work, SnapZone.LeftThird);
-        var c = Zone(work, SnapZone.CenterThird);
-        var r = Zone(work, SnapZone.RightThird);
-
-        Assert.Equal(0, l.Left);
-        Assert.Equal(l.Right, c.Left);
-        Assert.Equal(c.Right, r.Left);
-        Assert.Equal(w, r.Right);           // far edge reaches the work-area edge
-        Assert.Equal(h, l.Height);
-        Assert.Equal(h, c.Height);
-        Assert.Equal(h, r.Height);
-    }
-
-    [Theory]
     [InlineData(SnapZone.LeftHalf)]
     [InlineData(SnapZone.RightHalf)]
     [InlineData(SnapZone.TopLeft)]
     [InlineData(SnapZone.BottomRight)]
-    [InlineData(SnapZone.CenterThird)]
-    [InlineData(SnapZone.ThirdBottomRight)]
     [InlineData(SnapZone.Center)]
     public void Every_Zone_Stays_Within_The_Work_Area(SnapZone zone)
     {

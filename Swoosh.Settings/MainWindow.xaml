@@ -464,33 +464,6 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Grid.Column="0" Glyph="&#xE765;" FontSize="18" Margin="0,0,16,0"
-                                          VerticalAlignment="Center"
-                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Modifier key" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="Which key engages thirds snapping."
-                                               TextWrapping="Wrap"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </StackPanel>
-                                <ComboBox x:Name="ModifierCombo" Grid.Column="2" MinWidth="120"
-                                          VerticalAlignment="Center"
-                                          SelectionChanged="OnModifierChanged">
-                                    <ComboBoxItem Content="Shift" />
-                                    <ComboBoxItem Content="Ctrl" />
-                                    <ComboBoxItem Content="Alt" />
-                                </ComboBox>
-                            </Grid>
-                        </Border>
-
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,8,0,0">
                             <FontIcon Glyph="&#xE713;" FontSize="16" VerticalAlignment="Center"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
@@ -552,37 +525,6 @@
                                             Minimum="0" Maximum="28" StepFrequency="1"
                                             ValueChanged="OnSwipeDownThresholdChanged" />
                                     <TextBlock Grid.Column="2" Text="Deliberate" VerticalAlignment="Center"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-
-                        <Border x:Name="SensitivitySetting" Style="{StaticResource Card}">
-                            <StackPanel Spacing="6">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Touch sensitivity" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                </Grid>
-                                <TextBlock Text="Lower values ignore vertical drift during a sideways swipe."
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Forgiving" VerticalAlignment="Center"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <Slider x:Name="SensitivitySlider" Grid.Column="1" Margin="12,0"
-                                            Minimum="0" Maximum="1" StepFrequency="0.05"
-                                            ValueChanged="OnSensitivityChanged" />
-                                    <TextBlock Grid.Column="2" Text="Twitchy" VerticalAlignment="Center"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Grid>
@@ -715,7 +657,7 @@
                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="Snap Assist" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="After you snap a window into a half, quarter, or third, show your other open windows over the remaining space so one click fills it — like Windows 11's built-in Snap Assist."
+                                    <TextBlock Text="After you snap a window into a half or quarter, show your other open windows over the remaining space so one click fills it — like Windows 11's built-in Snap Assist."
                                                TextWrapping="Wrap"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -736,13 +678,26 @@
                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="Mouse middle-button HUD" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="Mouse-only mode: hold the middle button over a titlebar, drag toward a snap direction, then release to apply it. Swoosh observes the button but does not capture normal mouse clicks."
+                                    <TextBlock Text="Choose one trigger: Middle button or a modifier + Left button. Hold it over a titlebar, move to aim the same snap HUD, then release the mouse button to snap."
                                                TextWrapping="Wrap"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <StackPanel Spacing="8" Margin="0,10,0,0">
+                                        <ComboBox x:Name="MouseHudModifierCombo" Header="Activation"
+                                                  AutomationProperties.Name="Mouse HUD activation"
+                                                  IsEnabled="False" SelectionChanged="OnMouseHudChanged">
+                                            <ComboBoxItem Content="Middle button" />
+                                            <ComboBoxItem Content="Shift + Left button" />
+                                            <ComboBoxItem Content="Ctrl + Left button" />
+                                            <ComboBoxItem Content="Alt + Left button" />
+                                        </ComboBox>
+                                        <TextBlock Text="Only the selected trigger opens this HUD. For a modifier + Left button trigger, that modifier activates the HUD rather than move-to-display."
+                                                   TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
                                 </StackPanel>
                                 <ToggleSwitch x:Name="MouseHudToggle" Grid.Column="2" Margin="12,0,0,0"
-                                              VerticalAlignment="Center" Toggled="OnSettingToggled" />
+                                              VerticalAlignment="Top" Toggled="OnMouseHudToggled" />
                             </Grid>
                         </Border>
 

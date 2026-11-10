@@ -17,7 +17,7 @@ namespace Swoosh.SettingsApp;
 
 /// <summary>
 /// WinUI 3 settings window. Mirrors the old WPF settings surface (general toggles,
-/// thirds modifier, sensitivity, overlay color, update check + changelog) but writes
+/// mouse activation, overlay color, update check + changelog) but writes
 /// to the same settings.json, so changes apply live to the running tray app.
 /// </summary>
 public sealed partial class MainWindow : Window
@@ -57,7 +57,7 @@ public sealed partial class MainWindow : Window
     private sealed record SettingSearchItem(string Title, string Page, string Keywords, string? Target = null);
 
     private sealed record GestureDef(string Key, string Name, string Gesture,
-        double X0, double Y0, double X1, double Y1, bool Grid = false);
+        double X0, double Y0, double X1, double Y1);
 
     private static readonly GestureDef[] Gestures =
     {
@@ -66,7 +66,6 @@ public sealed partial class MainWindow : Window
         new("quarters", "Quarters",    "Swipe diagonally",  0.00, 0.00, 0.50, 0.50),
         new("minimize", "Minimize",    "Swipe down",        0.28, 0.74, 0.72, 0.94),
         new("center",   "Center",      "Five-finger tap",   0.24, 0.28, 0.76, 0.72),
-        new("thirds",   "Thirds grid", "Modifier + swipe",  0.00, 0.00, 0.00, 0.00, Grid: true),
     };
 
     private readonly Dictionary<string, bool> _gestureEnabled = new();
@@ -93,11 +92,10 @@ public sealed partial class MainWindow : Window
         new("Diagnostics", "general", "copy report problem troubleshooting", "diagnostics"),
         new("Phantom contact filtering", "general", "touchpad firmware filtering", "phantom"),
         new("Gesture tutorial", "general", "onboarding replay tutorial", "tutorial"),
-        new("Mouse middle-button HUD", "snapping", "mouse hud middle button", "mouse"),
+        new("Mouse middle-button HUD", "snapping", "mouse hud middle left click button ctrl control shift alt modifier shortcut touchpad", "mouse"),
         new("Live window preview", "snapping", "preview real window live", "live-preview"),
         new("Move cursor with window", "snapping", "cursor follow snap", "move-cursor"),
         new("Swipe down", "snapping", "minimize close chooser", "swipe-down"),
-        new("Touch sensitivity", "snapping", "sensitivity diagonal drift", "sensitivity"),
         new("Grid spacing", "snapping", "gap gutter spacing", "grid-spacing"),
         new("Cancel timeout", "snapping", "escape rest cancel", "cancel-timeout"),
         new("Two-finger resize", "snapping", "resize width height", "resize"),
@@ -399,19 +397,11 @@ public sealed partial class MainWindow : Window
         _gestureEnabled["quarters"] = s.QuartersEnabled;
         _gestureEnabled["minimize"] = s.MinimizeEnabled;
         _gestureEnabled["center"] = s.CenterEnabled;
-        _gestureEnabled["thirds"] = s.GridModifierEnabled;
         RefreshGestureCards();
         AnimateToggle.IsOn = s.AnimateSnaps;
         SnapSpeedSlider.Value = Math.Clamp((s.SnapAnimationSeconds * 1000.0 - 50) / 10.0, 0, 35);
         DemoToggle.IsOn = s.DemoOverlay;
         PhantomToggle.IsOn = s.PhantomRejection;
-        ModifierCombo.SelectedIndex = s.GridModifier switch
-        {
-            GridModifier.Ctrl => 1,
-            GridModifier.Alt => 2,
-            _ => 0,
-        };
-        ModifierCombo.IsEnabled = s.GridModifierEnabled;
         SwipeDownCombo.SelectedIndex = s.SwipeDownAction switch
         {
             SwipeDownMode.Close => 1,
@@ -422,7 +412,6 @@ public sealed partial class MainWindow : Window
         // value + 2, i.e. a 2%..30% pull. Threshold is stored as a 0..1 fraction.
         SwipeDownThresholdSlider.Value = Math.Clamp(s.SwipeDownThreshold * 100.0 - 2, 0, 28);
         UpdateMinimizeCardTitle();
-        SensitivitySlider.Value = s.Sensitivity;
         // Move to display is one control: Off, or the modifier key that engages it.
         MonitorMoveCombo.SelectedIndex = !s.MonitorMoveEnabled ? 0 : s.MonitorMoveModifier switch
         {
@@ -458,6 +447,9 @@ public sealed partial class MainWindow : Window
         MoveCursorToggle.IsOn = s.MoveCursor;
         SnapAssistToggle.IsOn = s.SnapAssistEnabled;
         MouseHudToggle.IsOn = s.MouseMiddleButtonHudEnabled;
+        MouseHudModifierCombo.SelectedIndex = s.MouseHudModifier is { } mouseModifier
+            ? ModifierIndex(mouseModifier) + 1 : 0;
+        UpdateMouseHudControls();
         ResizeHorizontalToggle.IsOn = s.ResizeHorizontalEnabled;
         ResizeVerticalToggle.IsOn = s.ResizeVerticalEnabled;
         FiveFingerToggle.IsOn = s.FiveFingerEnabled;
@@ -485,14 +477,6 @@ public sealed partial class MainWindow : Window
         SnapAnimationSeconds = (50 + SnapSpeedSlider.Value * 10) / 1000.0,
         DemoOverlay = DemoToggle.IsOn,
         PhantomRejection = PhantomToggle.IsOn,
-        GridModifierEnabled = GestureOn("thirds"),
-        GridModifier = ModifierCombo.SelectedIndex switch
-        {
-            1 => GridModifier.Ctrl,
-            2 => GridModifier.Alt,
-            _ => GridModifier.Shift,
-        },
-        Sensitivity = SensitivitySlider.Value,
         SwipeDownAction = SwipeDownCombo.SelectedIndex switch
         {
             1 => SwipeDownMode.Close,
@@ -528,6 +512,8 @@ public sealed partial class MainWindow : Window
         MoveCursor = MoveCursorToggle.IsOn,
         SnapAssistEnabled = SnapAssistToggle.IsOn,
         MouseMiddleButtonHudEnabled = MouseHudToggle.IsOn,
+        MouseHudModifier = MouseHudModifierCombo.SelectedIndex > 0
+            ? ModifierFromIndex(MouseHudModifierCombo.SelectedIndex - 1) : null,
         ResizeHorizontalEnabled = ResizeHorizontalToggle.IsOn,
         ResizeVerticalEnabled = ResizeVerticalToggle.IsOn,
         FiveFingerEnabled = FiveFingerToggle.IsOn,
@@ -595,11 +581,20 @@ public sealed partial class MainWindow : Window
 
     private void OnSettingToggled(object sender, RoutedEventArgs e) => SaveIfReady();
 
-    private void OnModifierChanged(object sender, SelectionChangedEventArgs e)
+    private void OnMouseHudToggled(object sender, RoutedEventArgs e)
     {
-        UpdateAppCompatibilityControls();
+        UpdateMouseHudControls();
         SaveIfReady();
     }
+
+    private void UpdateMouseHudControls()
+    {
+        if (MouseHudModifierCombo == null || MouseHudToggle == null) return;
+        MouseHudModifierCombo.IsEnabled = MouseHudToggle.IsOn;
+    }
+
+    private void OnMouseHudChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
+
     private void OnSwipeDownChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateMinimizeCardTitle();
@@ -663,8 +658,6 @@ public sealed partial class MainWindow : Window
     private void OnHudBackgroundChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
 
     private void OnHudSizeChanged(object sender, SelectionChangedEventArgs e) => SaveIfReady();
-
-    private void OnSensitivityChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 
     private void OnSnapSpeedChanged(object sender, RangeBaseValueChangedEventArgs e) => SaveIfReady();
 
@@ -766,8 +759,6 @@ public sealed partial class MainWindow : Window
 
         var modifier = ModifierFromIndex(AppCompatibilityModifierCombo.SelectedIndex);
         var conflicts = new List<string>();
-        if (GestureOn("thirds") && ModifierFromIndex(ModifierCombo.SelectedIndex) == modifier)
-            conflicts.Add("thirds snapping");
         if (MonitorMoveCombo.SelectedIndex > 0 && ModifierFromMonitorIndex(MonitorMoveCombo.SelectedIndex) == modifier)
             conflicts.Add("move to display");
 
@@ -1643,7 +1634,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>A window-shape HUD: a rounded "screen" frame with a uniform bezel and the
-    /// snap zone filled in the accent color. The thirds tile draws a 3x3 cell grid instead.
+    /// snap zone filled in the accent color.
     /// The fill sits inside the bezel so halves/quarters read exactly and rounded corners
     /// never let the background peek around a sharp fill.</summary>
     private static FrameworkElement BuildHud(GestureDef g)
@@ -1659,37 +1650,16 @@ public sealed partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        if (g.Grid)
+        inner.Children.Add(new Border
         {
-            for (int c = 0; c < 3; c++) inner.ColumnDefinitions.Add(new ColumnDefinition());
-            for (int r = 0; r < 3; r++) inner.RowDefinitions.Add(new RowDefinition());
-            for (int r = 0; r < 3; r++)
-                for (int c = 0; c < 3; c++)
-                {
-                    var cell = new Border
-                    {
-                        Margin = new Thickness(1),
-                        CornerRadius = new CornerRadius(1),
-                        Background = accent,
-                    };
-                    Grid.SetColumn(cell, c);
-                    Grid.SetRow(cell, r);
-                    inner.Children.Add(cell);
-                }
-        }
-        else
-        {
-            inner.Children.Add(new Border
-            {
-                Width = Math.Max(2, (g.X1 - g.X0) * innerW),
-                Height = Math.Max(2, (g.Y1 - g.Y0) * innerH),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(g.X0 * innerW, g.Y0 * innerH, 0, 0),
-                CornerRadius = new CornerRadius(2),
-                Background = accent,
-            });
-        }
+            Width = Math.Max(2, (g.X1 - g.X0) * innerW),
+            Height = Math.Max(2, (g.Y1 - g.Y0) * innerH),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(g.X0 * innerW, g.Y0 * innerH, 0, 0),
+            CornerRadius = new CornerRadius(2),
+            Background = accent,
+        });
 
         return new Border
         {
@@ -1708,7 +1678,6 @@ public sealed partial class MainWindow : Window
         if (sender is not Button { Tag: string key }) return;
         _gestureEnabled[key] = !GestureOn(key);
         ApplyGestureVisual(key);
-        if (key == "thirds") ModifierCombo.IsEnabled = GestureOn("thirds");
         UpdateAppCompatibilityControls();
         SaveIfReady();
     }
@@ -1810,7 +1779,6 @@ public sealed partial class MainWindow : Window
         "live-preview" => LivePreviewSetting,
         "move-cursor" => MoveCursorSetting,
         "swipe-down" => SwipeDownSetting,
-        "sensitivity" => SensitivitySetting,
         "grid-spacing" => GridSpacingSetting,
         "cancel-timeout" => CancelTimeoutSetting,
         "resize" => ResizeHorizontalSetting,
