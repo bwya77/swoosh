@@ -2,7 +2,7 @@
 
 What's new in Swoosh. Newest changes are at the top.
 
-## November 2026
+## 0.1.79 - November 10, 2026
 
 - Removed thirds snapping, its gesture tile and modifier selector, and the sensitivity slider that only adjusted the thirds grid. Existing mouse-HUD activation, halves, quarters, and move-to-display settings are preserved.
 - The existing Mouse middle-button HUD now lets you select one activation: Middle button or Shift/Ctrl/Alt + left button. All choices use the same HUD and aim-and-release behavior; only the selected trigger is enabled. Captured left-click gestures wait for the real button-up event, avoiding premature cancellation from asynchronous button-state checks, and holding the button no longer times out after eight seconds. The activation modifier does not also trigger move-to-display.
